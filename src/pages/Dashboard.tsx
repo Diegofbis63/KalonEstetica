@@ -76,13 +76,18 @@ export interface Service {
   sort_order: number;
 }
 
-export default function Dashboard() {
+export default function Dashboard({ defaultTab = 'leads' }: { defaultTab?: 'leads' | 'services' }) {
   const navigate = useNavigate();
   const { logout, user: authUser } = useAuth();
   const queryClient = useQueryClient();
   const [userName, setUserName] = useState(authUser?.email || "");
-  const [activeTab, setActiveTab] = useState<'leads' | 'services'>('leads');
+  const [activeTab, setActiveTab] = useState<'leads' | 'services'>(defaultTab);
   const [dateFilter, setDateFilter] = useState<'all' | 'hoy' | 'tomorrow'>('all');
+
+  // Trigger tab change if prop changes (e.g. via navigation)
+  useEffect(() => {
+    setActiveTab(defaultTab);
+  }, [defaultTab]);
 
   // Service form state
   const [isEditing, setIsEditing] = useState(false);
@@ -450,11 +455,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-noir text-cream">
-      <div className="fixed inset-0 pointer-events-none opacity-50">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-gold/[0.03] rounded-full blur-[120px]" />
-      </div>
-
+    <div className="min-h-full">
       <div className="relative z-10">
         {authUser?.role === 'guest' && (
           <div className="bg-gold/10 border-b border-gold/20 py-2 px-6 flex items-center justify-center gap-3 backdrop-blur-md sticky top-0 z-[60]">
@@ -464,64 +465,7 @@ export default function Dashboard() {
             </p>
           </div>
         )}
-        <header className="flex flex-col md:flex-row items-center justify-between px-6 py-5 border-b border-cream/5 gap-4 backdrop-blur-xl bg-noir/50 sticky top-0">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate("/")}
-              className="text-cream/30 hover:text-gold transition-colors p-1"
-              title="Volver al sitio"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-gold to-gold-light flex items-center justify-center shadow-lg">
-                <span className="text-noir font-serif font-bold text-sm">K</span>
-              </div>
-              <div>
-                <span className="text-xs font-serif font-bold tracking-[0.2em] uppercase text-cream">
-                  KÂLON
-                </span>
-                <p className="text-[9px] text-cream/20 font-sans tracking-wide">Centro Operativo • {userName}</p>
-              </div>
-            </div>
-          </div>
 
-          <div className="flex bg-noir-light/60 p-1 rounded-full border border-cream/5 backdrop-blur-md">
-            <button
-              onClick={() => setActiveTab('leads')}
-              className={`px-5 py-1.5 text-xs font-sans uppercase tracking-widest rounded-full transition-all ${activeTab === 'leads' ? 'bg-gold text-noir font-bold shadow-lg' : 'text-cream/40 hover:text-cream'}`}
-            >
-              Gestión Operativa
-            </button>
-            <button
-              onClick={() => setActiveTab('services')}
-              className={`px-5 py-1.5 text-xs font-sans uppercase tracking-widest rounded-full transition-all ${activeTab === 'services' ? 'bg-gold text-noir font-bold shadow-lg' : 'text-cream/40 hover:text-cream'}`}
-            >
-              Catálogo
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => {
-                queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-                queryClient.invalidateQueries({ queryKey: ['services'] });
-              }}
-              disabled={fetching}
-              className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-cream/40 hover:text-gold transition-colors border border-cream/5 rounded-full px-4 py-2 hover:bg-gold/5"
-            >
-              <RefreshCw className={`w-3 h-3 ${fetching ? "animate-spin" : ""}`} />
-              <span className="mt-0.5">Actualizar</span>
-            </button>
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-cream/40 hover:text-rose transition-colors border border-cream/5 rounded-full px-4 py-2 hover:bg-rose/5"
-            >
-              <LogOut className="w-3 h-3" />
-              <span className="mt-0.5">Salir</span>
-            </button>
-          </div>
-        </header>
 
         {activeTab === 'leads' ? (
           <div className="max-w-7xl mx-auto px-6 py-10 animate-in fade-in duration-500">
