@@ -9,7 +9,7 @@ import GallerySection from "@/components/landing/GallerySection";
 import WhyUsSection from "@/components/landing/WhyUsSection";
 import TestimonialsSection from "@/components/landing/TestimonialsSection";
 import FloatingChat from "@/components/FloatingChat";
-import { LogIn, MapPin, Phone, Instagram, Clock, Mail, Menu, X } from "lucide-react";
+import { LogIn, MapPin, Phone, Instagram, Clock, Mail, Menu, X, MessageCircle } from "lucide-react";
 
 const Index = () => {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -133,24 +133,42 @@ const Index = () => {
         <HeroSection />
 
         {/* Info bar */}
-        <ScrollReveal className="px-6 pb-16">
-          <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 md:gap-12 text-cream/80 text-sm font-sans font-medium">
-            <div className="flex items-center gap-3 justify-center md:justify-start">
-              <MapPin className="w-5 h-5 text-gold shrink-0" />
+        <ScrollReveal className="px-6 my-12 md:my-16">
+          <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 md:gap-12 text-cream/80 text-[15px] font-sans font-medium">
+            <a 
+              href="https://share.google/zge51oeFGhBo3NJys" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="flex items-center gap-3 justify-center md:justify-start hover:text-amber-500 transition-colors group"
+            >
+              <MapPin className="w-5 h-5 text-gold shrink-0 group-hover:scale-110 transition-transform" />
               <span className="text-center md:text-left">Av. Colón 456, Córdoba</span>
-            </div>
+            </a>
+            
             <div className="flex items-center gap-3 justify-center md:justify-start">
               <Clock className="w-5 h-5 text-gold shrink-0" />
               <span className="text-center md:text-left">Lun–Sáb 9:00–20:00</span>
             </div>
-            <div className="flex items-center gap-3 justify-center md:justify-start">
-              <Phone className="w-5 h-5 text-gold shrink-0" />
-              <span className="text-center md:text-left">+54 351 987-6543</span>
-            </div>
-            <div className="flex items-center gap-3 justify-center md:justify-start">
-              <Instagram className="w-5 h-5 text-gold shrink-0" />
-              <span className="text-center md:text-left">@kalon.estetica</span>
-            </div>
+
+            <a 
+              href="https://wa.me/5493513975114" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="flex items-center gap-3 justify-center md:justify-start hover:text-amber-500 transition-colors group"
+            >
+              <MessageCircle className="w-5 h-5 text-gold shrink-0 group-hover:scale-110 transition-transform" />
+              <span className="text-center md:text-left">+54 9 3513 97-5114</span>
+            </a>
+
+            <a 
+              href="https://www.instagram.com/kalon.multiespacio.estetico/" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="flex items-center gap-3 justify-center md:justify-start hover:text-amber-500 transition-colors group"
+            >
+              <Instagram className="w-5 h-5 text-gold shrink-0 group-hover:scale-110 transition-transform" />
+              <span className="text-center md:text-left">@kalon.multiespacio.estetico</span>
+            </a>
           </div>
         </ScrollReveal>
 
@@ -187,16 +205,21 @@ const Index = () => {
             <div>
               <h4 className="font-serif text-lg font-bold text-cream mb-4">Contacto</h4>
               <div className="space-y-3 text-sm text-cream/50 font-sans">
-                <p className="flex items-center justify-center md:justify-start gap-3"><MapPin className="w-4 h-4 text-gold/60" /> Av. Colón 456, Córdoba</p>
-                <p className="flex items-center justify-center md:justify-start gap-3"><Phone className="w-4 h-4 text-gold/60" /> +54 351 987-6543</p>
-                <p className="flex items-center justify-center md:justify-start gap-3"><Mail className="w-4 h-4 text-gold/60" /> hola@kalonestetica.com</p>
+                <a href="https://share.google/zge51oeFGhBo3NJys" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center md:justify-start gap-3 hover:text-gold transition-colors">
+                  <MapPin className="w-4 h-4 text-gold/60" /> Av. Colón 456, Córdoba
+                </a>
+                <a href="https://wa.me/5493513975114" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center md:justify-start gap-3 hover:text-gold transition-colors">
+                  <MessageCircle className="w-4 h-4 text-gold/60" /> +54 9 3513 97-5114
+                </a>
+                <a href="mailto:hola@kalonestetica.com" className="flex items-center justify-center md:justify-start gap-3 hover:text-gold transition-colors">
+                  <Mail className="w-4 h-4 text-gold/60" /> hola@kalonestetica.com
+                </a>
               </div>
             </div>
             <div>
               <h4 className="font-serif text-lg font-bold text-cream mb-4">Horarios</h4>
               <div className="space-y-2 text-sm text-cream/50 font-sans">
-                <p className="flex items-center justify-center md:justify-start gap-2"><Clock className="w-4 h-4 text-gold/60" /> Lunes a Viernes: 9:00 – 20:00</p>
-                <p className="flex items-center justify-center md:justify-start gap-2"><Clock className="w-4 h-4 text-gold/60" /> Sábados: 9:00 – 18:00</p>
+                <p className="flex items-center justify-center md:justify-start gap-2"><Clock className="w-4 h-4 text-gold/60" /> Lun–Sáb: 9:00 – 20:00</p>
                 <p className="flex items-center justify-center md:justify-start gap-2 text-rose/60"><Clock className="w-4 h-4 opacity-50" /> Domingos: Cerrado</p>
               </div>
             </div>
