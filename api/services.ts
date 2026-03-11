@@ -5,64 +5,65 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     const db = getDb();
 
-    // Public GET route to fetch services (no auth required)
+    // 1. GET - List services with optional category filtering
     if (req.method === 'GET') {
+        const { category, category_id, active } = req.query;
+        let query = 'SELECT * FROM services';
+        const conditions = [];
+        const values = [];
+
+        if (active === 'true') {
+            conditions.push('active = true');
+        }
+
+        if (category_id) {
+            values.push(category_id);
+            conditions.push(`category_id = $${values.length}`);
+        } else if (category) {
+            // Legacy support: fetch by category name if category_id isn't provided
+            values.push(category);
+            conditions.push(`category = $${values.length}`);
+        }
+
+        if (conditions.length > 0) {
+            query += ' WHERE ' + conditions.join(' AND ');
+        }
+
+        query += ' ORDER BY sort_order ASC, created_at DESC';
+
         try {
-            const activeOnly = req.query.active === 'true';
-            const category = req.query.category as string;
-            
-            let query = 'SELECT * FROM services';
-            const conditions = [];
-            const values = [];
-
-            if (activeOnly) {
-                conditions.push('active = true');
-            }
-            if (category) {
-                values.push(category);
-                conditions.push(`category = $${values.length}`);
-            }
-
-            if (conditions.length > 0) {
-                query += ' WHERE ' + conditions.join(' AND ');
-            }
-            
-            query += ' ORDER BY sort_order ASC, created_at ASC';
-            
             const result = await db.query(query, values);
             return res.status(200).json({ services: result.rows });
         } catch (e) {
             console.error(e);
-            return res.status(500).json({ error: 'Internal server error' });
+            return res.status(500).json({ error: 'Failed to fetch services' });
         }
     }
 
-    // All other routes require auth
+    // Require Auth for Mutations
     const user = requireAuth(req, res);
     if (!user) return;
 
+    // 2. POST - Create service
     if (req.method === 'POST') {
-        const { title, description, price, duration, image_url, active } = req.body;
-        try {
-            // Get current max sort_order
-            const maxOrderRes = await db.query('SELECT COALESCE(MAX(sort_order), 0) as max_order FROM services');
-            const newOrder = (maxOrderRes.rows[0].max_order || 0) + 1;
+        const { title, description, price, duration, image_url, category_id, sort_order } = req.body;
 
-            const result = await db.query(
-                'INSERT INTO services (title, description, price, duration, image_url, active, sort_order) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-                [title, description, price, duration, image_url, active ?? true, newOrder]
+        try {
+            const resInsert = await db.query(
+                'INSERT INTO services (title, description, price, duration, image_url, category_id, sort_order) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+                [title, description, price, duration, image_url, category_id, sort_order || 0]
             );
-            return res.status(201).json({ service: result.rows[0] });
+            return res.status(201).json({ service: resInsert.rows[0] });
         } catch (e) {
             console.error(e);
-            return res.status(500).json({ error: 'Internal server error' });
+            return res.status(500).json({ error: 'Failed to create service' });
         }
     }
 
+    // 3. PUT - Update service / Bulk Reorder
     if (req.method === 'PUT') {
-        const { id, title, description, price, duration, image_url, active, sort_order, reorder } = req.body;
+        const { id, title, description, price, duration, image_url, active, category_id, sort_order, reorder } = req.body;
 
-        // Handle bulk reorder
         if (reorder && Array.isArray(reorder)) {
             try {
                 for (const item of reorder) {
@@ -71,34 +72,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 return res.status(200).json({ success: true });
             } catch (e) {
                 console.error(e);
-                return res.status(500).json({ error: 'Failed to reorder' });
+                return res.status(500).json({ error: 'Error reordering services' });
             }
         }
 
-        if (!id) return res.status(400).json({ error: 'Missing ID' });
+        if (!id) return res.status(400).json({ error: 'Missing service ID' });
 
         try {
-            const result = await db.query(
-                'UPDATE services SET title = $1, description = $2, price = $3, duration = $4, image_url = $5, active = $6, sort_order = COALESCE($7, sort_order) WHERE id = $8 RETURNING *',
-                [title, description, price, duration, image_url, active, sort_order, id]
+            const resUpdate = await db.query(
+                `UPDATE services 
+                 SET title = $1, description = $2, price = $3, duration = $4, image_url = $5, active = $6, category_id = $7, sort_order = $8 
+                 WHERE id = $9 
+                 RETURNING *`,
+                [title, description, price, duration, image_url, active, category_id, sort_order, id]
             );
-            return res.status(200).json({ service: result.rows[0] });
+            return res.status(200).json({ service: resUpdate.rows[0] });
         } catch (e) {
             console.error(e);
-            return res.status(500).json({ error: 'Internal server error' });
+            return res.status(500).json({ error: 'Failed to update service' });
         }
     }
 
+    // 4. DELETE - Delete service
     if (req.method === 'DELETE') {
-        const id = req.query.id;
-        if (!id) return res.status(400).json({ error: 'Missing ID' });
+        const { id } = req.query;
+        if (!id) return res.status(400).json({ error: 'Missing service ID' });
 
         try {
             await db.query('DELETE FROM services WHERE id = $1', [id]);
             return res.status(200).json({ success: true });
         } catch (e) {
             console.error(e);
-            return res.status(500).json({ error: 'Internal server error' });
+            return res.status(500).json({ error: 'Failed to delete service' });
         }
     }
 
