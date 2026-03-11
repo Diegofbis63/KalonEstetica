@@ -16,8 +16,8 @@ const client = new Client({
 async function main() {
     await client.connect();
 
-    const email = 'admin@novaestetica.com';
-    const password = 'NovaSecureAdmin2026!';
+    const email = 'gabriela_adm_x79';
+    const password = 'gK#9vL$2xP@mQ1';
     const hash = await bcrypt.hash(password, 10);
 
     await client.query(
