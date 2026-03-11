@@ -5,14 +5,31 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     const db = getDb();
 
-    // Public GET route to fetch active services (no auth required)
+    // Public GET route to fetch services (no auth required)
     if (req.method === 'GET') {
         try {
             const activeOnly = req.query.active === 'true';
-            const q = activeOnly
-                ? 'SELECT * FROM services WHERE active = true ORDER BY sort_order ASC, created_at ASC'
-                : 'SELECT * FROM services ORDER BY sort_order ASC, created_at ASC';
-            const result = await db.query(q);
+            const category = req.query.category as string;
+            
+            let query = 'SELECT * FROM services';
+            const conditions = [];
+            const values = [];
+
+            if (activeOnly) {
+                conditions.push('active = true');
+            }
+            if (category) {
+                values.push(category);
+                conditions.push(`category = $${values.length}`);
+            }
+
+            if (conditions.length > 0) {
+                query += ' WHERE ' + conditions.join(' AND ');
+            }
+            
+            query += ' ORDER BY sort_order ASC, created_at ASC';
+            
+            const result = await db.query(query, values);
             return res.status(200).json({ services: result.rows });
         } catch (e) {
             console.error(e);

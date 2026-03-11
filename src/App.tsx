@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/components/AuthContext";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
+import CategoryDetail from "./pages/CategoryDetail";
 import NotFound from "./pages/NotFound";
 import DashboardLayout from "./components/layout/DashboardLayout";
 
@@ -61,6 +62,7 @@ const App = () => {
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/auth" element={<Auth />} />
+              <Route path="/servicios/:category" element={<CategoryDetail />} />
               
               {/* Rutas Protegidas de Administración */}
               <Route

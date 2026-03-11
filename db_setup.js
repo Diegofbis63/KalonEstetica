@@ -61,16 +61,18 @@ async function main() {
 
     // services
     await client.query(`
-        CREATE TABLE IF NOT EXISTS services (
-          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-          title VARCHAR(255) NOT NULL,
-          description TEXT,
-          price NUMERIC(10, 2),
-          duration VARCHAR(50),
-          image_url TEXT,
-          active BOOLEAN DEFAULT true,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
+    -- Services
+    CREATE TABLE IF NOT EXISTS services (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      category VARCHAR(255),
+      title VARCHAR(255) NOT NULL,
+      description TEXT,
+      price NUMERIC(10, 2),
+      duration VARCHAR(50),
+      image_url TEXT,
+      active BOOLEAN DEFAULT true,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
     `);
 
     // 3. Verificación y Alteración de Columnas Faltantes
@@ -95,6 +97,9 @@ async function main() {
         BEGIN
             IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='services' AND column_name='sort_order') THEN
                 ALTER TABLE services ADD COLUMN sort_order INTEGER DEFAULT 0;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='services' AND column_name='category') THEN
+                ALTER TABLE services ADD COLUMN category VARCHAR(255);
             END IF;
         END $$;
     `);
