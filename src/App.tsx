@@ -10,7 +10,16 @@ import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
 import DashboardLayout from "./components/layout/DashboardLayout";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutos de validez
+      gcTime: 1000 * 60 * 30, // Mantener en caché 30 min
+      retry: 1,
+      refetchOnWindowFocus: false, // Evitar refetch al cambiar de pestaña que puede saturar conexiones
+    },
+  },
+});
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated } = useAuth();

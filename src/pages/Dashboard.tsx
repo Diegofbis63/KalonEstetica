@@ -140,7 +140,10 @@ export default function Dashboard({ defaultTab = 'leads' }: { defaultTab?: 'lead
         };
       }
       const res = await fetch('/api/dashboard');
-      if (!res.ok) throw new Error('Failed to fetch dashboard');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Error ${res.status}: Fallo al cargar panel`);
+      }
       return res.json();
     }
   });
@@ -158,7 +161,10 @@ export default function Dashboard({ defaultTab = 'leads' }: { defaultTab?: 'lead
         };
       }
       const res = await fetch('/api/services');
-      if (!res.ok) throw new Error('Failed to fetch services');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Error ${res.status}: Fallo al cargar servicios`);
+      }
       return res.json();
     }
   });
@@ -439,7 +445,7 @@ export default function Dashboard({ defaultTab = 'leads' }: { defaultTab?: 'lead
     );
   }
 
-  if (dashError || servError) {
+  if ((dashError || servError) && !dashData) {
     return (
       <div className="min-h-screen bg-noir flex flex-col items-center justify-center gap-6 p-4">
         <AlertTriangle className="w-12 h-12 text-rose" />
@@ -465,7 +471,14 @@ export default function Dashboard({ defaultTab = 'leads' }: { defaultTab?: 'lead
             </p>
           </div>
         )}
-
+        {(dashError || servError) && dashData && (
+          <div className="bg-rose/10 border-b border-rose/20 py-2 px-6 flex items-center justify-center gap-3 backdrop-blur-md sticky top-0 z-[60]">
+            <AlertTriangle className="w-4 h-4 text-rose animate-pulse" />
+            <p className="text-[11px] font-sans font-medium text-rose uppercase tracking-[0.1em]">
+              Error al actualizar datos en tiempo real. Los datos mostrados podrían estar desincronizados.
+            </p>
+          </div>
+        )}
 
         {activeTab === 'leads' ? (
           <div className="max-w-7xl mx-auto px-6 py-10 animate-in fade-in duration-500">
