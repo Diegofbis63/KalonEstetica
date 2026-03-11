@@ -74,15 +74,15 @@ const CategoryDetail = () => {
 
   return (
     <div className="min-h-screen bg-noir text-cream relative selection:bg-gold/30">
-      {/* Background with Overlay */}
+      {/* Background with Overlay - Liquid Luxury Tuning */}
       <div className="fixed inset-0 z-0">
         <img 
           src={metadata.image} 
           alt={metadata.title} 
-          className="w-full h-full object-cover opacity-40 scale-105"
+          className="w-full h-full object-cover opacity-60 scale-105 transition-transform duration-[10s] animate-slow-zoom"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-noir via-noir/80 to-noir" />
-        <div className="absolute inset-0 bg-noir/40 backdrop-blur-[2px]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/20 to-noir" />
+        <div className="absolute inset-0 backdrop-blur-[1px]" />
       </div>
 
       <div className="relative z-10">
@@ -162,13 +162,18 @@ const CategoryDetail = () => {
           )}
         </main>
 
-        <footer className="py-20 text-center border-t border-cream/5 bg-noir-light/20 backdrop-blur-sm mt-20">
-           <p className="text-[10px] font-sans text-cream/20 uppercase tracking-[0.4em] mb-4">
-              KÂLON MULTIESPACIO ESTETICO
-           </p>
-           <Link to="/" className="text-xs text-gold/60 hover:text-gold transition-colors font-sans underline underline-offset-4 decoration-gold/20">
-              Ver otras categorías
-           </Link>
+        <footer className="py-24 text-center border-t border-cream/5 bg-noir-light/10 backdrop-blur-md mt-20">
+           <div className="max-w-xs mx-auto">
+             <p className="text-[10px] font-sans text-cream/20 uppercase tracking-[0.5em] mb-10">
+                KÂLON MULTIESPACIO ESTETICO
+             </p>
+             <Link 
+               to="/" 
+               className="inline-block px-10 py-4 border border-gold/40 text-gold hover:text-gold-light hover:border-gold/60 hover:bg-gold/5 rounded-full text-xs font-sans font-bold uppercase tracking-[0.2em] transition-all duration-300 shadow-lg shadow-gold/5"
+             >
+                Ver otras categorías
+             </Link>
+           </div>
         </footer>
       </div>
     </div>
