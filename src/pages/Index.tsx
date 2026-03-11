@@ -136,13 +136,13 @@ const Index = () => {
         <ScrollReveal className="px-6 my-12 md:my-16">
           <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 md:gap-12 text-cream/80 text-[15px] font-sans font-medium">
             <a 
-              href="https://share.google/zge51oeFGhBo3NJys" 
+              href="https://maps.apple.com/place?address=Miguel%20de%20Cervantes%20708,%20X5019%20C%C3%B3rdoba,%20C%C3%B3rdoba,%20Argentina&coordinate=-31.389794,-64.184034&name=Kalon%20Multiespacio%20Estetico&place-id=IAE916E2589304DEE&map=explore" 
               target="_blank" 
               rel="noopener noreferrer" 
               className="flex items-center gap-3 justify-center md:justify-start hover:text-amber-500 transition-colors group"
             >
               <MapPin className="w-5 h-5 text-gold shrink-0 group-hover:scale-110 transition-transform" />
-              <span className="text-center md:text-left">Av. Colón 456, Córdoba</span>
+              <span className="text-center md:text-left">Miguel de Cervantes 708, Córdoba</span>
             </a>
             
             <div className="flex items-center gap-3 justify-center md:justify-start">
@@ -205,8 +205,8 @@ const Index = () => {
             <div>
               <h4 className="font-serif text-lg font-bold text-cream mb-4">Contacto</h4>
               <div className="space-y-3 text-sm text-cream/50 font-sans">
-                <a href="https://share.google/zge51oeFGhBo3NJys" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center md:justify-start gap-3 hover:text-gold transition-colors">
-                  <MapPin className="w-4 h-4 text-gold/60" /> Av. Colón 456, Córdoba
+                <a href="https://maps.apple.com/place?address=Miguel%20de%20Cervantes%20708,%20X5019%20C%C3%B3rdoba,%20C%C3%B3rdoba,%20Argentina&coordinate=-31.389794,-64.184034&name=Kalon%20Multiespacio%20Estetico&place-id=IAE916E2589304DEE&map=explore" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center md:justify-start gap-3 hover:text-gold transition-colors">
+                  <MapPin className="w-4 h-4 text-gold/60" /> Miguel de Cervantes 708, Córdoba
                 </a>
                 <a href="https://wa.me/5493513975114" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center md:justify-start gap-3 hover:text-gold transition-colors">
                   <MessageCircle className="w-4 h-4 text-gold/60" /> +54 9 3513 97-5114
