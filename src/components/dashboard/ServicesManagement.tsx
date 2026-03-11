@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Plus, 
@@ -177,6 +177,34 @@ const SortableServiceItem = ({
 export default function ServicesManagement() {
   const queryClient = useQueryClient();
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 1.5 * 1024 * 1024) {
+      toast.error("Imagen demasiado grande (máx 1.5MB para almacenamiento directo)");
+      return;
+    }
+
+    setIsUploading(true);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = reader.result as string;
+      if (editingCategory) {
+        setEditingCategory({ ...editingCategory, image_url: base64 });
+      }
+      setIsUploading(false);
+      toast.success("Imagen cargada localmente");
+    };
+    reader.onerror = () => {
+      setIsUploading(false);
+      toast.error("Error al procesar la imagen");
+    };
+    reader.readAsDataURL(file);
+  };
   
   // Modal states
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -465,17 +493,51 @@ export default function ServicesManagement() {
                 />
             </div>
             <div className="space-y-2">
-                <label className="text-[10px] uppercase tracking-widest text-cream/30">Imagen de Fondo (URL)</label>
-                <div className="flex gap-3">
-                    <Input 
-                        value={editingCategory?.image_url || ''} 
-                        onChange={e => setEditingCategory({ ...editingCategory, image_url: e.target.value })}
-                        className="bg-noir-light border-cream/10 focus:border-gold/30"
-                        placeholder="https://images.unsplash.com/..."
-                    />
-                    <button className="p-3 rounded-lg bg-cream/5 hover:bg-gold/10 text-cream/40 hover:text-gold transition-all border border-cream/10">
-                        <Upload className="w-4 h-4" />
-                    </button>
+                <label className="text-[10px] uppercase tracking-widest text-cream/30 font-bold">Imagen de Fondo (Banner)</label>
+                <div className="flex gap-4 items-center p-4 rounded-xl bg-noir-light border border-cream/10">
+                    {editingCategory?.image_url ? (
+                      <div className="relative group w-24 h-24 rounded-lg overflow-hidden border border-gold/20 flex-shrink-0 bg-noir">
+                        <img src={editingCategory.image_url} alt="Preview" className="w-full h-full object-cover" />
+                        <button 
+                          onClick={() => setEditingCategory({ ...editingCategory, image_url: '' })}
+                          className="absolute inset-0 bg-rose/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+                        >
+                          <X className="w-5 h-5 text-white" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="w-24 h-24 rounded-lg border-2 border-dashed border-cream/10 flex flex-col items-center justify-center gap-2 text-cream/20">
+                        <ImageIcon className="w-6 h-6" />
+                        <span className="text-[8px] uppercase font-bold">Sin Foto</span>
+                      </div>
+                    )}
+                    
+                    <div className="flex-1 flex flex-col gap-2">
+                      <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        onChange={handleFileChange} 
+                        className="hidden" 
+                        accept="image/*" 
+                      />
+                      <button 
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isUploading}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gold/10 text-gold hover:bg-gold hover:text-noir transition-all border border-gold/20 text-[10px] font-bold uppercase tracking-widest"
+                      >
+                        {isUploading ? (
+                          <div className="w-4 h-4 border-2 border-noir border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <Upload className="w-4 h-4" />
+                        )}
+                        {editingCategory?.image_url ? 'Cambiar Imagen' : 'Seleccionar Archivo'}
+                      </button>
+                      
+                      {!editingCategory?.image_url && (
+                        <p className="text-[9px] text-cream/20 italic text-center">Formatos sugeridos: JPG, PNG, WebP (Máx 1.5MB)</p>
+                      )}
+                    </div>
                 </div>
             </div>
           </div>
