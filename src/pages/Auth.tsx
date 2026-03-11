@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Mail, Lock, ArrowRight, ArrowLeft } from "lucide-react";
+import { User, Lock, ArrowRight, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/components/AuthContext";
 
 export default function Auth() {
@@ -102,10 +102,10 @@ export default function Auth() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="relative group">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-cream/20 group-focus-within:text-gold transition-colors" />
+              <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-cream/20 group-focus-within:text-gold transition-colors" />
               <input
-                type="email"
-                placeholder="Email corporativo"
+                type="text"
+                placeholder="Nombre de usuario"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
