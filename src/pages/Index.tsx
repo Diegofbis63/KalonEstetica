@@ -136,7 +136,7 @@ const Index = () => {
         <ScrollReveal className="px-6 my-12 md:my-16">
           <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 md:gap-12 text-cream/80 text-[15px] font-sans font-medium">
             <a 
-              href="https://maps.apple.com/place?address=Miguel%20de%20Cervantes%20708,%20X5019%20C%C3%B3rdoba,%20C%C3%B3rdoba,%20Argentina&coordinate=-31.389794,-64.184034&name=Kalon%20Multiespacio%20Estetico&place-id=IAE916E2589304DEE&map=explore" 
+              href="https://www.google.com/maps/search/?api=1&query=Miguel+de+Cervantes+708,+Córdoba,+Argentina+-31.389794,-64.184034" 
               target="_blank" 
               rel="noopener noreferrer" 
               className="flex items-center gap-3 justify-center md:justify-start hover:text-amber-500 transition-colors group"
@@ -205,7 +205,7 @@ const Index = () => {
             <div>
               <h4 className="font-serif text-lg font-bold text-cream mb-4">Contacto</h4>
               <div className="space-y-3 text-sm text-cream/50 font-sans">
-                <a href="https://maps.apple.com/place?address=Miguel%20de%20Cervantes%20708,%20X5019%20C%C3%B3rdoba,%20C%C3%B3rdoba,%20Argentina&coordinate=-31.389794,-64.184034&name=Kalon%20Multiespacio%20Estetico&place-id=IAE916E2589304DEE&map=explore" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center md:justify-start gap-3 hover:text-gold transition-colors">
+                <a href="https://www.google.com/maps/search/?api=1&query=Miguel+de+Cervantes+708,+Córdoba,+Argentina+-31.389794,-64.184034" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center md:justify-start gap-3 hover:text-gold transition-colors">
                   <MapPin className="w-4 h-4 text-gold/60" /> Miguel de Cervantes 708, Córdoba
                 </a>
                 <a href="https://wa.me/5493513975114" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center md:justify-start gap-3 hover:text-gold transition-colors">
