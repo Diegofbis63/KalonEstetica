@@ -953,34 +953,34 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                   <Table>
                     <TableHeader>
                       <TableRow className="border-b border-white/5 hover:bg-transparent">
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Prospecto</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Contacto</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12 text-center">Interés</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12 text-center">Estado Bot</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12 text-center">Última Interacción</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12 text-right">Gestión</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14">Prospecto</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14">Contacto</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center">Interés</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center">Estado Bot</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center">Última Interacción</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-right">Gestión</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {leads.map((l, i) => (
                         <TableRow key={l.id} className={`border-b border-cream/5 hover:bg-cream/[0.02] group transition-colors animate-in fade-in slide-in-from-bottom-2 ${!l.canManage ? 'opacity-40' : ''}`} style={{ animationDelay: `${i * 50}ms` }}>
-                          <TableCell className="px-6 py-5">
-                            <div className="font-serif font-bold text-cream text-lg tracking-tight leading-tight">{l.canManage ? l.client_name : `Interesado - ${l.category_name}`}</div>
+                          <TableCell className="px-5 py-6">
+                            <div className="font-serif font-bold text-cream text-lg tracking-tight leading-tight whitespace-nowrap">{l.canManage ? l.client_name : `Interesado - ${l.category_name}`}</div>
                           </TableCell>
-                          <TableCell className="px-6 py-5">
+                          <TableCell className="px-5 py-6">
                             {l.phone && (
                               <a 
                                 href={`https://wa.me/${l.phone.replace(/\D/g, '')}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-[10px] font-bold font-mono hover:bg-emerald-500/10 hover:border-emerald-500/40 transition-all group/wa"
+                                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-xs font-bold font-mono hover:bg-emerald-500/10 hover:border-emerald-500/40 transition-all group/wa whitespace-nowrap"
                               >
                                 <Phone className="w-3 h-3 group-hover/wa:scale-110 transition-transform" />
                                 {l.phone}
                               </a>
                             )}
                           </TableCell>
-                          <TableCell className="px-6 py-5 text-center">
+                          <TableCell className="px-5 py-6 text-center">
                             <div className="flex items-center justify-center gap-2">
                                 <span className="text-sm font-bold text-emerald-400">{l.intent_score}%</span>
                                 <Badge variant="outline" className={`text-[9px] font-black border ${l.intent_score > 70 ? 'border-emerald-500/30 text-emerald-400 bg-emerald-500/5' : l.intent_score > 40 ? 'border-amber-500/30 text-amber-500 bg-amber-500/5' : 'border-rose-500/30 text-rose-500 bg-rose-500/5'}`}>
@@ -988,44 +988,42 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                 </Badge>
                             </div>
                           </TableCell>
-                          <TableCell className="px-6 py-5 text-center">
-                            <div className="flex items-center justify-center gap-3">
-                                <span className={`text-[9px] font-black tracking-widest ${l.is_bot_enabled ? 'text-emerald-400' : 'text-cream/20'}`}>
-                                    {l.is_bot_enabled ? 'ACTIVO' : 'PAUSADO'}
-                                </span>
+                          <TableCell className="px-5 py-6 text-center">
+                            <div className="flex items-center justify-center gap-2">
                                 <Switch 
                                     checked={l.is_bot_enabled} 
                                     onCheckedChange={(val) => toggleBotMutation.mutate({ leadId: l.id, isBotEnabled: val })}
-                                    className="data-[state=checked]:bg-gold"
+                                    className="data-[state=checked]:bg-gold scale-75"
                                 />
+                                <span className={`text-[8px] font-black tracking-widest ${l.is_bot_enabled ? 'text-emerald-400' : 'text-cream/20'}`}>
+                                    {l.is_bot_enabled ? 'ON' : 'OFF'}
+                                </span>
                             </div>
                           </TableCell>
-                          <TableCell className="px-6 py-5 text-center">
-                            <div className="text-[11px] text-cream/40 flex flex-col items-center">
+                          <TableCell className="px-5 py-6 text-center">
+                            <div className="text-sm text-cream/40 flex flex-col items-center">
                                 {l.updated_at || l.created_at ? (
-                                    <>
-                                        <div className="flex items-center gap-2">
-                                            <span>{new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(l.updated_at || l.created_at))}</span>
-                                            <span className="text-cream/10">•</span>
-                                            <span className="text-gold font-bold">
-                                                {new Date(l.updated_at || l.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}hs
-                                            </span>
-                                        </div>
-                                    </>
+                                    <div className="flex items-center gap-2 whitespace-nowrap">
+                                        <span>{new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(l.updated_at || l.created_at))}</span>
+                                        <span className="text-cream/10">•</span>
+                                        <span className="text-gold font-bold">
+                                            {new Date(l.updated_at || l.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}hs
+                                        </span>
+                                    </div>
                                 ) : '-'}
                             </div>
                           </TableCell>
-                          <TableCell className="px-6 py-4 text-right">
+                          <TableCell className="px-5 py-6 text-right">
                             {l.canManage && (
                               <div className="flex justify-end gap-2">
                                   <button 
                                     onClick={() => { setSelectedLeadForChat(l); setIsChatModalOpen(true); }}
                                     disabled={!l.canManage}
-                                    className={`px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2 group/btn ${
+                                    className={`px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs font-bold font-mono uppercase transition-all flex items-center gap-2 group/btn ${
                                       l.canManage ? 'text-cream/40 hover:text-gold hover:border-gold/30' : 'opacity-20 cursor-not-allowed'
                                     }`}
                                   >
-                                    <ClipboardList className="w-3.5 h-3.5 group-hover/btn:scale-110 transition-transform" /> Log
+                                    <ClipboardList className="w-4 h-4 group-hover/btn:scale-110 transition-transform" /> Log
                                   </button>
                                 <button 
                                   onClick={() => { 
@@ -1035,15 +1033,15 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                     setCartService("");
                                     setIsNewAppointmentModalOpen(true); 
                                   }}
-                                  className="px-3 py-1.5 rounded-lg bg-emerald-500/5 border border-emerald-500/20 text-[9px] font-black uppercase tracking-widest text-emerald-400 hover:bg-emerald-500/10 transition-all flex items-center gap-2"
+                                  className="px-3 py-1.5 rounded-lg bg-emerald-500/5 border border-emerald-500/20 text-xs font-bold font-mono uppercase text-emerald-400 hover:bg-emerald-500/10 transition-all flex items-center gap-2"
                                 >
-                                  <CalendarCheck className="w-3 h-3" /> Agendar
+                                  <CalendarCheck className="w-4 h-4" /> Agendar
                                 </button>
                                 <button 
                                   onClick={() => { setItemToDelete({ id: l.id, type: 'lead' }); setDeleteConfirmOpen(true); }} 
-                                  className="p-1.5 rounded-lg bg-rose/5 text-rose/40 hover:text-rose hover:bg-rose/10 transition-all"
+                                  className="p-2 rounded-lg bg-rose/5 text-rose/40 hover:text-rose hover:bg-rose/10 transition-all border border-transparent hover:border-rose/20"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <Trash2 className="w-4 h-4" />
                                 </button>
                               </div>
                             )}
