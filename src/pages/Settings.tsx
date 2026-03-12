@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Users, Shield, Save, Key, ChevronRight, Lock } from "lucide-react";
+import { Users, Shield, Save, Key, ChevronRight, Lock, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/components/AuthContext";
 import { toast } from "sonner";
 import {
@@ -43,6 +43,7 @@ export default function Settings() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
+  const [showPassword, setShowPassword] = useState(false);
 
   const { data: userData, isLoading: usersLoading } = useQuery({
     queryKey: ['admin-users'],
@@ -98,6 +99,7 @@ export default function Settings() {
     setPassword("");
     setSelectedCats(user.category_ids || []);
     setIsEditModalOpen(true);
+    setShowPassword(false);
   };
 
   const handleSave = () => {
@@ -215,17 +217,24 @@ export default function Settings() {
                   />
                 </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-[10px] uppercase tracking-widest text-cream/30 font-bold ml-1">Password</label>
+              <div className="space-y-2 text-right">
+                <label className="text-[10px] uppercase tracking-widest text-cream/30 font-bold ml-1 text-left block">Password</label>
                 <div className="relative">
                   <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gold/40" />
                   <input 
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     placeholder="••••••••"
                     className="w-full bg-noir-light border border-white/5 rounded-xl px-11 py-2.5 text-sm focus:outline-none focus:border-gold/30 transition-all font-sans"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-cream/20 hover:text-white transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
               </div>
             </div>
