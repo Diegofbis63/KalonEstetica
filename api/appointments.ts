@@ -9,13 +9,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
         const db = getDb();
 
+        const checkPermission = async (id: string, user: any) => {
+            if (user.role === 'admin') return true;
+            // Get category name for this appointment
+            const res = await db.query('SELECT c.name FROM appointments a LEFT JOIN categories c ON a.category_id = c.id WHERE a.id = $1', [id]);
+            if (res.rows.length === 0) return false;
+            const categoryName = res.rows[0].name;
+            return user.permissions.includes(categoryName);
+        };
+
         if (req.method === 'PATCH') {
             const { id } = req.query;
-            const { status, date_time, service_type, client_name, phone } = req.body;
+            if (!id || typeof id !== 'string') return res.status(400).json({ error: 'Missing appointment ID' });
 
-            if (!id) {
-                return res.status(400).json({ error: 'Missing appointment ID' });
+            if (!await checkPermission(id, user)) {
+                return res.status(403).json({ error: 'No tienes permiso para gestionar este servicio' });
             }
+
+            const { status, date_time, service_type, client_name, phone } = req.body;
 
             const updates: string[] = [];
             const values: any[] = [];
@@ -84,18 +95,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return res.status(200).json({ appointment });
 
         } else if (req.method === 'POST') {
-            const { lead_id, date_time, service_type } = req.body;
+            const { lead_id, date_time, service_type, category_id } = req.body;
 
             if (!lead_id || !date_time || !service_type) {
                 return res.status(400).json({ error: 'Missing required fields' });
             }
 
             const query = `
-                INSERT INTO appointments (lead_id, date_time, service_type, status)
-                VALUES ($1, $2, $3, 'confirmed')
+                INSERT INTO appointments (lead_id, date_time, service_type, status, category_id)
+                VALUES ($1, $2, $3, 'confirmed', $4)
                 RETURNING *
             `;
-            const result = await db.query(query, [lead_id, date_time, service_type]);
+            const result = await db.query(query, [lead_id, date_time, service_type, category_id]);
 
             await db.query(`UPDATE leads SET status = 'qualified' WHERE id = $1`, [lead_id]);
 
@@ -103,13 +114,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         } else if (req.method === 'DELETE') {
             const { id } = req.query;
+            if (!id || typeof id !== 'string') return res.status(400).json({ error: 'Missing appointment ID' });
 
-            if (!id) {
-                return res.status(400).json({ error: 'Missing appointment ID' });
+            if (!await checkPermission(id, user)) {
+                return res.status(403).json({ error: 'No tienes permiso para gestionar este servicio' });
             }
 
-            // Using soft delete by changing status, or real delete if instructed.
-            // Requirement said "borrado lógico (soft-delete)"
             const result = await db.query(
                 `UPDATE appointments SET status = 'canceled' WHERE id = $1 RETURNING *`,
                 [id]

@@ -5,7 +5,7 @@ import { useAuth } from "@/components/AuthContext";
 
 export default function Auth() {
   const { login } = useAuth();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -13,7 +13,6 @@ export default function Auth() {
 
   const { isAuthenticated } = useAuth();
 
-  // Redirect to dashboard if already logged in (Persistent Session)
   useEffect(() => {
     if (isAuthenticated) {
       navigate("/dashboard");
@@ -27,11 +26,13 @@ export default function Auth() {
 
     try {
       // ─── DEMO MODE BYPASS ───
-      if (email === "demo@kalonestetica.com" && password === "demo123") {
+      if (username === "demo" && password === "demo123") {
         login({
           id: "demo-user",
           email: "demo@kalonestetica.com",
-          role: "guest"
+          username: "demo",
+          role: "staff",
+          permissions: ["Masajes"]
         });
         navigate("/dashboard");
         return;
@@ -40,7 +41,7 @@ export default function Auth() {
       const res = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ username, password }),
       });
       const data = await res.json();
 
@@ -48,7 +49,7 @@ export default function Auth() {
         throw new Error(data.error || "Error al iniciar sesión");
       }
 
-      login({ ...data.user, role: 'admin' });
+      login(data.user);
       navigate("/dashboard");
     } catch (err: unknown) {
       const e = err instanceof Error ? err : new Error(String(err));
@@ -106,8 +107,8 @@ export default function Auth() {
               <input
                 type="text"
                 placeholder="Nombre de usuario"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 required
                 className="w-full bg-noir border border-cream/5 rounded-xl px-11 py-3.5 text-sm text-cream placeholder:text-cream/20 focus:outline-none focus:border-gold/30 focus:bg-noir/80 transition-all font-sans"
               />

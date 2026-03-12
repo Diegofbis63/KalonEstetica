@@ -3,7 +3,9 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 interface User {
     id: string;
     email: string;
-    role?: 'admin' | 'guest';
+    username: string;
+    role: 'admin' | 'staff' | 'guest';
+    permissions?: string[];
 }
 
 interface AuthContextType {

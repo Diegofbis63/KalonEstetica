@@ -65,13 +65,13 @@ export default function Sidebar() {
         {/* User Badge */}
         <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
           <div className="w-8 h-8 rounded-lg bg-cream/10 flex items-center justify-center text-xs font-serif font-bold text-gold">
-            {user?.email?.[0].toUpperCase() || "A"}
+            {(user?.username || user?.email || "A")[0].toUpperCase()}
           </div>
           <div className="flex-1 overflow-hidden">
             <p className="text-[11px] font-sans font-medium text-cream truncate">
-              {user?.email || "Administrador"}
+              {user?.username || user?.email || "Administrador"}
             </p>
-            <p className="text-[9px] text-cream/20 font-sans tracking-tight uppercase">Acceso {user?.role || 'Admin'}</p>
+            <p className="text-[9px] text-cream/20 font-sans tracking-tight uppercase">Acceso {user?.role || "Admin"}</p>
           </div>
         </div>
 

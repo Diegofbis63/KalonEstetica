@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/components/AuthContext";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
+import Settings from "./pages/Settings";
 import CategoryDetail from "./pages/CategoryDetail";
 import NotFound from "./pages/NotFound";
 import DashboardLayout from "./components/layout/DashboardLayout";
@@ -78,7 +79,7 @@ const App = () => {
                 <Route path="clients" element={<PlaceholderPage title="Clientes" />} />
                 <Route path="income" element={<PlaceholderPage title="Ingresos" />} />
                 <Route path="services" element={<Dashboard defaultTab="services" />} />
-                <Route path="settings" element={<PlaceholderPage title="Configuración" />} />
+                <Route path="settings" element={<Settings />} />
               </Route>
 
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
