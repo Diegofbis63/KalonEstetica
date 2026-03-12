@@ -66,6 +66,13 @@ interface Client {
   }>;
 }
 
+interface ClientUpdateData {
+  client_name: string;
+  phone: string;
+  email: string;
+  note: string;
+}
+
 export default function Clients() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -89,7 +96,7 @@ export default function Clients() {
   });
 
   const updateClient = useMutation({
-    mutationFn: async (clientData: any) => {
+    mutationFn: async (clientData: ClientUpdateData) => {
       const res = await fetch(`/api/clients?id=${selectedClient?.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -107,7 +114,7 @@ export default function Clients() {
       setIsEditing(false);
       toast.success("Cliente actualizado correctamente");
     },
-    onError: (err: any) => toast.error(err.message)
+    onError: (err: Error) => toast.error(err.message)
   });
 
   const handleEditInit = (client: Client) => {

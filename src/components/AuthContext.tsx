@@ -92,7 +92,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     }, [isAuthenticated]);
 
-    console.log("Estado de Auth:", { user, loading: isAuthenticated === null });
+    // Auth state debug log removed for production quality
 
     const login = (userData: User) => {
         localStorage.setItem("kalon_auth", JSON.stringify({

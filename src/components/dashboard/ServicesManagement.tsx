@@ -149,7 +149,7 @@ const SortableServiceItem = ({
       <div className="flex-grow">
         <h4 className="text-cream font-serif font-bold group-hover:text-gold transition-colors">{service.title}</h4>
         <div className="flex items-center gap-4 mt-1">
-          <span className="text-xs text-gold/60 font-medium whitespace-nowrap">$ {Number(service.price).toLocaleString('es-AR')}</span>
+          <span className="text-xs text-gold/60 font-medium whitespace-nowrap">${Number(service.price).toLocaleString('es-AR')}</span>
           <span className="text-[10px] text-cream/30 uppercase tracking-widest">{service.duration}</span>
         </div>
       </div>

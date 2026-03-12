@@ -100,6 +100,14 @@ interface Appointment {
     category_name?: string;
   }>;
   total_price?: number;
+  total_duration?: number;
+}
+
+interface Category {
+  id: string;
+  name: string;
+  description?: string;
+  image_url?: string;
 }
 
 export interface Service {
@@ -269,6 +277,8 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
     onError: () => toast.error("Error al eliminar lead")
   });
 
+
+
   const deleteAppointment = useMutation({
     mutationFn: async (id: string) => {
         const res = await fetch(`/api/appointments?id=${id}`, { method: 'DELETE' });
@@ -284,7 +294,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
         queryClient.invalidateQueries({ queryKey: ['timeline'] });
         toast.success("Cita eliminada");
     },
-    onError: (err) => toast.error(err.message)
+    onError: (err: Error) => toast.error(err.message)
   });
 
   const deleteService = useMutation({
@@ -638,7 +648,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                                   <Clock className="w-2.5 h-2.5" /> {s.duration}
                                                 </p>
                                               </div>
-                                                <p className="text-xs font-sans font-bold text-cream/80 whitespace-nowrap">$ {Number(s.price).toLocaleString('es-AR')}</p>
+                                                <p className="text-xs font-sans font-bold text-cream/80 whitespace-nowrap">${Number(s.price).toLocaleString('es-AR')}</p>
                                             </div>
                                           ))
                                         ) : (
@@ -663,7 +673,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                         {a.total_price && a.total_price > 0 && (
                                           <div className="flex justify-between items-center">
                                             <p className="text-xs font-bold text-gold uppercase tracking-tighter">Total</p>
-                                              <p className="text-sm font-sans font-black text-gold whitespace-nowrap">$ {Number(a.total_price).toLocaleString('es-AR')}</p>
+                                              <p className="text-sm font-sans font-black text-gold whitespace-nowrap">${Number(a.total_price).toLocaleString('es-AR')}</p>
                                           </div>
                                         )}
                                       </div>
@@ -697,9 +707,8 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                           <TableCell className="px-6 py-6 font-sans">
                             <div className="text-sm font-bold text-gold/90">
                               {a.total_price ? (
-                                <div className="flex items-center gap-1 whitespace-nowrap">
-                                  <span>$</span>
-                                  <span>{Number(a.total_price || 0).toLocaleString('es-AR')}</span>
+                                <div className="text-sm font-bold text-gold/90 whitespace-nowrap">
+                                  ${Number(a.total_price || 0).toLocaleString('es-AR')}
                                 </div>
                               ) : "-"}
                             </div>
@@ -964,7 +973,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                             <SelectValue placeholder="Categoría..." />
                           </SelectTrigger>
                           <SelectContent className="bg-noir-light border-white/10 text-cream">
-                            {catData?.categories?.map((c: any) => (
+                            {catData?.categories?.map((c: Category) => (
                               <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                             ))}
                           </SelectContent>
@@ -977,8 +986,8 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                             <SelectValue placeholder="Servicio..." />
                           </SelectTrigger>
                           <SelectContent className="bg-noir-light border-white/10 text-cream">
-                            {subServicesData?.services?.map((s: any) => (
-                              <SelectItem key={s.id} value={s.id}>{s.title} - $ {Number(s.price).toLocaleString('es-AR')}</SelectItem>
+                            {subServicesData?.services?.map((s: Service) => (
+                              <SelectItem key={s.id} value={s.id}>{s.title} - ${Number(s.price).toLocaleString('es-AR')}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -987,14 +996,14 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                   <button 
                     onClick={() => {
                       if (!cartService) return;
-                      const sObj = subServicesData.services.find((s: any) => s.id === cartService);
+                      const sObj = subServicesData.services.find((s: Service) => s.id === cartService);
                       if (sObj) {
                         setSelectedServices(prev => [...prev!, {
                           id: sObj.id,
                           title: sObj.title,
                           price: sObj.price,
                           duration: sObj.duration || "30 min",
-                          category_name: catData?.categories?.find((c: any) => c.id === cartCategory)?.name
+                          category_name: catData?.categories?.find((c: Category) => c.id === cartCategory)?.name
                         }]);
                         setCartService("");
                       }
@@ -1019,7 +1028,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                           <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5 group">
                             <div className="space-y-0.5">
                               <p className="text-xs font-bold text-cream">{s.title}</p>
-                              <p className="text-[10px] text-cream/40">{s.duration} • ${Number(s.price).toLocaleString('es-AR')}</p>
+                              <p className="text-[10px] text-cream/40 whitespace-nowrap">{s.duration} • ${Number(s.price).toLocaleString('es-AR')}</p>
                             </div>
                             <button 
                               onClick={() => setSelectedServices(prev => prev!.filter((_, i) => i !== idx))}
@@ -1064,8 +1073,8 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                 <div className="p-4 rounded-2xl bg-gold/5 border border-gold/10 flex justify-between items-center mt-4">
                   <div>
                     <p className="text-[10px] uppercase font-bold tracking-[0.2em] text-gold/60">Total del Turno</p>
-                    <p className="text-2xl font-serif font-black text-gold">
-                      $ {Number(selectedServices?.reduce((acc, s) => acc + Number(s.price), 0) || 0).toLocaleString('es-AR')}
+                    <p className="text-2xl font-serif font-black text-gold whitespace-nowrap">
+                      ${Number(selectedServices?.reduce((acc, s) => acc + Number(s.price), 0) || 0).toLocaleString('es-AR')}
                     </p>
                   </div>
                   <div className="text-right">
@@ -1138,7 +1147,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                         <SelectValue placeholder="Categoría" />
                       </SelectTrigger>
                       <SelectContent className="bg-noir-light border-white/10 text-cream">
-                        {catData?.categories?.map((c: any) => (
+                        {catData?.categories?.map((c: Category) => (
                           <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                         ))}
                       </SelectContent>
@@ -1149,8 +1158,8 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                         <SelectValue placeholder="Sub-servicio" />
                       </SelectTrigger>
                       <SelectContent className="bg-noir-light border-white/10 text-cream">
-                          {subServicesData?.services?.map((s: any) => (
-                            <SelectItem key={s.id} value={s.id}>{s.title} - $ {Number(s.price).toLocaleString('es-AR')}</SelectItem>
+                          {subServicesData?.services?.map((s: Service) => (
+                            <SelectItem key={s.id} value={s.id}>{s.title} - ${Number(s.price).toLocaleString('es-AR')}</SelectItem>
                           ))}
                       </SelectContent>
                     </Select>
@@ -1158,14 +1167,14 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                   <button 
                     onClick={() => {
                       if (!cartService) return;
-                      const sObj = subServicesData.services.find((s: any) => s.id === cartService);
+                      const sObj = subServicesData.services.find((s: Service) => s.id === cartService);
                       if (sObj) {
                         setSelectedServices(prev => [...prev!, {
                           id: sObj.id,
                           title: sObj.title,
                           price: sObj.price,
                           duration: sObj.duration || "30 min",
-                          category_name: catData?.categories?.find((c: any) => c.id === cartCategory)?.name
+                          category_name: catData?.categories?.find((c: Category) => c.id === cartCategory)?.name
                         }]);
                         setCartService("");
                       }
@@ -1186,7 +1195,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                           <div className="text-[11px]">
                             <span className="font-bold text-cream">{s.title}</span>
                             <span className="text-cream/30 mx-2">•</span>
-                            <span className="text-cream/60 font-mono">$ {Number(s.price).toLocaleString('es-AR')}</span>
+                            <span className="text-cream/60 font-mono">${Number(s.price).toLocaleString('es-AR')}</span>
                           </div>
                           <button onClick={() => setSelectedServices(prev => prev!.filter((_, i) => i !== idx))} className="text-rose/40 hover:text-rose transition-colors">
                             <X className="w-3.5 h-3.5" />
@@ -1214,8 +1223,8 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                 <div className="flex justify-between items-end border-t border-white/5 pt-4">
                   <div>
                     <label className="text-[10px] uppercase tracking-[0.2em] text-gold/40 font-bold">Total del Turno</label>
-                    <p className="text-3xl font-serif font-black text-gold">
-                      $ {Number(selectedServices?.reduce((acc, s) => acc + Number(s.price), 0) || 0).toLocaleString('es-AR')}
+                    <p className="text-3xl font-serif font-black text-gold whitespace-nowrap">
+                      ${Number(selectedServices?.reduce((acc, s) => acc + Number(s.price), 0) || 0).toLocaleString('es-AR')}
                     </p>
                   </div>
                   <div className="flex flex-col items-end gap-1">

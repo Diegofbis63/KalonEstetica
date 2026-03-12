@@ -133,7 +133,7 @@ const CategoryDetail = () => {
                             </span>
                           </div>
                         </div>
-                        <div className="text-3xl font-serif font-bold text-gold shrink-0">
+                        <div className="text-3xl font-serif font-bold text-gold shrink-0 whitespace-nowrap">
                           ${Number(s.price).toLocaleString('es-AR')}
                         </div>
                       </div>

@@ -139,3 +139,42 @@ html {
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--gold) / 0.5);
 }
+
+@layer utilities {
+  .liquid-glass {
+    @apply bg-white/[0.03] backdrop-blur-2xl border border-white/5 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)];
+  }
+
+  .text-gradient {
+    @apply bg-gradient-to-r from-gold via-gold-light to-gold-light bg-clip-text text-transparent;
+  }
+
+  .cosmic-glow {
+    box-shadow: 0 0 50px -10px rgba(212, 175, 55, 0.3);
+  }
+
+  .neon-pulse {
+    animation: neon-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes neon-pulse {
+    0%, 100% {
+      opacity: 1;
+      filter: brightness(1) drop-shadow(0 0 2px hsl(var(--gold)));
+    }
+    50% {
+      opacity: .8;
+      filter: brightness(1.2) drop-shadow(0 0 8px hsl(var(--gold)));
+    }
+  }
+
+  .float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-20px); }
+    100% { transform: translateY(0px); }
+  }
+}

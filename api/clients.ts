@@ -17,20 +17,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 return res.status(400).json({ error: 'Missing client id' });
             }
 
-            // 1. Update direct fields
+            const clientUpdateValues: (string | number | boolean | null)[] = [];
+            let currentIdx = 1;
+            const setClauses: string[] = [];
+
             if (client_name) {
-                await db.query('UPDATE leads SET client_name = $1 WHERE id = $2', [client_name, id]);
+                setClauses.push(`client_name = $${currentIdx++}`);
+                clientUpdateValues.push(client_name);
             }
 
-            // 2. Update contact_info JSONB fields
-            if (phone) {
-                await db.query(`UPDATE leads SET contact_info = jsonb_set(COALESCE(contact_info, '{}'::jsonb), '{phone}', $1) WHERE id = $2`, [JSON.stringify(phone), id]);
+            // Build an object with only the keys we want to update in contact_info
+            const contactInfoUpdates: Record<string, string | null> = {};
+            if (phone !== undefined) contactInfoUpdates.phone = phone;
+            if (email !== undefined) contactInfoUpdates.email = email;
+            if (note !== undefined) contactInfoUpdates.note = note;
+
+            if (Object.keys(contactInfoUpdates).length > 0) {
+                setClauses.push(`contact_info = COALESCE(contact_info, '{}'::jsonb) || $${currentIdx++}::jsonb`);
+                clientUpdateValues.push(JSON.stringify(contactInfoUpdates));
             }
-            if (email) {
-                await db.query(`UPDATE leads SET contact_info = jsonb_set(COALESCE(contact_info, '{}'::jsonb), '{email}', $1) WHERE id = $2`, [JSON.stringify(email), id]);
-            }
-            if (note !== undefined) {
-                await db.query(`UPDATE leads SET contact_info = jsonb_set(COALESCE(contact_info, '{}'::jsonb), '{note}', $1) WHERE id = $2`, [JSON.stringify(note), id]);
+
+            if (setClauses.length > 0) {
+                clientUpdateValues.push(id as string);
+                await db.query(
+                    `UPDATE leads SET ${setClauses.join(', ')} WHERE id = $${currentIdx}`,
+                    clientUpdateValues
+                );
             }
 
             const result = await db.query('SELECT *, contact_info->>\'phone\' as phone, contact_info->>\'email\' as email, contact_info->>\'note\' as note FROM leads WHERE id = $1', [id]);
