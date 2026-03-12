@@ -447,7 +447,7 @@ export default function Clients() {
                                                 </div>
                                                 <div className="flex items-center gap-1">
                                                   <Activity className="w-3 h-3" />
-                                                  {new Date(appt.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}hs
+                                                                                                     {new Date(appt.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}hs
                                                 </div>
                                               </div>
                                             </div>

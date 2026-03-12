@@ -427,7 +427,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                 <div className="flex items-center gap-3">
                                   <Clock className={`w-3.5 h-3.5 ${appt.canManage ? 'text-gold' : 'text-cream/20'}`} />
                                   <span className={`text-sm font-bold font-sans ${appt.canManage ? 'text-gold' : 'text-cream/40'}`}>
-                                    {new Date(appt.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} HS
+                                                                        {new Date(appt.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}hs
                                   </span>
                                 </div>
                                 <h4 className={`text-lg font-serif font-bold ${appt.canManage ? 'text-cream' : 'text-cream/30'}`}>
@@ -638,7 +638,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                                   <Clock className="w-2.5 h-2.5" /> {s.duration}
                                                 </p>
                                               </div>
-                                              <p className="text-xs font-sans font-bold text-cream/80">${Number(s.price).toLocaleString('es-AR')}</p>
+                                                <p className="text-xs font-sans font-bold text-cream/80 whitespace-nowrap">$ {Number(s.price).toLocaleString('es-AR')}</p>
                                             </div>
                                           ))
                                         ) : (
@@ -663,7 +663,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                         {a.total_price && a.total_price > 0 && (
                                           <div className="flex justify-between items-center">
                                             <p className="text-xs font-bold text-gold uppercase tracking-tighter">Total</p>
-                                            <p className="text-sm font-sans font-black text-gold">${Number(a.total_price).toLocaleString('es-AR')}</p>
+                                              <p className="text-sm font-sans font-black text-gold whitespace-nowrap">$ {Number(a.total_price).toLocaleString('es-AR')}</p>
                                           </div>
                                         )}
                                       </div>
@@ -686,17 +686,22 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                             </div>
                           </TableCell>
                           <TableCell className="px-6 py-6 font-sans">
-                            <div className="text-sm font-medium text-cream/60 capitalize">
+                            <div className="text-sm font-medium text-cream/60 capitalize whitespace-nowrap">
                               {new Intl.DateTimeFormat('es-AR', { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(a.date_time))}
                               <span className="mx-2 text-cream/10">•</span>
                               <span className="text-gold font-bold">
-                                {new Date(a.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}hs
+                                {new Date(a.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}hs
                               </span>
                             </div>
                           </TableCell>
                           <TableCell className="px-6 py-6 font-sans">
                             <div className="text-sm font-bold text-gold/90">
-                              {a.total_price ? `$ ${Number(a.total_price || 0).toLocaleString('es-AR')}` : "-"}
+                              {a.total_price ? (
+                                <div className="flex items-center gap-1 whitespace-nowrap">
+                                  <span>$</span>
+                                  <span>{Number(a.total_price || 0).toLocaleString('es-AR')}</span>
+                                </div>
+                              ) : "-"}
                             </div>
                           </TableCell>
                           <TableCell className="px-6 py-6">
@@ -973,7 +978,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                           </SelectTrigger>
                           <SelectContent className="bg-noir-light border-white/10 text-cream">
                             {subServicesData?.services?.map((s: any) => (
-                              <SelectItem key={s.id} value={s.id}>{s.title} - ${Number(s.price).toLocaleString('es-AR')}</SelectItem>
+                              <SelectItem key={s.id} value={s.id}>{s.title} - $ {Number(s.price).toLocaleString('es-AR')}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -1144,9 +1149,9 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                         <SelectValue placeholder="Sub-servicio" />
                       </SelectTrigger>
                       <SelectContent className="bg-noir-light border-white/10 text-cream">
-                        {subServicesData?.services?.map((s: any) => (
-                          <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
-                        ))}
+                          {subServicesData?.services?.map((s: any) => (
+                            <SelectItem key={s.id} value={s.id}>{s.title} - $ {Number(s.price).toLocaleString('es-AR')}</SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1181,7 +1186,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                           <div className="text-[11px]">
                             <span className="font-bold text-cream">{s.title}</span>
                             <span className="text-cream/30 mx-2">•</span>
-                            <span className="text-cream/60 font-mono">${Number(s.price).toLocaleString('es-AR')}</span>
+                            <span className="text-cream/60 font-mono">$ {Number(s.price).toLocaleString('es-AR')}</span>
                           </div>
                           <button onClick={() => setSelectedServices(prev => prev!.filter((_, i) => i !== idx))} className="text-rose/40 hover:text-rose transition-colors">
                             <X className="w-3.5 h-3.5" />
