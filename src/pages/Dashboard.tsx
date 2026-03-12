@@ -4,7 +4,7 @@ import {
   LogOut, Users, CalendarCheck, TrendingUp, Edit, MessageSquare, 
   Trash2, CheckCircle2, XCircle, AlertTriangle, Clock, 
   ArrowRight, ShieldAlert, Zap, Bell, CalendarDays, ChevronRight, 
-  Phone, MoreHorizontal 
+  Phone, MoreHorizontal, Info, X, Plus, Search
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/AuthContext";
@@ -44,6 +44,25 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface Lead {
   id: string;
@@ -73,6 +92,14 @@ interface Appointment {
   status: string;
   created_at: string;
   canManage?: boolean;
+  selected_services?: Array<{
+    id: string;
+    title: string;
+    price: number | string;
+    duration: string;
+    category_name?: string;
+  }>;
+  total_price?: number;
 }
 
 export interface Service {
@@ -116,6 +143,11 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
   const [formService, setFormService] = useState("");
   const [formPhone, setFormPhone] = useState("");
   const [formClientName, setFormClientName] = useState("");
+  
+  // Multi-service state
+  const [selectedServices, setSelectedServices] = useState<Appointment['selected_services']>([]);
+  const [cartCategory, setCartCategory] = useState<string>("");
+  const [cartService, setCartService] = useState<string>("");
 
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [itemToDelete, setItemToDelete ] = useState<{ id: string, type: 'lead' | 'appointment' | 'service' } | null>(null);
@@ -154,14 +186,34 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
     }
   });
 
+  const { data: catData } = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => fetch('/api/categories').then(res => res.json())
+  });
+
+  const { data: subServicesData } = useQuery({
+    queryKey: ['sub-services', cartCategory],
+    queryFn: () => fetch(`/api/services?category_id=${cartCategory}`).then(res => res.json()),
+    enabled: !!cartCategory
+  });
+
   const services: Service[] = useMemo(() => servData?.services || [], [servData?.services]);
 
   const updateAppointment = useMutation({
-    mutationFn: async ({ id, status, date_time, service_type, client_name, phone }: { id: string, status?: string, date_time?: string, service_type?: string, client_name?: string, phone?: string }) => {
+    mutationFn: async ({ id, status, date_time, service_type, client_name, phone, selected_services, total_price }: { 
+      id: string, 
+      status?: string, 
+      date_time?: string, 
+      service_type?: string, 
+      client_name?: string, 
+      phone?: string,
+      selected_services?: Appointment['selected_services'],
+      total_price?: number
+    }) => {
       const res = await fetch(`/api/appointments?id=${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status, date_time, service_type, client_name, phone })
+        body: JSON.stringify({ status, date_time, service_type, client_name, phone, selected_services, total_price })
       });
       if (!res.ok) {
         const err = await res.json();
@@ -181,11 +233,18 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
   });
 
   const createAppointment = useMutation({
-    mutationFn: async ({ lead_id, date_time, service_type, category_id }: { lead_id: string, date_time: string, service_type: string, category_id?: string }) => {
+    mutationFn: async ({ lead_id, date_time, service_type, category_id, selected_services, total_price }: { 
+      lead_id: string, 
+      date_time: string, 
+      service_type: string, 
+      category_id?: string,
+      selected_services?: Appointment['selected_services'],
+      total_price?: number
+    }) => {
       const res = await fetch('/api/appointments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lead_id, date_time, service_type, category_id })
+        body: JSON.stringify({ lead_id, date_time, service_type, category_id, selected_services, total_price })
       });
       if (!res.ok) throw new Error('Failed to create appointment');
       return res.json();
@@ -523,6 +582,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Contacto</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Servicio</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Fecha y Hora</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Precio</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Estado</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12 text-right">Acciones</TableHead>
                       </TableRow>
@@ -551,7 +611,49 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                           <TableCell className="px-6 py-6">
                             <div className="flex items-center gap-2.5 text-sm font-serif text-cream/80 group-hover:text-cream transition-colors">
                               <div className={`w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(194,154,91,0.4)] ${a.canManage ? 'bg-gold' : 'bg-white/10'}`} />
-                              {a.service_type}
+                              {a.canManage ? (
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <button className="flex items-center gap-1.5 hover:text-gold transition-colors text-left">
+                                      {a.service_type || "Varios Servicios"}
+                                      <Info className="w-3.5 h-3.5" />
+                                    </button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-64 bg-noir/95 backdrop-blur-xl border-gold/20 shadow-[0_10px_40px_rgba(0,0,0,0.5)] p-0">
+                                    <div className="p-3 border-b border-white/5 bg-white/5">
+                                      <p className="text-[10px] uppercase font-bold tracking-widest text-gold mb-1">Detalle del Turno</p>
+                                      <p className="text-xs text-cream/60">Servicios seleccionados:</p>
+                                    </div>
+                                    <ScrollArea className="max-h-48">
+                                      <div className="p-3 space-y-3">
+                                        {a.selected_services && a.selected_services.length > 0 ? (
+                                          a.selected_services.map((s, idx) => (
+                                            <div key={idx} className="flex justify-between items-start gap-2 group/item">
+                                              <div className="space-y-0.5">
+                                                <p className="text-xs font-bold text-cream group-hover/item:text-gold transition-colors">{s.title}</p>
+                                                <p className="text-[10px] text-cream/40 flex items-center gap-1">
+                                                  <Clock className="w-2.5 h-2.5" /> {s.duration}
+                                                </p>
+                                              </div>
+                                              <p className="text-xs font-sans font-bold text-cream/80">${Number(s.price).toLocaleString('es-AR')}</p>
+                                            </div>
+                                          ))
+                                        ) : (
+                                          <div className="text-[10px] text-cream/20 italic italic py-2">Sin sub-servicios detallados</div>
+                                        )}
+                                      </div>
+                                    </ScrollArea>
+                                    {a.total_price && a.total_price > 0 && (
+                                      <div className="p-3 border-t border-white/5 bg-gold/5 flex justify-between items-center">
+                                        <p className="text-xs font-bold text-gold uppercase tracking-tighter">Total</p>
+                                        <p className="text-sm font-sans font-black text-gold">${Number(a.total_price).toLocaleString('es-AR')}</p>
+                                      </div>
+                                    )}
+                                  </PopoverContent>
+                                </Popover>
+                              ) : (
+                                a.service_type
+                              )}
                             </div>
                           </TableCell>
                           <TableCell className="px-6 py-6 font-sans">
@@ -561,6 +663,11 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                               <span className="text-gold font-bold">
                                 {new Date(a.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}hs
                               </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-6 py-6 font-sans">
+                            <div className="text-sm font-bold text-gold/90">
+                              {a.total_price ? `$ ${Number(a.total_price || 0).toLocaleString('es-AR')}` : "-"}
                             </div>
                           </TableCell>
                           <TableCell className="px-6 py-6">
@@ -593,6 +700,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                     setFormService(a.service_type);
                                     setFormClientName(a.client_name || "");
                                     setFormPhone(a.phone || "");
+                                    setSelectedServices(a.selected_services || []);
                                     setIsEditAppointmentModalOpen(true);
                                   }} 
                                   className="p-2 rounded-lg bg-cream/5 text-cream/40 hover:text-gold hover:bg-gold/10 transition-all border border-transparent hover:border-gold/20"
@@ -705,7 +813,13 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                   <MessageSquare className="w-4 h-4" />
                                 </button>
                                 <button 
-                                  onClick={() => { setSelectedLeadForAppt(l); setIsNewAppointmentModalOpen(true); }}
+                                  onClick={() => { 
+                                    setSelectedLeadForAppt(l); 
+                                    setSelectedServices([]);
+                                    setCartCategory("");
+                                    setCartService("");
+                                    setIsNewAppointmentModalOpen(true); 
+                                  }}
                                   className="p-2 rounded-lg bg-emerald-500/5 text-emerald-400/60 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all border border-transparent hover:border-emerald-500/20"
                                   title="Agendar Cita"
                                 >
@@ -799,23 +913,97 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
 
       {/* 2. New Appointment Modal */}
       <Dialog open={isNewAppointmentModalOpen} onOpenChange={setIsNewAppointmentModalOpen}>
-        <DialogContent className="bg-noir border border-gold/20 text-cream">
+        <DialogContent className="bg-noir border border-gold/20 text-cream max-w-xl">
             <DialogHeader>
                 <DialogTitle className="font-serif text-xl">Agendar Cita Manual</DialogTitle>
-                <DialogDescription>Convierte este lead en un turno confirmado</DialogDescription>
+                <DialogDescription>Convierte este lead en un turno confirmado con múltiples servicios</DialogDescription>
             </DialogHeader>
             <div className="space-y-6 py-4">
-                <div className="space-y-2">
-                    <label className="text-[10px] uppercase tracking-widest text-cream/30 font-bold">Seleccionar Tratamiento</label>
-                    <select 
-                      value={formService} 
-                      onChange={e => setFormService(e.target.value)} 
-                      className="w-full bg-noir-light border border-white/10 rounded-xl p-3 outline-none focus:border-gold transition-colors appearance-none cursor-pointer"
-                    >
-                        <option value="">Elegir servicio...</option>
-                        {services.map(s => <option key={s.id} value={s.title}>{s.title}</option>)}
-                    </select>
+                {/* Multi-Service Selector */}
+                <div className="p-4 rounded-2xl bg-white/5 border border-white/5 space-y-4">
+                  <p className="text-[10px] uppercase font-bold tracking-widest text-gold">Selección de Servicios (POS Style)</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                        <label className="text-[10px] uppercase tracking-widest text-cream/30 font-bold">Categoría</label>
+                        <Select value={cartCategory} onValueChange={setCartCategory}>
+                          <SelectTrigger className="bg-noir-light border-white/10 rounded-xl h-12">
+                            <SelectValue placeholder="Categoría..." />
+                          </SelectTrigger>
+                          <SelectContent className="bg-noir-light border-white/10 text-cream">
+                            {catData?.categories?.map((c: any) => (
+                              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-[10px] uppercase tracking-widest text-cream/30 font-bold">Servicio</label>
+                        <Select value={cartService} onValueChange={setCartService} disabled={!cartCategory}>
+                          <SelectTrigger className="bg-noir-light border-white/10 rounded-xl h-12">
+                            <SelectValue placeholder="Servicio..." />
+                          </SelectTrigger>
+                          <SelectContent className="bg-noir-light border-white/10 text-cream">
+                            {subServicesData?.services?.map((s: any) => (
+                              <SelectItem key={s.id} value={s.id}>{s.title} - ${Number(s.price).toLocaleString('es-AR')}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      if (!cartService) return;
+                      const sObj = subServicesData.services.find((s: any) => s.id === cartService);
+                      if (sObj) {
+                        setSelectedServices(prev => [...prev!, {
+                          id: sObj.id,
+                          title: sObj.title,
+                          price: sObj.price,
+                          duration: sObj.duration || "30 min"
+                        }]);
+                        setCartService("");
+                      }
+                    }}
+                    disabled={!cartService}
+                    className="w-full py-2.5 rounded-xl bg-gold/10 text-gold border border-gold/20 text-[10px] uppercase font-bold tracking-widest hover:bg-gold hover:text-noir transition-all disabled:opacity-30 flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" /> Añadir Tratamiento
+                  </button>
                 </div>
+
+                {/* Selected Services List */}
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase tracking-widest text-cream/30 font-bold flex justify-between">
+                    Tratamientos Añadidos
+                    <span>{selectedServices?.length || 0} items</span>
+                  </label>
+                  <ScrollArea className="h-40 rounded-xl border border-white/5 bg-noir-light/30 p-2">
+                    {selectedServices && selectedServices.length > 0 ? (
+                      <div className="space-y-2">
+                        {selectedServices.map((s, idx) => (
+                          <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5 group">
+                            <div className="space-y-0.5">
+                              <p className="text-xs font-bold text-cream">{s.title}</p>
+                              <p className="text-[10px] text-cream/40">{s.duration} • ${Number(s.price).toLocaleString('es-AR')}</p>
+                            </div>
+                            <button 
+                              onClick={() => setSelectedServices(prev => prev!.filter((_, i) => i !== idx))}
+                              className="p-1.5 rounded-lg bg-rose/5 text-rose/40 hover:text-rose transition-colors"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="h-full flex flex-col items-center justify-center text-cream/10 italic">
+                        <CalendarDays className="w-8 h-8 mb-2 opacity-10" />
+                        <p className="text-[10px] uppercase tracking-tighter">Sin servicios seleccionados</p>
+                      </div>
+                    )}
+                  </ScrollArea>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                         <label className="text-[10px] uppercase tracking-widest text-cream/30 font-bold">Fecha</label>
@@ -836,27 +1024,43 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                         />
                     </div>
                 </div>
+
+                {/* Total Footer */}
+                <div className="p-4 rounded-2xl bg-gold/5 border border-gold/10 flex justify-between items-center mt-4">
+                  <div>
+                    <p className="text-[10px] uppercase font-bold tracking-[0.2em] text-gold/60">Total del Turno</p>
+                    <p className="text-2xl font-serif font-black text-gold">
+                      $ {Number(selectedServices?.reduce((acc, s) => acc + Number(s.price), 0) || 0).toLocaleString('es-AR')}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] uppercase font-bold tracking-[0.1em] text-cream/30">Duración Est.</p>
+                    <p className="text-sm font-sans font-bold text-cream/60">
+                      ~ {selectedServices?.length ? "60 min" : "0 min"}
+                    </p>
+                  </div>
+                </div>
             </div>
-            <DialogFooter>
+            <DialogFooter className="gap-2">
                 <button onClick={() => setIsNewAppointmentModalOpen(false)} className="px-6 py-2.5 text-xs font-bold uppercase tracking-widest opacity-20 hover:opacity-100 transition-opacity">Cancelar</button>
                 <button 
-                    disabled={createAppointment.isPending}
+                    disabled={createAppointment.isPending || !selectedServices?.length}
                     onClick={() => {
-                        if (!formService || !formDate || !formTime) {
-                            toast.error("Por favor completa todos los campos");
+                        if (!formDate || !formTime) {
+                            toast.error("Por favor completa los campos de fecha y hora");
                             return;
                         }
-                        const serviceRes = services.find(s => s.title === formService);
                         createAppointment.mutate({ 
                           lead_id: selectedLeadForAppt!.id, 
                           date_time: `${formDate}T${formTime}:00Z`, 
-                          service_type: formService,
-                          category_id: serviceRes?.category_id || ""
+                          service_type: selectedServices![0].title + (selectedServices!.length > 1 ? "..." : ""),
+                          selected_services: selectedServices,
+                          total_price: selectedServices?.reduce((acc, s) => acc + Number(s.price), 0)
                         });
                     }} 
-                    className="px-8 py-3 bg-gold text-noir rounded-xl font-bold text-[10px] uppercase tracking-widest shadow-lg shadow-gold/20"
+                    className="flex-1 py-4 bg-gradient-to-r from-gold to-[#d4af37] text-noir rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-gold/20 hover:-translate-y-1 transition-all"
                 >
-                    {createAppointment.isPending ? 'Procesando...' : 'Confirmar y Agendar'}
+                    {createAppointment.isPending ? 'Procesando...' : 'Confirmar y Agendar Turno'}
                 </button>
             </DialogFooter>
         </DialogContent>
@@ -864,10 +1068,10 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
 
       {/* 3. Edit Appointment Modal */}
       <Dialog open={isEditAppointmentModalOpen} onOpenChange={setIsEditAppointmentModalOpen}>
-        <DialogContent className="bg-noir border border-gold/20 text-cream">
+        <DialogContent className="bg-noir border border-gold/20 text-cream max-w-xl">
             <DialogHeader>
                 <DialogTitle className="font-serif text-xl border-l-4 border-gold pl-3">Redefinir Cita</DialogTitle>
-                <DialogDescription>Modifica los detalles del turno programado</DialogDescription>
+                <DialogDescription>Modifica los detalles del turno programado con soporte multi-servicio</DialogDescription>
             </DialogHeader>
             <div className="space-y-5 py-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -880,12 +1084,79 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                         <input type="text" value={formPhone} onChange={e => setFormPhone(e.target.value)} className="w-full bg-noir-light border border-white/10 rounded-xl p-3 focus:border-gold outline-none" />
                     </div>
                 </div>
-                <div className="space-y-2">
-                    <label className="text-[10px] uppercase tracking-widest text-cream/30 font-bold">Tratamiento Asignado</label>
-                    <select value={formService} onChange={e => setFormService(e.target.value)} className="w-full bg-noir-light border border-white/10 rounded-xl p-3">
-                        {services.map(s => <option key={s.id} value={s.title}>{s.title}</option>)}
-                    </select>
+
+                {/* Multi-Service Selection (POS Style) */}
+                <div className="p-4 rounded-2xl bg-white/5 border border-white/5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] uppercase font-bold tracking-widest text-gold">Añadir Tratamientos</p>
+                    <Info className="w-3.5 h-3.5 text-gold/40" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Select value={cartCategory} onValueChange={setCartCategory}>
+                      <SelectTrigger className="bg-noir-light border-white/10">
+                        <SelectValue placeholder="Categoría" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-noir-light border-white/10 text-cream">
+                        {catData?.categories?.map((c: any) => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <Select value={cartService} onValueChange={setCartService} disabled={!cartCategory}>
+                      <SelectTrigger className="bg-noir-light border-white/10">
+                        <SelectValue placeholder="Sub-servicio" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-noir-light border-white/10 text-cream">
+                        {subServicesData?.services?.map((s: any) => (
+                          <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      if (!cartService) return;
+                      const sObj = subServicesData.services.find((s: any) => s.id === cartService);
+                      if (sObj) {
+                        setSelectedServices(prev => [...prev!, {
+                          id: sObj.id,
+                          title: sObj.title,
+                          price: sObj.price,
+                          duration: sObj.duration || "30 min"
+                        }]);
+                        setCartService("");
+                      }
+                    }}
+                    disabled={!cartService}
+                    className="w-full py-2 bg-gold/10 text-gold text-[10px] font-bold uppercase tracking-widest rounded-lg border border-gold/20 hover:bg-gold hover:text-noir transition-all"
+                  >
+                    Añadir Tratamiento
+                  </button>
                 </div>
+
+                {/* List of services */}
+                <ScrollArea className="h-32 border border-white/5 rounded-xl bg-noir-light/30 p-1">
+                  <div className="space-y-1.5">
+                    {selectedServices && selectedServices.length > 0 ? (
+                      selectedServices.map((s, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/5">
+                          <div className="text-[11px]">
+                            <span className="font-bold text-cream">{s.title}</span>
+                            <span className="text-cream/30 mx-2">•</span>
+                            <span className="text-cream/60 font-mono">${Number(s.price).toLocaleString('es-AR')}</span>
+                          </div>
+                          <button onClick={() => setSelectedServices(prev => prev!.filter((_, i) => i !== idx))} className="text-rose/40 hover:text-rose transition-colors">
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-[10px] text-center text-cream/20 py-4 italic">No hay servicios seleccionados</p>
+                    )}
+                  </div>
+                </ScrollArea>
+
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                         <label className="text-[10px] uppercase tracking-widest text-cream/30 font-bold">Nueva Fecha</label>
@@ -896,20 +1167,37 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                         <input type="time" value={formTime} onChange={e => setFormTime(e.target.value)} className="w-full bg-noir-light border border-white/10 rounded-xl p-3 [color-scheme:dark]" />
                     </div>
                 </div>
+
+                {/* Total Calc */}
+                <div className="flex justify-between items-end border-t border-white/5 pt-4">
+                  <div>
+                    <label className="text-[10px] uppercase tracking-[0.2em] text-gold/40 font-bold">Total del Turno</label>
+                    <p className="text-3xl font-serif font-black text-gold">
+                      $ {Number(selectedServices?.reduce((acc, s) => acc + Number(s.price), 0) || 0).toLocaleString('es-AR')}
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                     <div className="px-3 py-1 bg-white/5 border border-white/10 rounded-full text-[9px] font-bold text-cream/40 uppercase tracking-widest">
+                       {selectedServices?.length || 0} Servicios
+                     </div>
+                  </div>
+                </div>
             </div>
             <DialogFooter>
                 <button 
-                    disabled={updateAppointment.isPending}
+                    disabled={updateAppointment.isPending || !selectedServices?.length}
                     onClick={() => updateAppointment.mutate({ 
                         id: selectedAppointmentForEdit!.id,
                         date_time: `${formDate}T${formTime}:00Z`,
-                        service_type: formService,
+                        service_type: selectedServices![0].title + (selectedServices!.length > 1 ? "..." : ""),
                         client_name: formClientName,
-                        phone: formPhone
+                        phone: formPhone,
+                        selected_services: selectedServices,
+                        total_price: selectedServices?.reduce((acc, s) => acc + Number(s.price), 0)
                     })} 
-                    className="w-full py-3.5 bg-gradient-to-r from-gold to-[#d4af37] text-noir rounded-xl font-bold text-[10px] uppercase tracking-widest shadow-xl shadow-gold/10 hover:-translate-y-0.5 transition-all"
+                    className="w-full py-4 bg-gradient-to-r from-gold to-[#d4af37] text-noir rounded-xl font-bold text-[10px] uppercase tracking-widest shadow-xl shadow-gold/10 hover:-translate-y-0.5 transition-all"
                 >
-                    {updateAppointment.isPending ? 'Guardando...' : 'Aplicar Cambios'}
+                    {updateAppointment.isPending ? 'Guardando...' : 'Aplicar Cambios en la Cita'}
                 </button>
             </DialogFooter>
         </DialogContent>

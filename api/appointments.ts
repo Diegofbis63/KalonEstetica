@@ -26,7 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 return res.status(403).json({ error: 'No tienes permiso para gestionar este servicio' });
             }
 
-            const { status, date_time, service_type, client_name, phone } = req.body;
+            const { status, date_time, service_type, client_name, phone, selected_services, total_price } = req.body;
 
             const updates: string[] = [];
             const values: any[] = [];
@@ -43,6 +43,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             if (service_type !== undefined) {
                 updates.push(`service_type = $${index++}`);
                 values.push(service_type);
+            }
+            if (selected_services !== undefined) {
+                updates.push(`selected_services = $${index++}::jsonb`);
+                values.push(JSON.stringify(selected_services));
+            }
+            if (total_price !== undefined) {
+                updates.push(`total_price = $${index++}`);
+                values.push(total_price);
             }
 
             let appointmentResult = null;
@@ -95,18 +103,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return res.status(200).json({ appointment });
 
         } else if (req.method === 'POST') {
-            const { lead_id, date_time, service_type, category_id } = req.body;
+            const { lead_id, date_time, service_type, category_id, selected_services, total_price } = req.body;
 
             if (!lead_id || !date_time || !service_type) {
                 return res.status(400).json({ error: 'Missing required fields' });
             }
 
             const query = `
-                INSERT INTO appointments (lead_id, date_time, service_type, status, category_id)
-                VALUES ($1, $2, $3, 'confirmed', $4)
+                INSERT INTO appointments (lead_id, date_time, service_type, status, category_id, selected_services, total_price)
+                VALUES ($1, $2, $3, 'confirmed', $4, $5::jsonb, $6)
                 RETURNING *
             `;
-            const result = await db.query(query, [lead_id, date_time, service_type, category_id]);
+            const result = await db.query(query, [
+                lead_id, 
+                date_time, 
+                service_type, 
+                category_id, 
+                JSON.stringify(selected_services || []), 
+                total_price || 0
+            ]);
 
             await db.query(`UPDATE leads SET status = 'qualified' WHERE id = $1`, [lead_id]);
 
