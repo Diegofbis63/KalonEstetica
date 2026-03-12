@@ -223,7 +223,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
       return res.json();
     },
     enabled: !!selectedLeadForChat && isChatModalOpen,
-    refetchInterval: isChatModalOpen ? 4000 : false, // Poll every 4s while open
+    refetchInterval: isChatModalOpen ? 1000 : false, // Poll every 1s while open for fluid UX
   });
 
   const chatLogs = useMemo(() => chatHistoryData?.history || [], [chatHistoryData?.history]);
@@ -372,7 +372,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
       await queryClient.cancelQueries({ queryKey: ['chat', newReply.leadId] });
       const previousChat = queryClient.getQueryData(['chat', newReply.leadId]);
       
-      queryClient.setQueryData(['chat', newReply.leadId], (old: { history: any[] } | undefined) => ({
+      queryClient.setQueryData(['chat', newReply.leadId], (old: { history: Array<{ role: string; content: string; media_url?: string; media_data?: string; created_at?: string; isPending?: boolean }> } | undefined) => ({
         ...old,
         history: [...(old?.history || []), {
           role: 'admin',
@@ -1040,13 +1040,13 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                           {m.isPending && <Clock className="w-2.5 h-2.5 animate-spin opacity-30" />}
                                         </div>
                                         
-                                        {m.media_url && (
+                                        {(m.media_url || m.media_data) && (
                                           <div className="mb-3 rounded-xl overflow-hidden border border-white/10 bg-black/40 shadow-inner group/img relative">
                                             <img 
-                                              src={m.media_url} 
+                                              src={m.media_url || m.media_data} 
                                               alt="Comprobante / Multimedia" 
                                               className="max-w-full h-auto cursor-zoom-in hover:scale-105 transition-transform duration-500" 
-                                              onClick={() => window.open(m.media_url, '_blank')}
+                                              onClick={() => window.open(m.media_url || m.media_data, '_blank')}
                                             />
                                             <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
                                               <Plus className="w-6 h-6 text-white drop-shadow-lg" />

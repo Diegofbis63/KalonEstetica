@@ -342,6 +342,7 @@ export default async function handler(req: Request) {
         userId = body.userId;
         const incomingMessage = body.message || "";
         let incomingMediaUrl = body.mediaUrl || null;
+        const incomingMediaData = body.mediaData || null; // Base64 from Bridge
 
         // Auto-extract media URL if missing and message follows "📸 [Imagen enviada] (...) " pattern
         if (!incomingMediaUrl && incomingMessage.includes('📸 [Imagen enviada]')) {
@@ -549,10 +550,12 @@ export default async function handler(req: Request) {
             }
 
             // 2. Log last user message and bot response to chat_logs
-            if (incomingMessage || incomingMediaUrl) {
-              await sql`INSERT INTO chat_logs (lead_id, role, content, media_url) VALUES (${leadId}, 'user', ${incomingMessage}, ${incomingMediaUrl})`;
+            if (incomingMessage || incomingMediaUrl || incomingMediaData) {
+              await sql`INSERT INTO chat_logs (lead_id, role, content, media_url, media_data, sent_to_whatsapp) 
+                        VALUES (${leadId}, 'user', ${incomingMessage}, ${incomingMediaUrl}, ${incomingMediaData}, true)`;
             }
-            await sql`INSERT INTO chat_logs (lead_id, role, content) VALUES (${leadId}, 'bot', ${responseText})`;
+            await sql`INSERT INTO chat_logs (lead_id, role, content, sent_to_whatsapp) 
+                      VALUES (${leadId}, 'bot', ${responseText}, false)`; // Bot messages might need pushing too if bridged differently
         }
 
         if (userId) {
