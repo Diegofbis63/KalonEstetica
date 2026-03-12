@@ -13,9 +13,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
         const db = getDb();
         const { date } = req.query; // For daily timeline filtering
+
+        interface LeadRow {
+            category_name: string;
+            phone: string;
+            email: string;
+            contact_info: { phone: string; email: string };
+            [key: string]: any;
+        }
         
         // Helper to check and obfuscate
-        const processRBAC = (row: any, user: { role: string; permissions: string[] }) => {
+        const processRBAC = (row: LeadRow, user: { role: string; permissions: string[] }) => {
             if (user.role === 'admin') return { ...row, canManage: true };
             
             // Assume the category name is already joined as "category_name"
@@ -36,10 +44,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Fetch leads with category info and contact details extracted
         const leadsQuery = `
             SELECT l.*, l.contact_info->>'phone' as phone, l.contact_info->>'email' as email, 
-                   c.name as category_name 
+                   c.name as category_name, l.updated_at
             FROM leads l
             LEFT JOIN categories c ON l.category_id = c.id
-            ORDER BY l.created_at DESC LIMIT 100
+            ORDER BY COALESCE(l.updated_at, l.created_at) DESC LIMIT 100
         `;
         const leadsRes = await db.query(leadsQuery);
 
@@ -60,8 +68,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         
         const apptsRes = await db.query(appointmentsQuery, queryValues);
 
-        const processedLeads = leadsRes.rows.map(r => processRBAC(r, user as any));
-        const processedAppts = apptsRes.rows.map(r => processRBAC(r, user as any));
+        const processedLeads = leadsRes.rows.map(r => processRBAC(r as LeadRow, user as { role: string; permissions: string[] }));
+        const processedAppts = apptsRes.rows.map(r => processRBAC(r as LeadRow, user as { role: string; permissions: string[] }));
 
         return res.status(200).json({
             leads: processedLeads,

@@ -4,12 +4,13 @@ import {
   LogOut, Users, CalendarCheck, TrendingUp, Edit, MessageSquare, 
   Trash2, CheckCircle2, XCircle, AlertTriangle, Clock, 
   ArrowRight, ShieldAlert, Zap, Bell, CalendarDays, ChevronRight, 
-  Phone, MoreHorizontal, Info, X, Plus, Search
+  Phone, MoreHorizontal, Info, X, Plus, Search, ClipboardList
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/AuthContext";
 import { toast } from "sonner";
 import ServicesManagement from "@/components/dashboard/ServicesManagement";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -78,6 +79,7 @@ interface Lead {
   category_name?: string;
   canManage?: boolean;
   phone?: string; // Unified phone from API RBAC
+  updated_at?: string;
   chat_history?: { role: string; content: string }[];
 }
 
@@ -809,15 +811,17 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                       <TableRow className="border-b border-white/5 hover:bg-transparent">
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Prospecto</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Contacto</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12 text-center">Intención AI</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12 text-right">Acciones</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12 text-center">Interés</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12 text-center">Estado Bot</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12 text-center">Última Interacción</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12 text-right">Gestión</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {leads.map((l, i) => (
                         <TableRow key={l.id} className={`border-b border-cream/5 hover:bg-cream/[0.02] group transition-colors animate-in fade-in slide-in-from-bottom-2 ${!l.canManage ? 'opacity-40' : ''}`} style={{ animationDelay: `${i * 50}ms` }}>
                           <TableCell className="px-6 py-5">
-                            <div className="font-serif font-bold text-cream text-base tracking-tight">{l.canManage ? l.client_name : `Interesado - ${l.category_name}`}</div>
+                            <div className="font-serif font-bold text-cream text-lg tracking-tight leading-tight">{l.canManage ? l.client_name : `Interesado - ${l.category_name}`}</div>
                           </TableCell>
                           <TableCell className="px-6 py-5">
                             {l.phone && (
@@ -833,28 +837,49 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                             )}
                           </TableCell>
                           <TableCell className="px-6 py-5 text-center">
-                            <div className="inline-flex flex-col items-center">
-                              <span className={`text-[10px] font-black tracking-widest mb-1 ${l.intent_score > 70 ? 'text-gold' : 'text-cream/40'}`}>
-                                {l.intent_score}%
-                              </span>
-                              <div className="w-16 h-1 bg-white/5 rounded-full overflow-hidden">
-                                <div 
-                                  className="bg-gold h-full shadow-[0_0_8px_rgba(194,154,91,0.5)] transition-all duration-1000" 
-                                  style={{ width: `${l.intent_score}%` }} 
+                            <div className="flex items-center justify-center gap-2">
+                                <span className="text-sm font-bold text-emerald-400">{l.intent_score}%</span>
+                                <Badge variant="outline" className={`text-[9px] font-black border ${l.intent_score > 70 ? 'border-emerald-500/30 text-emerald-400 bg-emerald-500/5' : l.intent_score > 40 ? 'border-amber-500/30 text-amber-500 bg-amber-500/5' : 'border-rose-500/30 text-rose-500 bg-rose-500/5'}`}>
+                                    {l.intent_score > 70 ? 'ALTA' : l.intent_score > 40 ? 'MEDIA' : 'BAJA'}
+                                </Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-6 py-5 text-center">
+                            <div className="flex items-center justify-center gap-3">
+                                <span className={`text-[9px] font-black tracking-widest ${l.is_bot_enabled ? 'text-emerald-400' : 'text-cream/20'}`}>
+                                    {l.is_bot_enabled ? 'ACTIVO' : 'PAUSADO'}
+                                </span>
+                                <Switch 
+                                    checked={l.is_bot_enabled} 
+                                    onCheckedChange={(val) => toggleBotMutation.mutate({ leadId: l.id, isBotEnabled: val })}
+                                    className="data-[state=checked]:bg-gold"
                                 />
-                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-6 py-5 text-center">
+                            <div className="text-[11px] text-cream/40 flex flex-col items-center">
+                                {l.updated_at || l.created_at ? (
+                                    <>
+                                        <div className="flex items-center gap-2">
+                                            <span>{new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(l.updated_at || l.created_at))}</span>
+                                            <span className="text-cream/10">•</span>
+                                            <span className="text-gold font-bold">
+                                                {new Date(l.updated_at || l.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}hs
+                                            </span>
+                                        </div>
+                                    </>
+                                ) : '-'}
                             </div>
                           </TableCell>
                           <TableCell className="px-6 py-4 text-right">
                             {l.canManage && (
-                              <div className="flex justify-end gap-2.5">
-                                <button 
-                                  onClick={() => { setSelectedLeadForChat(l); setIsChatModalOpen(true); }}
-                                  className="p-2 rounded-lg bg-gold/5 text-gold/60 hover:text-gold hover:bg-gold/10 transition-all border border-transparent hover:border-gold/20"
-                                  title="Abrir Chat"
-                                >
-                                  <MessageSquare className="w-4 h-4" />
-                                </button>
+                              <div className="flex justify-end gap-2">
+                                  <button 
+                                    onClick={() => { setSelectedLeadForChat(l); setIsChatModalOpen(true); }}
+                                    className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[9px] font-black uppercase tracking-widest text-cream/40 hover:text-gold hover:border-gold/30 transition-all flex items-center gap-2 group/btn"
+                                  >
+                                    <ClipboardList className="w-3.5 h-3.5 group-hover/btn:scale-110 transition-transform" /> Log
+                                  </button>
                                 <button 
                                   onClick={() => { 
                                     setSelectedLeadForAppt(l); 
@@ -863,35 +888,16 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                     setCartService("");
                                     setIsNewAppointmentModalOpen(true); 
                                   }}
-                                  className="p-2 rounded-lg bg-emerald-500/5 text-emerald-400/60 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all border border-transparent hover:border-emerald-500/20"
-                                  title="Agendar Cita"
+                                  className="px-3 py-1.5 rounded-lg bg-emerald-500/5 border border-emerald-500/20 text-[9px] font-black uppercase tracking-widest text-emerald-400 hover:bg-emerald-500/10 transition-all flex items-center gap-2"
                                 >
-                                  <CalendarCheck className="w-4 h-4" />
+                                  <CalendarCheck className="w-3 h-3" /> Agendar
                                 </button>
                                 <button 
                                   onClick={() => { setItemToDelete({ id: l.id, type: 'lead' }); setDeleteConfirmOpen(true); }} 
-                                  className="p-2 rounded-lg bg-rose/5 text-rose/60 hover:text-rose hover:bg-rose/10 transition-all border border-transparent hover:border-rose/20"
-                                  title="Eliminar Lead"
+                                  className="p-1.5 rounded-lg bg-rose/5 text-rose/40 hover:text-rose hover:bg-rose/10 transition-all"
                                 >
-                                  <Trash2 className="w-4 h-4" />
+                                  <Trash2 className="w-3.5 h-3.5" />
                                 </button>
-                                
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <button className="p-2 rounded-lg bg-cream/5 text-cream/20 hover:text-cream transition-all border border-transparent hover:bg-white/5">
-                                      <MoreHorizontal className="w-4 h-4" />
-                                    </button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end" className="bg-noir-light border-cream/5 text-cream/80">
-                                    <DropdownMenuItem className="focus:bg-emerald-500/10 focus:text-emerald-400 cursor-pointer" onClick={() => toggleBotMutation.mutate({ leadId: l.id, isBotEnabled: !l.is_bot_enabled })}>
-                                      <Zap className="w-4 h-4 mr-2" /> {l.is_bot_enabled ? 'Pausar Bot' : 'Activar Bot'}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator className="bg-white/5" />
-                                    <DropdownMenuItem className="focus:bg-gold/10 focus:text-gold cursor-pointer" onClick={() => window.open(`https://wa.me/${l.phone?.replace(/\D/g, '')}`, '_blank')}>
-                                      <MessageSquare className="w-4 h-4 mr-2" /> Escribir por WhatsApp
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
                               </div>
                             )}
                           </TableCell>
