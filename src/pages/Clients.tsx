@@ -34,6 +34,15 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { X } from 'lucide-react';
 
 interface Client {
   id: string;
@@ -54,6 +63,10 @@ interface Client {
 export default function Clients() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  
+  // States for filtering
+  const [filterType, setFilterType] = useState<'all' | 'new' | 'recurrent' | 'vip'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
 
   const { data, isLoading } = useQuery({
     queryKey: ['clients-list'],
@@ -66,10 +79,30 @@ export default function Clients() {
 
   const clients: Client[] = data?.clients || [];
   
-  const filteredClients = clients.filter(c => 
-    c.client_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (c.phone && c.phone.includes(searchTerm))
-  );
+  const filteredClients = clients.filter(c => {
+    const matchesSearch = c.client_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (c.phone && c.phone.includes(searchTerm));
+    
+    let matchesType = true;
+    if (filterType === 'new') matchesType = Number(c.total_appointments) === 1;
+    else if (filterType === 'recurrent') matchesType = Number(c.total_appointments) > 1 && Number(c.total_appointments) <= 5;
+    else if (filterType === 'vip') matchesType = Number(c.total_appointments) > 5;
+
+    let matchesStatus = true;
+    const daysSinceLast = Math.floor((new Date().getTime() - new Date(c.last_appointment).getTime()) / (1000 * 60 * 60 * 24));
+    if (filterStatus === 'active') matchesStatus = daysSinceLast <= 30;
+    else if (filterStatus === 'inactive') matchesStatus = daysSinceLast > 30;
+
+    return matchesSearch && matchesType && matchesStatus;
+  });
+
+  const clearFilters = () => {
+    setFilterType('all');
+    setFilterStatus('all');
+    setSearchTerm("");
+  };
+
+  const hasActiveFilters = filterType !== 'all' || filterStatus !== 'all' || searchTerm !== "";
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
@@ -93,10 +126,64 @@ export default function Clients() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <Button variant="outline" className="border-cream/5 bg-noir hover:bg-white/5 text-cream/60">
-            <Filter className="w-4 h-4 mr-2" />
-            Filtros
-          </Button>
+          
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button 
+                variant="outline" 
+                className={`border-cream/5 bg-noir hover:bg-white/5 text-cream/60 ${(filterType !== 'all' || filterStatus !== 'all') ? 'border-gold/30 text-gold' : ''}`}
+              >
+                <Filter className="w-4 h-4 mr-2" />
+                Filtros
+                {(filterType !== 'all' || filterStatus !== 'all') && (
+                  <Badge className="ml-2 bg-gold text-noir text-[8px] h-4 w-4 p-0 flex items-center justify-center rounded-full">
+                    !
+                  </Badge>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="bg-noir-light border-white/5 text-cream w-56">
+              <DropdownMenuLabel className="text-[10px] uppercase tracking-widest text-cream/30">Nivel de Cliente</DropdownMenuLabel>
+              <DropdownMenuCheckboxItem checked={filterType === 'all'} onCheckedChange={() => setFilterType('all')}>
+                Todos los niveles
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={filterType === 'new'} onCheckedChange={() => setFilterType('new')}>
+                Nuevos (1 visita)
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={filterType === 'recurrent'} onCheckedChange={() => setFilterType('recurrent')}>
+                Recurrentes (2-5)
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={filterType === 'vip'} onCheckedChange={() => setFilterType('vip')}>
+                V.I.P. (+5 visitas)
+              </DropdownMenuCheckboxItem>
+              
+              <DropdownMenuSeparator className="bg-white/5" />
+              
+              <DropdownMenuLabel className="text-[10px] uppercase tracking-widest text-cream/30">Estado de Actividad</DropdownMenuLabel>
+              <DropdownMenuCheckboxItem checked={filterStatus === 'all'} onCheckedChange={() => setFilterStatus('all')}>
+                Cualquier estado
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={filterStatus === 'active'} onCheckedChange={() => setFilterStatus('active')}>
+                Activos (últ. 30 días)
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={filterStatus === 'inactive'} onCheckedChange={() => setFilterStatus('inactive')}>
+                Inactivos (+30 días)
+              </DropdownMenuCheckboxItem>
+
+              {hasActiveFilters && (
+                <>
+                  <DropdownMenuSeparator className="bg-white/5" />
+                  <Button 
+                    variant="ghost" 
+                    className="w-full text-[10px] h-8 text-rose hover:bg-rose/10 hover:text-rose uppercase tracking-tighter"
+                    onClick={clearFilters}
+                  >
+                    <X className="w-3 h-3 mr-1" /> Limpiar Filtros
+                  </Button>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
