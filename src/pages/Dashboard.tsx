@@ -3,7 +3,8 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { 
   LogOut, Users, CalendarCheck, TrendingUp, Edit, MessageSquare, 
   Trash2, CheckCircle2, XCircle, AlertTriangle, Clock, 
-  ArrowRight, ShieldAlert, Zap, Bell, CalendarDays, ChevronRight 
+  ArrowRight, ShieldAlert, Zap, Bell, CalendarDays, ChevronRight, 
+  Phone, MoreHorizontal 
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/AuthContext";
@@ -511,33 +512,61 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                   <Table>
                     <TableHeader>
                       <TableRow className="border-b border-cream/5 hover:bg-transparent">
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Cliente / Teléfono</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Tratamiento</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Cliente</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Contacto</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Servicio</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Fecha y Hora</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Estado</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12 text-right">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredAppointments.map((a, i) => (
                         <TableRow key={a.id} className={`border-b border-cream/5 hover:bg-cream/[0.02] transition-colors group animate-in fade-in slide-in-from-bottom-2 ${!a.canManage ? 'opacity-40 grayscale-[0.5]' : ''}`} style={{ animationDelay: `${i * 50}ms` }}>
-                          <TableCell className="px-6 py-4">
-                            <div className="font-serif font-bold text-cream">{a.canManage ? a.client_name : `Ocupado - ${a.category_name}`}</div>
-                            <div className="text-[10px] text-cream/20 font-sans tracking-tight">{a.phone || "Oculto"}</div>
-                          </TableCell>
-                          <TableCell className="px-6 py-4">
-                            <Badge variant="outline" className={`font-serif ${a.canManage ? 'text-gold/60 border-gold/20 bg-gold/5' : 'text-cream/20 border-white/5'}`}>{a.service_type}</Badge>
-                          </TableCell>
-                          <TableCell className="px-6 py-4">
-                            <div className="text-sm font-sans text-cream/60">
-                                {new Date(a.date_time).toLocaleDateString('es-AR', { day: 'numeric', month: 'long' })}
-                            </div>
-                            <div className="text-xs font-bold text-cream/20">
-                                {new Date(a.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} HS
+                          <TableCell className="px-6 py-6">
+                            <div className="font-serif font-bold text-lg text-cream tracking-tight">
+                              {a.canManage ? a.client_name : `Ocupado - ${a.category_name}`}
                             </div>
                           </TableCell>
-                          <TableCell className="px-6 py-4 text-right">
+                          <TableCell className="px-6 py-6">
+                            {a.canManage && a.phone && (
+                              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-xs font-bold font-mono group-hover:bg-emerald-500/10 transition-colors">
+                                <Phone className="w-3 h-3" />
+                                {a.phone}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell className="px-6 py-6">
+                            <div className="flex items-center gap-2.5 text-sm font-serif text-cream/80 group-hover:text-cream transition-colors">
+                              <div className={`w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(194,154,91,0.4)] ${a.canManage ? 'bg-gold' : 'bg-white/10'}`} />
+                              {a.service_type}
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-6 py-6 font-sans">
+                            <div className="text-sm font-medium text-cream/60 capitalize">
+                              {new Intl.DateTimeFormat('es-AR', { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(a.date_time))}
+                              <span className="mx-2 text-cream/10">•</span>
+                              <span className="text-gold font-bold">
+                                {new Date(a.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}hs
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-6 py-6">
+                            <Badge 
+                              variant="outline" 
+                              className={`
+                                text-[9px] font-black tracking-[0.15em] px-3 py-1 rounded-full border shadow-sm
+                                ${a.status === 'scheduled' 
+                                  ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-400' 
+                                  : 'border-gold/30 bg-gold/5 text-gold'}
+                              `}
+                            >
+                              {a.status === 'scheduled' ? 'CONFIRMADA' : 'PENDIENTE'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="px-6 py-6 text-right">
                             {a.canManage && (
-                              <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="flex justify-end gap-2.5">
                                 <button 
                                   onClick={() => {
                                     setSelectedAppointmentForEdit(a);
@@ -548,12 +577,19 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                     setFormPhone(a.phone || "");
                                     setIsEditAppointmentModalOpen(true);
                                   }} 
-                                  className="p-2 rounded-lg bg-cream/5 text-cream/40 hover:text-gold transition-colors"
-                                ><Edit className="w-4 h-4" /></button>
+                                  className="p-2 rounded-lg bg-cream/5 text-cream/40 hover:text-gold hover:bg-gold/10 transition-all border border-transparent hover:border-gold/20"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
                                 <button 
                                   onClick={() => { setItemToDelete({ id: a.id, type: 'appointment' }); setDeleteConfirmOpen(true); }} 
-                                  className="p-2 rounded-lg bg-cream/5 text-cream/40 hover:text-rose transition-colors"
-                                ><Trash2 className="w-4 h-4" /></button>
+                                  className="p-2 rounded-lg bg-cream/5 text-cream/40 hover:text-rose hover:bg-rose/10 transition-all border border-transparent hover:border-rose/20"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                                <button className="p-2 rounded-lg bg-cream/5 text-cream/20 hover:text-cream transition-all border border-transparent hover:bg-white/5">
+                                  <MoreHorizontal className="w-4 h-4" />
+                                </button>
                               </div>
                             )}
                           </TableCell>
