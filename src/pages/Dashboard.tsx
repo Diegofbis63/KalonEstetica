@@ -1493,7 +1493,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
       {/* 11. Custom Lightbox */}
       {lightboxImage && (
         <div 
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-noir/95 backdrop-blur-md animate-in fade-in duration-300"
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-noir/95 backdrop-blur-md animate-in fade-in duration-300"
           onClick={() => setLightboxImage(null)}
         >
           <button 
