@@ -701,41 +701,41 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                   <Table>
                     <TableHeader>
                       <TableRow className="border-b border-cream/5 hover:bg-transparent">
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-3 h-12 w-[150px]">Cliente</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-3 h-12 w-[120px]">Contacto</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-3 h-12">Servicio</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-3 h-12 w-[100px]">Duración</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-3 h-12 w-[160px]">Fecha / Hora</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-3 h-12 w-[110px]">Precio</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-3 h-12 w-[120px]">Estado</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-3 h-12 text-center w-[80px]">Bot</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-3 h-12 text-center w-[80px]">Chat</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-3 h-12 text-right w-[120px]">Acciones</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14">Cliente</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14">Contacto</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 w-fit">Servicio</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center">Duración</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center">Fecha / Hora</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center">Precio</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center">Estado</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-4 h-14 text-center">Bot</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-4 h-14 text-center">Chat</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-right">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredAppointments.map((a, i) => (
                         <TableRow key={a.id} className={`border-b border-cream/5 hover:bg-cream/[0.02] transition-colors group animate-in fade-in slide-in-from-bottom-2 ${!a.canManage ? 'opacity-40 grayscale-[0.5]' : ''}`} style={{ animationDelay: `${i * 50}ms` }}>
-                          <TableCell className="px-3 py-5">
-                            <div className="font-serif font-bold text-base text-cream tracking-tight truncate max-w-[140px]">
+                          <TableCell className="px-5 py-6">
+                            <div className="font-serif font-bold text-lg text-cream tracking-tight whitespace-nowrap">
                               {a.canManage ? a.client_name : `Ocupado - ${a.category_name}`}
                             </div>
                           </TableCell>
-                          <TableCell className="px-3 py-5">
+                          <TableCell className="px-5 py-6">
                             {a.canManage && a.phone && (
                               <a 
                                 href={`https://wa.me/${a.phone.replace(/\D/g, '')}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-[10px] font-bold font-mono hover:bg-emerald-500/10 hover:border-emerald-500/40 transition-all group/wa whitespace-nowrap"
+                                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-xs font-bold font-mono hover:bg-emerald-500/10 hover:border-emerald-500/40 transition-all group/wa whitespace-nowrap"
                               >
-                                <Phone className="w-2.5 h-2.5 group-hover/wa:scale-110 transition-transform" />
+                                <Phone className="w-3 h-3 group-hover/wa:scale-110 transition-transform" />
                                 {a.phone}
                               </a>
                             )}
                           </TableCell>
-                          <TableCell className="px-3 py-5">
-                            <div className="flex items-center gap-2 text-sm font-serif text-cream/80 group-hover:text-cream transition-colors">
+                          <TableCell className="px-5 py-6">
+                            <div className="flex items-center gap-2 text-base font-serif text-cream/80 group-hover:text-cream transition-colors whitespace-nowrap w-fit">
                               <div className={`w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(194,154,91,0.4)] ${a.canManage ? 'bg-gold' : 'bg-white/10'}`} />
                               {a.canManage ? (
                                 <Popover>
@@ -798,9 +798,9 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                               )}
                             </div>
                           </TableCell>
-                          <TableCell className="px-3 py-5 font-sans">
-                            <div className="text-[11px] font-bold text-cream/70 flex items-center gap-1.5 whitespace-nowrap">
-                              <Clock className="w-3 h-3 text-gold/60" />
+                          <TableCell className="px-5 py-6 text-center font-sans">
+                            <div className="text-sm font-bold text-cream/70 flex items-center justify-center gap-2 whitespace-nowrap">
+                              <Clock className="w-3.5 h-3.5 text-gold/60" />
                               {a.total_duration ? (
                                 a.total_duration >= 60 
                                   ? `${Math.floor(a.total_duration/60)}H${a.total_duration%60 > 0 ? ` ${a.total_duration%60}M` : ''}`
@@ -808,25 +808,25 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                               ) : "-"}
                             </div>
                           </TableCell>
-                          <TableCell className="px-3 py-5 font-sans">
-                            <div className="text-[11px] font-medium text-cream/60 capitalize whitespace-nowrap">
+                          <TableCell className="px-5 py-6 text-center font-sans">
+                            <div className="text-sm font-medium text-cream/60 capitalize whitespace-nowrap">
                               {new Intl.DateTimeFormat('es-AR', { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(a.date_time))}
-                              <span className="mx-1 text-cream/10">•</span>
+                              <span className="mx-2 text-cream/10">•</span>
                               <span className="text-gold font-bold">
                                 {new Date(a.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}hs
                               </span>
                             </div>
                           </TableCell>
-                          <TableCell className="px-3 py-5 font-sans">
-                            <div className="text-xs font-bold text-gold/90 whitespace-nowrap">
+                          <TableCell className="px-5 py-6 text-center font-sans">
+                            <div className="text-sm font-bold text-gold/90 whitespace-nowrap">
                               {a.total_price ? `$${Number(a.total_price || 0).toLocaleString('es-AR')}` : "-"}
                             </div>
                           </TableCell>
-                          <TableCell className="px-3 py-5">
+                          <TableCell className="px-5 py-6 text-center">
                             <Badge 
                               variant="outline" 
                               className={`
-                                text-[9px] font-black tracking-[0.15em] px-3 py-1 rounded-full border shadow-sm
+                                text-[9px] font-black tracking-[0.15em] px-3 py-1 rounded-full border shadow-sm mx-auto
                                 ${ (a.status === 'scheduled' || a.status === 'confirmed')
                                   ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-400' 
                                   : a.status === 'completed'
@@ -841,20 +841,20 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                 a.status === 'canceled' ? 'CANCELADA' : 'PENDIENTE'}
                             </Badge>
                           </TableCell>
-                          <TableCell className="px-2 py-5 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
+                          <TableCell className="px-4 py-6 text-center">
+                            <div className="flex items-center justify-center gap-2">
                                 <Switch 
                                     checked={a.is_bot_enabled} 
                                     onCheckedChange={(val) => toggleBotMutation.mutate({ leadId: a.lead_id!, isBotEnabled: val })}
-                                    className="data-[state=checked]:bg-gold scale-[0.65]"
+                                    className="data-[state=checked]:bg-gold scale-75"
                                     disabled={!a.lead_id}
                                 />
-                                <span className={`text-[7px] font-black tracking-widest ${a.is_bot_enabled ? 'text-emerald-400' : 'text-cream/20'}`}>
+                                <span className={`text-[8px] font-black tracking-widest ${a.is_bot_enabled ? 'text-emerald-400' : 'text-cream/20'}`}>
                                     {a.is_bot_enabled ? 'ON' : 'OFF'}
                                 </span>
                             </div>
                           </TableCell>
-                          <TableCell className="px-2 py-5 text-center">
+                          <TableCell className="px-4 py-6 text-center">
                               <button 
                                 onClick={() => { 
                                   const leadObj: Lead = {
@@ -871,16 +871,16 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                   setIsChatModalOpen(true); 
                                 }}
                                 disabled={!a.lead_id || !a.canManage}
-                                className={`p-1.5 rounded-lg bg-white/5 border border-white/10 transition-all mx-auto flex items-center justify-center group/btn ${
+                                className={`p-2 rounded-lg bg-white/5 border border-white/10 transition-all mx-auto flex items-center justify-center group/btn ${
                                   a.canManage && a.lead_id ? 'text-cream/40 hover:text-gold hover:border-gold/30' : 'opacity-20 cursor-not-allowed'
                                 }`}
                               >
-                                <ClipboardList className="w-3 h-3" />
+                                <ClipboardList className="w-4 h-4" />
                               </button>
                           </TableCell>
-                          <TableCell className="px-3 py-5 text-right">
+                          <TableCell className="px-5 py-6 text-right">
                             {a.canManage && (
-                              <div className="flex justify-end gap-1.5">
+                              <div className="flex justify-end gap-2">
                                 <button 
                                   onClick={() => {
                                     setSelectedAppointmentForEdit(a);
@@ -892,21 +892,21 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                     setSelectedServices(a.selected_services || []);
                                     setIsEditAppointmentModalOpen(true);
                                   }} 
-                                  className="p-1.5 rounded-lg bg-cream/5 text-cream/40 hover:text-gold hover:bg-gold/10 transition-all border border-transparent hover:border-gold/20"
+                                  className="p-2 rounded-lg bg-cream/5 text-cream/40 hover:text-gold hover:bg-gold/10 transition-all border border-transparent hover:border-gold/20"
                                 >
-                                  <Edit className="w-3.5 h-3.5" />
+                                  <Edit className="w-4 h-4" />
                                 </button>
                                 <button 
                                   onClick={() => { setItemToDelete({ id: a.id, type: 'appointment' }); setDeleteConfirmOpen(true); }} 
-                                  className="p-1.5 rounded-lg bg-rose/5 text-rose/40 hover:text-rose hover:bg-rose/10 transition-all border border-transparent hover:border-rose/20"
+                                  className="p-2 rounded-lg bg-rose/5 text-rose/40 hover:text-rose hover:bg-rose/10 transition-all border border-transparent hover:border-rose/20"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <Trash2 className="w-4 h-4" />
                                 </button>
                                 
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
-                                    <button className="p-1.5 rounded-lg bg-cream/5 text-cream/20 hover:text-cream transition-all border border-transparent hover:bg-white/5">
-                                      <MoreHorizontal className="w-3.5 h-3.5" />
+                                    <button className="p-2 rounded-lg bg-cream/5 text-cream/20 hover:text-cream transition-all border border-transparent hover:bg-white/5">
+                                      <MoreHorizontal className="w-4 h-4" />
                                     </button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end" className="bg-noir-light border-cream/5 text-cream/80">
