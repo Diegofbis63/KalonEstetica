@@ -47,10 +47,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             created_at: new Date().toISOString()
         };
 
-        // 3. Insert into chat_logs and update leads.updated_at
+        // 3. Insert into chat_logs and update leads.updated_at (sent_to_whatsapp = false for bridge to pick it up)
         await db.query(`
-            INSERT INTO chat_logs (lead_id, role, content, media_url, created_at)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO chat_logs (lead_id, role, content, media_url, created_at, sent_to_whatsapp)
+            VALUES ($1, $2, $3, $4, $5, false)
         `, [leadId, newMessage.role, newMessage.content, newMessage.media_url, newMessage.created_at]);
 
         await db.query(`UPDATE leads SET updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [leadId]);
