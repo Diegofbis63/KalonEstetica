@@ -3,7 +3,7 @@ import { requireAuth } from './utils/auth.js';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-    const user = requireAuth(req, res);
+    const user = await requireAuth(req, res);
     if (!user) return;
 
     try {
@@ -90,7 +90,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
                 if (phone !== undefined) {
                     leadUpdates.push(`contact_info = jsonb_set(COALESCE(contact_info::jsonb, '{}'::jsonb), '{phone}', $${leadIndex++}::jsonb)`);
-                    leadValues.push(`"${phone}"`);
+                    leadValues.push(JSON.stringify(phone));
                 }
 
                 if (leadUpdates.length > 0) {
