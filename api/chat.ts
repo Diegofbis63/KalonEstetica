@@ -227,7 +227,7 @@ function generateResponse(
     isBookingConfirmed: boolean,
     isFirstResponse: boolean = false,
     isFromWhatsApp: boolean = false,
-    messages: any[] = []
+    messages: Array<{ role: string; content: string; media_url?: string; created_at?: string }> = []
 ): string {
     if (isBookingConfirmed) {
         return `¡Excelente! 🎉 He confirmado tu turno para *${state.interestedService}* el día *${state.pendingDate}* a las *${state.pendingTime}hs*. Estaremos esperándote en NOVA Estética para brindarte una experiencia única de lujo.\n\nQue tengas un día maravilloso. ✨ ¡Adiós!`;
@@ -341,7 +341,15 @@ export default async function handler(req: Request) {
 
         userId = body.userId;
         const incomingMessage = body.message || "";
-        let messages: Array<{ role: string; content: string }> = body.messages || [];
+        let incomingMediaUrl = body.mediaUrl || null;
+
+        // Auto-extract media URL if missing and message follows "📸 [Imagen enviada] (...) " pattern
+        if (!incomingMediaUrl && incomingMessage.includes('📸 [Imagen enviada]')) {
+            const urlMatch = incomingMessage.match(/\((https?:\/\/[^)]+)\)/);
+            if (urlMatch) incomingMediaUrl = urlMatch[1];
+        }
+
+        let messages: Array<{ role: string; content: string; media_url?: string }> = body.messages || [];
         let isFirstInteraction = false;
 
         if (userId && typeof userId === 'string') {
@@ -379,12 +387,12 @@ export default async function handler(req: Request) {
                         LIMIT 1
                     )
                     ORDER BY created_at ASC
-                ` as any[];
+                ` as Array<{ role: string; content: string; media_url?: string; created_at?: string }>;
                 if (historyRes.length > 0) {
                     messages = historyRes;
                 }
             } catch (historyErr) { console.error("History fetch error:", historyErr); }
-            messages.push({ role: 'user', content: incomingMessage });
+            messages.push({ role: 'user', content: incomingMessage, media_url: incomingMediaUrl });
         }
 
         // ─── WEB CHAT INITIALIZATION ───
@@ -541,8 +549,8 @@ export default async function handler(req: Request) {
             }
 
             // 2. Log last user message and bot response to chat_logs
-            if (incomingMessage) {
-              await sql`INSERT INTO chat_logs (lead_id, role, content) VALUES (${leadId}, 'user', ${incomingMessage})`;
+            if (incomingMessage || incomingMediaUrl) {
+              await sql`INSERT INTO chat_logs (lead_id, role, content, media_url) VALUES (${leadId}, 'user', ${incomingMessage}, ${incomingMediaUrl})`;
             }
             await sql`INSERT INTO chat_logs (lead_id, role, content) VALUES (${leadId}, 'bot', ${responseText})`;
         }

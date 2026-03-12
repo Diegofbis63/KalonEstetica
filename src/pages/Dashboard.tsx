@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { 
   LogOut, Users, CalendarCheck, TrendingUp, Edit, MessageSquare, 
@@ -211,6 +211,31 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
     enabled: !!cartCategory
   });
 
+  // --- Start: NEW CHAT POLLING LOGIC ---
+  const { data: chatHistoryData, refetch: refetchChat } = useQuery({
+    queryKey: ['chat', selectedLeadForChat?.id],
+    queryFn: async () => {
+      if (!selectedLeadForChat) return { history: [] };
+      const res = await fetch(`/api/leads/chat?leadId=${selectedLeadForChat.id}`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch chat logs');
+      return res.json();
+    },
+    enabled: !!selectedLeadForChat && isChatModalOpen,
+    refetchInterval: isChatModalOpen ? 4000 : false, // Poll every 4s while open
+  });
+
+  const chatLogs = useMemo(() => chatHistoryData?.history || [], [chatHistoryData?.history]);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+        scrollRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatLogs, isChatModalOpen]);
+  // --- End: CHAT POLLING LOGIC ---
+
   const services: Service[] = useMemo(() => servData?.services || [], [servData?.services]);
 
   const updateAppointment = useMutation({
@@ -333,7 +358,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
     mutationFn: async ({ leadId, message }: { leadId: string, message: string }) => {
       const res = await fetch('/api/leads/reply', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
         body: JSON.stringify({ leadId, message })
       });
       if (!res.ok) {
@@ -342,12 +367,34 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
       }
       return res.json();
     },
+    onMutate: async (newReply) => {
+      // Optimistic update
+      await queryClient.cancelQueries({ queryKey: ['chat', newReply.leadId] });
+      const previousChat = queryClient.getQueryData(['chat', newReply.leadId]);
+      
+      queryClient.setQueryData(['chat', newReply.leadId], (old: { history: any[] } | undefined) => ({
+        ...old,
+        history: [...(old?.history || []), {
+          role: 'admin',
+          content: newReply.message,
+          created_at: new Date().toISOString(),
+          isPending: true
+        }]
+      }));
+
+      return { previousChat };
+    },
     onSuccess: () => {
       setReplyMessage("");
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       toast.success("Mensaje enviado");
     },
-    onError: (err: Error) => {
+    onSettled: (data, error, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['chat', variables.leadId] });
+    },
+    onError: (err: Error, newReply, context) => {
+      if (context?.previousChat) {
+        queryClient.setQueryData(['chat', newReply.leadId], context.previousChat);
+      }
       toast.error(err.message);
     }
   });
@@ -970,50 +1017,60 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
 
             <ScrollArea className="flex-1 p-6 bg-[url('https://www.transparenttextures.com/patterns/dark-leather.png')]">
                 <div className="space-y-6">
-                  {selectedLeadForChat?.chat_history && selectedLeadForChat.chat_history.length > 0 ? (
-                      selectedLeadForChat.chat_history.map((m, i) => {
+                  {chatLogs.length > 0 ? (
+                      chatLogs.map((m, i) => {
                           const isUser = m.role === 'user';
                           const isAdmin = m.role === 'admin';
+                          const isBot = m.role === 'bot';
+
                           return (
                             <div key={i} className={`flex ${isUser ? 'justify-start' : 'justify-end'}`}>
                                 <div className={`max-w-[85%] space-y-1 ${isUser ? 'items-start' : 'items-end'} flex flex-col`}>
-                                    <div className={`p-4 rounded-2xl text-sm leading-relaxed shadow-xl ${
+                                    <div className={`p-4 rounded-2xl text-sm leading-relaxed shadow-xl border backdrop-blur-md transition-all ${
                                         isUser 
-                                          ? 'bg-noir-light border border-white/10 text-cream/80 rounded-tl-none' 
+                                          ? 'bg-noir-light/60 border-white/5 text-cream/80 rounded-tl-none ring-1 ring-white/5' 
                                           : isAdmin 
-                                          ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-tr-none border border-blue-400/20'
-                                          : 'bg-gradient-to-br from-gold/20 to-gold/10 text-gold rounded-tr-none border border-gold/30'
-                                    }`}>
-                                        <p className="text-[8px] uppercase tracking-[0.2em] font-black opacity-40 mb-1">
-                                          {isUser ? 'Cliente' : isAdmin ? 'Staff (Tú)' : 'Aura I.A.'}
-                                        </p>
+                                          ? 'bg-gradient-to-br from-emerald-600/90 to-emerald-800/90 text-white rounded-tr-none border-emerald-400/20'
+                                          : 'bg-gradient-to-br from-gold/30 to-gold/10 text-gold rounded-tr-none border-gold/40'
+                                    } ${m.isPending ? 'opacity-50 scale-95' : 'opacity-100'}`}>
+                                        <div className="flex items-center justify-between gap-4 mb-2">
+                                          <p className="text-[8px] uppercase tracking-[0.2em] font-black opacity-40">
+                                            {isUser ? 'Cliente' : isAdmin ? 'Soporte KÂLON' : 'Aura I.A.'}
+                                          </p>
+                                          {m.isPending && <Clock className="w-2.5 h-2.5 animate-spin opacity-30" />}
+                                        </div>
                                         
                                         {m.media_url && (
-                                          <div className="mb-3 rounded-lg overflow-hidden border border-white/10 bg-black/20">
+                                          <div className="mb-3 rounded-xl overflow-hidden border border-white/10 bg-black/40 shadow-inner group/img relative">
                                             <img 
                                               src={m.media_url} 
-                                              alt="Adjunto" 
-                                              className="max-w-full h-auto cursor-zoom-in hover:scale-105 transition-transform" 
+                                              alt="Comprobante / Multimedia" 
+                                              className="max-w-full h-auto cursor-zoom-in hover:scale-105 transition-transform duration-500" 
                                               onClick={() => window.open(m.media_url, '_blank')}
                                             />
+                                            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                                              <Plus className="w-6 h-6 text-white drop-shadow-lg" />
+                                            </div>
                                           </div>
                                         )}
                                         
-                                        <p className="font-medium">{m.content}</p>
+                                        <p className="font-medium whitespace-pre-wrap">{m.content}</p>
                                     </div>
-                                    <span className="text-[9px] text-cream/20 font-bold px-1">
-                                      {m.created_at ? new Date(m.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : ''}
+                                    <span className="text-[9px] text-cream/20 font-bold px-1 italic">
+                                      {m.created_at ? new Date(m.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : 'Enviando...'}
                                     </span>
                                 </div>
                             </div>
                           );
                       })
                   ) : (
-                      <div className="h-full flex flex-col items-center justify-center opacity-20 italic py-20">
-                          <MessageSquare className="w-12 h-12 mb-2" />
-                          <p>No hay mensajes registrados aún.</p>
+                      <div className="h-full flex flex-col items-center justify-center opacity-20 italic py-20 text-center">
+                          <MessageSquare className="w-12 h-12 mb-4 opacity-10" />
+                          <p className="text-sm uppercase tracking-widest font-black">Silencio en el canal</p>
+                          <p className="text-[10px] mt-2">Inicia una conversación o espera un mensaje del cliente.</p>
                       </div>
                   )}
+                  <div ref={scrollRef} />
                 </div>
             </ScrollArea>
 
