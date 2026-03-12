@@ -69,7 +69,7 @@ export interface Service {
   sort_order: number;
 }
 
-export default function Dashboard({ defaultTab = 'leads' }: { defaultTab?: 'leads' | 'services' }) {
+export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: 'dashboard' | 'appointments' | 'services' | 'leads' }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { logout, user: authUser } = useAuth();
@@ -77,7 +77,12 @@ export default function Dashboard({ defaultTab = 'leads' }: { defaultTab?: 'lead
   
   // Tab management: prioritizing URL path, then prop
   const currentTab = useMemo(() => {
-    if (location.pathname.includes('/dashboard/services')) return 'services';
+    if (location.pathname.endsWith('/dashboard/services')) return 'services';
+    if (location.pathname.endsWith('/dashboard/appointments')) return 'appointments';
+    if (location.pathname.endsWith('/dashboard') || location.pathname === '/dashboard/') return 'dashboard';
+    
+    // For backwards compatibility or explicit prop
+    if (defaultTab === 'leads') return 'appointments';
     return defaultTab;
   }, [location.pathname, defaultTab]);
 
@@ -218,9 +223,9 @@ export default function Dashboard({ defaultTab = 'leads' }: { defaultTab?: 'lead
   }, [appointments, dateFilter]);
 
   const stats = [
-    { icon: Users, label: "Leads Activos", value: leads.length, color: "text-gold" },
+    { icon: Users, label: "Clientes Activos", value: leads.length, color: "text-gold", path: "/dashboard/clients" },
     { icon: CalendarCheck, label: "Turnos", value: appointments.length, color: "text-amber-400" },
-    { icon: TrendingUp, label: "Conversión", value: `${leads.length > 0 ? Math.round((appointments.length / leads.length) * 100) : 0}%`, color: "text-emerald-400" },
+    { icon: TrendingUp, label: "Ingresos", value: `${leads.length > 0 ? Math.round((appointments.length / leads.length) * 100) : 0}%`, color: "text-emerald-400", path: "/dashboard/income" },
   ];
 
   if (dashLoading) {
@@ -237,29 +242,41 @@ export default function Dashboard({ defaultTab = 'leads' }: { defaultTab?: 'lead
       <div className="flex-1 overflow-y-auto custom-scrollbar px-8 py-10">
         <div className="max-w-7xl mx-auto space-y-12 pb-20">
           
-          {currentTab === 'leads' ? (
-            <>
-              {/* Stats Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                {stats.map((s, i) => (
-                  <div key={i} className="p-6 rounded-2xl border border-cream/5 bg-noir-light/30 backdrop-blur-sm group hover:border-gold/20 transition-all">
-                    <div className="flex items-center gap-4 mb-4">
+          {currentTab === 'dashboard' && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              {stats.map((s, i) => (
+                <div 
+                  key={i} 
+                  onClick={() => s.path && navigate(s.path)}
+                  className={`p-6 rounded-2xl border border-cream/5 bg-noir-light/30 backdrop-blur-sm group hover:border-gold/20 transition-all ${s.path ? 'cursor-pointer hover:bg-noir-light/50' : ''}`}
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-4">
                       <div className={`p-2 rounded-lg bg-noir-light border border-white/5`}>
                         <s.icon className={`w-5 h-5 ${s.color}`} />
                       </div>
                       <span className="text-[10px] text-cream/30 uppercase tracking-[0.2em] font-bold">{s.label}</span>
                     </div>
-                    <p className="text-4xl font-serif font-bold group-hover:text-gold transition-colors">{s.value}</p>
+                    {s.path && (
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                        <TrendingUp className="w-3 h-3 text-gold/40" />
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
+                  <p className="text-4xl font-serif font-bold group-hover:text-gold transition-colors">{s.value}</p>
+                </div>
+              ))}
+            </div>
+          )}
 
+          {currentTab === 'appointments' && (
+             <div className="space-y-12">
               {/* Agenda Section */}
               <section className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-100">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-1.5 h-6 bg-gold rounded-full" />
-                    <h3 className="text-xl font-serif font-bold">Agenda de Turnos</h3>
+                    <h3 className="text-xl font-serif font-bold">Gestión de Citas Agendadas</h3>
                   </div>
                   <div className="flex gap-1 bg-noir-light p-1 rounded-full border border-white/5">
                     {['all', 'hoy', 'tomorrow'].map(f => (
@@ -340,7 +357,7 @@ export default function Dashboard({ defaultTab = 'leads' }: { defaultTab?: 'lead
               <section className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
                 <div className="flex items-center gap-3">
                   <div className="w-1.5 h-6 bg-gold rounded-full" />
-                  <h3 className="text-xl font-serif font-bold">Leads Recientes</h3>
+                  <h3 className="text-xl font-serif font-bold">Clientes potenciales</h3>
                 </div>
                 <div className="rounded-2xl border border-cream/5 bg-noir-light/20 overflow-hidden shadow-2xl backdrop-blur-md">
                   <Table>
@@ -404,8 +421,10 @@ export default function Dashboard({ defaultTab = 'leads' }: { defaultTab?: 'lead
                   </Table>
                 </div>
               </section>
-            </>
-          ) : (
+             </div>
+          )}
+
+          {currentTab === 'services' && (
             <div className="animate-in fade-in slide-in-from-right-4 duration-500">
               <ServicesManagement />
             </div>
