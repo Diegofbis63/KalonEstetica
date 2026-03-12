@@ -4,7 +4,8 @@ import {
   LogOut, Users, CalendarCheck, TrendingUp, Edit, MessageSquare, 
   Trash2, CheckCircle2, XCircle, AlertTriangle, Clock, 
   ArrowRight, ShieldAlert, Zap, Bell, CalendarDays, ChevronRight, 
-  Phone, MoreHorizontal, Info, X, Plus, Search, ClipboardList
+  Phone, MoreHorizontal, Info, X, Plus, Search, ClipboardList,
+  Send, Paperclip, Image as LucideImage
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/AuthContext";
@@ -27,6 +28,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
   DialogContent,
@@ -80,7 +82,7 @@ interface Lead {
   canManage?: boolean;
   phone?: string; // Unified phone from API RBAC
   updated_at?: string;
-  chat_history?: { role: string; content: string }[];
+  chat_history?: { role: string; content: string; media_url?: string; created_at?: string }[];
 }
 
 interface Appointment {
@@ -146,6 +148,8 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
   const [selectedLeadForAppt, setSelectedLeadForAppt] = useState<Lead | null>(null);
   const [isEditAppointmentModalOpen, setIsEditAppointmentModalOpen] = useState(false);
   const [selectedAppointmentForEdit, setSelectedAppointmentForEdit] = useState<Appointment | null>(null);
+  const [replyMessage, setReplyMessage] = useState("");
+  const [isSendingReply, setIsSendingReply] = useState(false);
 
   // Form states
   const [formDate, setFormDate] = useState("");
@@ -322,6 +326,29 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
     onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ['dashboard'] });
         toast.info("Estado del bot actualizado");
+    }
+  });
+
+  const sendReplyMutation = useMutation({
+    mutationFn: async ({ leadId, message }: { leadId: string, message: string }) => {
+      const res = await fetch('/api/leads/reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadId, message })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Error al enviar mensaje');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      setReplyMessage("");
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      toast.success("Mensaje enviado");
+    },
+    onError: (err: Error) => {
+      toast.error(err.message);
     }
   });
 
@@ -876,7 +903,10 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                               <div className="flex justify-end gap-2">
                                   <button 
                                     onClick={() => { setSelectedLeadForChat(l); setIsChatModalOpen(true); }}
-                                    className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[9px] font-black uppercase tracking-widest text-cream/40 hover:text-gold hover:border-gold/30 transition-all flex items-center gap-2 group/btn"
+                                    disabled={!l.canManage}
+                                    className={`px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2 group/btn ${
+                                      l.canManage ? 'text-cream/40 hover:text-gold hover:border-gold/30' : 'opacity-20 cursor-not-allowed'
+                                    }`}
                                   >
                                     <ClipboardList className="w-3.5 h-3.5 group-hover/btn:scale-110 transition-transform" /> Log
                                   </button>
@@ -922,41 +952,106 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
       
       {/* 1. Chat History Modal */}
       <Dialog open={isChatModalOpen} onOpenChange={setIsChatModalOpen}>
-        <DialogContent className="bg-noir border border-gold/20 text-cream max-w-lg">
-            <DialogHeader>
-                <DialogTitle className="font-serif text-xl flex items-center gap-2">
-                    <MessageSquare className="w-5 h-5 text-gold" />
-                    Inteligencia Artificial: {selectedLeadForChat?.client_name}
-                </DialogTitle>
-                <DialogDescription className="text-cream/30">Historial completo de la conversación automatizada</DialogDescription>
-            </DialogHeader>
-            <div className="h-[450px] overflow-y-auto space-y-4 p-4 bg-noir-light/30 rounded-2xl border border-white/5 custom-scrollbar">
-                {selectedLeadForChat?.chat_history && selectedLeadForChat.chat_history.length > 0 ? (
-                    selectedLeadForChat.chat_history.map((m, i) => (
-                        <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed ${
-                                m.role === 'user' 
-                                  ? 'bg-white/5 text-cream/70 rounded-tr-sm border border-white/10' 
-                                  : 'bg-gold/10 text-gold rounded-tl-sm border border-gold/20'
-                            }`}>
-                                <p className="text-[10px] uppercase tracking-widest font-bold opacity-30 mb-1">{m.role === 'user' ? 'Cliente' : 'Aura I.A.'}</p>
-                                {m.content}
-                            </div>
-                        </div>
-                    ))
-                ) : (
-                    <div className="h-full flex flex-col items-center justify-center opacity-20 italic">
-                        <MessageSquare className="w-12 h-12 mb-2" />
-                        <p>No hay mensajes registrados aún.</p>
+        <DialogContent className="bg-noir border border-gold/20 text-cream max-w-lg p-0 overflow-hidden flex flex-col h-[80vh]">
+            <DialogHeader className="p-6 border-b border-white/5">
+                <DialogTitle className="font-serif text-xl flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center">
+                        <Users className="w-5 h-5 text-gold" />
+                      </div>
+                      <div className="text-left">
+                        <p className="text-sm font-bold text-cream leading-none mb-1">{selectedLeadForChat?.client_name}</p>
+                        <p className="text-[10px] text-emerald-400 uppercase tracking-widest font-black">Online • Aura AI Activo</p>
+                      </div>
                     </div>
-                )}
+                    <Badge variant="outline" className="border-gold/20 text-gold text-[9px]">ID: {selectedLeadForChat?.id.slice(0,8)}</Badge>
+                </DialogTitle>
+            </DialogHeader>
+
+            <ScrollArea className="flex-1 p-6 bg-[url('https://www.transparenttextures.com/patterns/dark-leather.png')]">
+                <div className="space-y-6">
+                  {selectedLeadForChat?.chat_history && selectedLeadForChat.chat_history.length > 0 ? (
+                      selectedLeadForChat.chat_history.map((m, i) => {
+                          const isUser = m.role === 'user';
+                          const isAdmin = m.role === 'admin';
+                          return (
+                            <div key={i} className={`flex ${isUser ? 'justify-start' : 'justify-end'}`}>
+                                <div className={`max-w-[85%] space-y-1 ${isUser ? 'items-start' : 'items-end'} flex flex-col`}>
+                                    <div className={`p-4 rounded-2xl text-sm leading-relaxed shadow-xl ${
+                                        isUser 
+                                          ? 'bg-noir-light border border-white/10 text-cream/80 rounded-tl-none' 
+                                          : isAdmin 
+                                          ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-tr-none border border-blue-400/20'
+                                          : 'bg-gradient-to-br from-gold/20 to-gold/10 text-gold rounded-tr-none border border-gold/30'
+                                    }`}>
+                                        <p className="text-[8px] uppercase tracking-[0.2em] font-black opacity-40 mb-1">
+                                          {isUser ? 'Cliente' : isAdmin ? 'Staff (Tú)' : 'Aura I.A.'}
+                                        </p>
+                                        
+                                        {m.media_url && (
+                                          <div className="mb-3 rounded-lg overflow-hidden border border-white/10 bg-black/20">
+                                            <img 
+                                              src={m.media_url} 
+                                              alt="Adjunto" 
+                                              className="max-w-full h-auto cursor-zoom-in hover:scale-105 transition-transform" 
+                                              onClick={() => window.open(m.media_url, '_blank')}
+                                            />
+                                          </div>
+                                        )}
+                                        
+                                        <p className="font-medium">{m.content}</p>
+                                    </div>
+                                    <span className="text-[9px] text-cream/20 font-bold px-1">
+                                      {m.created_at ? new Date(m.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : ''}
+                                    </span>
+                                </div>
+                            </div>
+                          );
+                      })
+                  ) : (
+                      <div className="h-full flex flex-col items-center justify-center opacity-20 italic py-20">
+                          <MessageSquare className="w-12 h-12 mb-2" />
+                          <p>No hay mensajes registrados aún.</p>
+                      </div>
+                  )}
+                </div>
+            </ScrollArea>
+
+            <div className="p-4 bg-noir-light/50 border-t border-white/5 backdrop-blur-xl">
+              <div className="flex items-center gap-3">
+                <button className="p-3 rounded-xl bg-white/5 border border-white/10 text-cream/40 hover:text-gold transition-colors">
+                  <Paperclip className="w-4 h-4" />
+                </button>
+                <div className="flex-1 relative">
+                  <input 
+                    type="text" 
+                    placeholder="Escribe una respuesta manual..."
+                    value={replyMessage}
+                    onChange={(e) => setReplyMessage(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && replyMessage.trim()) {
+                        sendReplyMutation.mutate({ leadId: selectedLeadForChat!.id, message: replyMessage });
+                      }
+                    }}
+                    className="w-full bg-noir border border-white/10 rounded-2xl py-3 px-5 text-sm outline-none focus:border-gold/50 transition-all pr-12"
+                  />
+                  <button 
+                    onClick={() => {
+                      if (replyMessage.trim()) {
+                        sendReplyMutation.mutate({ leadId: selectedLeadForChat!.id, message: replyMessage });
+                      }
+                    }}
+                    disabled={!replyMessage.trim() || sendReplyMutation.isPending}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg bg-gold text-noir hover:scale-105 active:scale-95 disabled:opacity-30 disabled:grayscale transition-all"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              <p className="text-[8px] text-center text-cream/20 uppercase tracking-widest font-bold mt-3">
+                Al responder manualmente, el bot se pausará para este cliente (Próximamente)
+              </p>
             </div>
-            <DialogFooter>
-                <button 
-                  onClick={() => setIsChatModalOpen(false)} 
-                  className="w-full py-3 bg-noir-light border border-white/5 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-white/5 transition-colors text-gold"
-                >Cerrar Ventana</button>
-            </DialogFooter>
         </DialogContent>
       </Dialog>
 
