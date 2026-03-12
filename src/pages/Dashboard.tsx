@@ -18,6 +18,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -530,10 +537,15 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                           </TableCell>
                           <TableCell className="px-6 py-6">
                             {a.canManage && a.phone && (
-                              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-xs font-bold font-mono group-hover:bg-emerald-500/10 transition-colors">
-                                <Phone className="w-3 h-3" />
+                              <a 
+                                href={`https://wa.me/${a.phone.replace(/\D/g, '')}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-xs font-bold font-mono hover:bg-emerald-500/10 hover:border-emerald-500/40 transition-all group/wa"
+                              >
+                                <Phone className="w-3 h-3 group-hover/wa:scale-110 transition-transform" />
                                 {a.phone}
-                              </div>
+                              </a>
                             )}
                           </TableCell>
                           <TableCell className="px-6 py-6">
@@ -583,13 +595,30 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                 </button>
                                 <button 
                                   onClick={() => { setItemToDelete({ id: a.id, type: 'appointment' }); setDeleteConfirmOpen(true); }} 
-                                  className="p-2 rounded-lg bg-cream/5 text-cream/40 hover:text-rose hover:bg-rose/10 transition-all border border-transparent hover:border-rose/20"
+                                  className="p-2 rounded-lg bg-rose/5 text-rose/40 hover:text-rose hover:bg-rose/10 transition-all border border-transparent hover:border-rose/20"
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
-                                <button className="p-2 rounded-lg bg-cream/5 text-cream/20 hover:text-cream transition-all border border-transparent hover:bg-white/5">
-                                  <MoreHorizontal className="w-4 h-4" />
-                                </button>
+                                
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <button className="p-2 rounded-lg bg-cream/5 text-cream/20 hover:text-cream transition-all border border-transparent hover:bg-white/5">
+                                      <MoreHorizontal className="w-4 h-4" />
+                                    </button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="bg-noir-light border-cream/5 text-cream/80">
+                                    <DropdownMenuItem className="focus:bg-gold/10 focus:text-gold cursor-pointer" onClick={() => updateAppointment.mutate({ id: a.id, status: 'completed' })}>
+                                      <CheckCircle2 className="w-4 h-4 mr-2" /> Marcar como Realizado
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem className="focus:bg-rose/10 focus:text-rose cursor-pointer" onClick={() => updateAppointment.mutate({ id: a.id, status: 'canceled' })}>
+                                      <XCircle className="w-4 h-4 mr-2" /> Cancelar Cita
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator className="bg-white/5" />
+                                    <DropdownMenuItem className="focus:bg-emerald-500/10 focus:text-emerald-400 cursor-pointer" onClick={() => window.open(`https://wa.me/${a.phone?.replace(/\D/g, '')}`, '_blank')}>
+                                      <MessageSquare className="w-4 h-4 mr-2" /> Enviar Recordatorio
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
                               </div>
                             )}
                           </TableCell>
@@ -597,7 +626,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                       ))}
                       {filteredAppointments.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={4} className="h-48 text-center text-cream/10 italic font-serif">
+                          <TableCell colSpan={6} className="h-48 text-center text-cream/10 italic font-serif">
                             <CalendarCheck className="w-8 h-8 mx-auto mb-2 opacity-5" />
                             No hay turnos registrados para este criterio
                           </TableCell>
@@ -632,10 +661,15 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                           </TableCell>
                           <TableCell className="px-6 py-5">
                             {l.phone && (
-                              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-[10px] font-bold font-mono">
-                                <Phone className="w-3 h-3" />
+                              <a 
+                                href={`https://wa.me/${l.phone.replace(/\D/g, '')}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-[10px] font-bold font-mono hover:bg-emerald-500/10 hover:border-emerald-500/40 transition-all group/wa"
+                              >
+                                <Phone className="w-3 h-3 group-hover/wa:scale-110 transition-transform" />
                                 {l.phone}
-                              </div>
+                              </a>
                             )}
                           </TableCell>
                           <TableCell className="px-6 py-5 text-center">
@@ -653,22 +687,45 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                           </TableCell>
                           <TableCell className="px-6 py-4 text-right">
                             {l.canManage && (
-                              <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="flex justify-end gap-2.5">
                                 <button 
-                                  onClick={() => { setSelectedLeadForChat(l); setIsChatModalOpen(true); }} 
-                                  className="p-2 rounded-lg bg-noir-light text-gold hover:bg-gold hover:text-noir transition-all border border-white/5"
-                                  title="Ver Historial de IA"
-                                ><MessageSquare className="w-4 h-4" /></button>
+                                  onClick={() => { setSelectedLeadForChat(l); setIsChatModalOpen(true); }}
+                                  className="p-2 rounded-lg bg-gold/5 text-gold/60 hover:text-gold hover:bg-gold/10 transition-all border border-transparent hover:border-gold/20"
+                                  title="Abrir Chat"
+                                >
+                                  <MessageSquare className="w-4 h-4" />
+                                </button>
                                 <button 
-                                  onClick={() => { setSelectedLeadForAppt(l); setIsNewAppointmentModalOpen(true); }} 
-                                  className="p-2 rounded-lg bg-noir-light text-emerald-400 hover:bg-emerald-400 hover:text-noir transition-all border border-white/5"
+                                  onClick={() => { setSelectedLeadForAppt(l); setIsNewAppointmentModalOpen(true); }}
+                                  className="p-2 rounded-lg bg-emerald-500/5 text-emerald-400/60 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all border border-transparent hover:border-emerald-500/20"
                                   title="Agendar Cita"
-                                ><CalendarCheck className="w-4 h-4" /></button>
+                                >
+                                  <CalendarCheck className="w-4 h-4" />
+                                </button>
                                 <button 
                                   onClick={() => { setItemToDelete({ id: l.id, type: 'lead' }); setDeleteConfirmOpen(true); }} 
-                                  className="p-2 rounded-lg bg-noir-light text-rose hover:bg-rose hover:text-white transition-all border border-white/5"
+                                  className="p-2 rounded-lg bg-rose/5 text-rose/60 hover:text-rose hover:bg-rose/10 transition-all border border-transparent hover:border-rose/20"
                                   title="Eliminar Lead"
-                                ><Trash2 className="w-4 h-4" /></button>
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                                
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <button className="p-2 rounded-lg bg-cream/5 text-cream/20 hover:text-cream transition-all border border-transparent hover:bg-white/5">
+                                      <MoreHorizontal className="w-4 h-4" />
+                                    </button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="bg-noir-light border-cream/5 text-cream/80">
+                                    <DropdownMenuItem className="focus:bg-emerald-500/10 focus:text-emerald-400 cursor-pointer" onClick={() => toggleBotMutation.mutate({ leadId: l.id, isBotEnabled: !l.is_bot_enabled })}>
+                                      <Zap className="w-4 h-4 mr-2" /> {l.is_bot_enabled ? 'Pausar Bot' : 'Activar Bot'}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator className="bg-white/5" />
+                                    <DropdownMenuItem className="focus:bg-gold/10 focus:text-gold cursor-pointer" onClick={() => window.open(`https://wa.me/${l.phone?.replace(/\D/g, '')}`, '_blank')}>
+                                      <MessageSquare className="w-4 h-4 mr-2" /> Escribir por WhatsApp
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
                               </div>
                             )}
                           </TableCell>
@@ -780,12 +837,12 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                             toast.error("Por favor completa todos los campos");
                             return;
                         }
-                        const service = services.find(s => s.title === formService);
+                        const serviceRes = services.find(s => s.title === formService);
                         createAppointment.mutate({ 
                           lead_id: selectedLeadForAppt!.id, 
                           date_time: `${formDate}T${formTime}:00Z`, 
                           service_type: formService,
-                          category_id: (service as any)?.category_id 
+                          category_id: serviceRes?.category_id || ""
                         });
                     }} 
                     className="px-8 py-3 bg-gold text-noir rounded-xl font-bold text-[10px] uppercase tracking-widest shadow-lg shadow-gold/20"

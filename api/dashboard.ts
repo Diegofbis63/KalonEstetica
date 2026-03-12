@@ -33,9 +33,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return { ...row, canManage: true };
         };
 
-        // Fetch leads with category info
+        // Fetch leads with category info and contact details extracted
         const leadsQuery = `
-            SELECT l.*, c.name as category_name 
+            SELECT l.*, l.contact_info->>'phone' as phone, l.contact_info->>'email' as email, 
+                   c.name as category_name 
             FROM leads l
             LEFT JOIN categories c ON l.category_id = c.id
             ORDER BY l.created_at DESC LIMIT 100
