@@ -234,10 +234,14 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (scrollRef.current) {
-        scrollRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (isChatModalOpen && scrollRef.current) {
+        // Instant scroll when opening or payload changes
+        const timeoutId = setTimeout(() => {
+            scrollRef.current?.scrollIntoView({ behavior: 'auto' });
+        }, 50);
+        return () => clearTimeout(timeoutId);
     }
-  }, [chatLogs, isChatModalOpen]);
+  }, [isChatModalOpen, chatLogs.length]);
   // --- End: CHAT POLLING LOGIC ---
 
   const services: Service[] = useMemo(() => servData?.services || [], [servData?.services]);
