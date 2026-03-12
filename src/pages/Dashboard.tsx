@@ -200,7 +200,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
   const services: Service[] = useMemo(() => servData?.services || [], [servData?.services]);
 
   const updateAppointment = useMutation({
-    mutationFn: async ({ id, status, date_time, service_type, client_name, phone, selected_services, total_price }: { 
+    mutationFn: async ({ id, status, date_time, service_type, client_name, phone, selected_services, total_price, total_duration }: { 
       id: string, 
       status?: string, 
       date_time?: string, 
@@ -208,12 +208,13 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
       client_name?: string, 
       phone?: string,
       selected_services?: Appointment['selected_services'],
-      total_price?: number
+      total_price?: number,
+      total_duration?: number
     }) => {
       const res = await fetch(`/api/appointments?id=${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status, date_time, service_type, client_name, phone, selected_services, total_price })
+        body: JSON.stringify({ status, date_time, service_type, client_name, phone, selected_services, total_price, total_duration })
       });
       if (!res.ok) {
         const err = await res.json();
@@ -233,18 +234,19 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
   });
 
   const createAppointment = useMutation({
-    mutationFn: async ({ lead_id, date_time, service_type, category_id, selected_services, total_price }: { 
+    mutationFn: async ({ lead_id, date_time, service_type, category_id, selected_services, total_price, total_duration }: { 
       lead_id: string, 
       date_time: string, 
       service_type: string, 
       category_id?: string,
       selected_services?: Appointment['selected_services'],
-      total_price?: number
+      total_price?: number,
+      total_duration?: number
     }) => {
       const res = await fetch('/api/appointments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lead_id, date_time, service_type, category_id, selected_services, total_price })
+        body: JSON.stringify({ lead_id, date_time, service_type, category_id, selected_services, total_price, total_duration })
       });
       if (!res.ok) throw new Error('Failed to create appointment');
       return res.json();
@@ -581,6 +583,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Cliente</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Contacto</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Servicio</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Duración</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Fecha y Hora</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Precio</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Estado</TableHead>
@@ -615,7 +618,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                 <Popover>
                                   <PopoverTrigger asChild>
                                     <button className="flex items-center gap-1.5 hover:text-gold transition-colors text-left">
-                                      {a.service_type || "Varios Servicios"}
+                                      {Array.from(new Set((a.selected_services || []).map(s => s.category_name || "Servicio"))).join(" + ") || "Varios Servicios"}
                                       <Info className="w-3.5 h-3.5" />
                                     </button>
                                   </PopoverTrigger>
@@ -643,10 +646,26 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                         )}
                                       </div>
                                     </ScrollArea>
-                                    {a.total_price && a.total_price > 0 && (
-                                      <div className="p-3 border-t border-white/5 bg-gold/5 flex justify-between items-center">
-                                        <p className="text-xs font-bold text-gold uppercase tracking-tighter">Total</p>
-                                        <p className="text-sm font-sans font-black text-gold">${Number(a.total_price).toLocaleString('es-AR')}</p>
+                                    {(a.total_price || a.total_duration) && (
+                                      <div className="p-3 border-t border-white/5 bg-gold/5 space-y-2">
+                                        {a.total_duration && (
+                                          <div className="flex justify-between items-center text-[10px] text-cream/40">
+                                            <p className="uppercase tracking-widest uppercase">Duración Total</p>
+                                            <p className="font-bold flex items-center gap-1">
+                                              <Clock className="w-2.5 h-2.5" />
+                                              {a.total_duration >= 60 
+                                                ? `${Math.floor(a.total_duration/60)}H${a.total_duration%60 > 0 ? ` ${a.total_duration%60}M` : ''}`
+                                                : `${a.total_duration} MIN`
+                                              }
+                                            </p>
+                                          </div>
+                                        )}
+                                        {a.total_price && a.total_price > 0 && (
+                                          <div className="flex justify-between items-center">
+                                            <p className="text-xs font-bold text-gold uppercase tracking-tighter">Total</p>
+                                            <p className="text-sm font-sans font-black text-gold">${Number(a.total_price).toLocaleString('es-AR')}</p>
+                                          </div>
+                                        )}
                                       </div>
                                     )}
                                   </PopoverContent>
@@ -654,6 +673,16 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                               ) : (
                                 a.service_type
                               )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-6 py-6 font-sans">
+                            <div className="text-sm font-bold text-cream/70 flex items-center gap-2">
+                              <Clock className="w-3.5 h-3.5 text-gold/60" />
+                              {a.total_duration ? (
+                                a.total_duration >= 60 
+                                  ? `${Math.floor(a.total_duration/60)}H${a.total_duration%60 > 0 ? ` ${a.total_duration%60}M` : ''}`
+                                  : `${a.total_duration} MIN`
+                              ) : "-"}
                             </div>
                           </TableCell>
                           <TableCell className="px-6 py-6 font-sans">
@@ -959,7 +988,8 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                           id: sObj.id,
                           title: sObj.title,
                           price: sObj.price,
-                          duration: sObj.duration || "30 min"
+                          duration: sObj.duration || "30 min",
+                          category_name: catData?.categories?.find((c: any) => c.id === cartCategory)?.name
                         }]);
                         setCartService("");
                       }
@@ -1036,7 +1066,12 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                   <div className="text-right">
                     <p className="text-[10px] uppercase font-bold tracking-[0.1em] text-cream/30">Duración Est.</p>
                     <p className="text-sm font-sans font-bold text-cream/60">
-                      ~ {selectedServices?.length ? "60 min" : "0 min"}
+                      ~ {(() => {
+                        const totalMins = selectedServices?.reduce((acc, s) => acc + parseInt(s.duration || "0"), 0) || 0;
+                        return totalMins >= 60 
+                          ? `${Math.floor(totalMins/60)}H${totalMins%60 > 0 ? ` ${totalMins%60}M` : ''}`
+                          : `${totalMins} MIN`;
+                      })()}
                     </p>
                   </div>
                 </div>
@@ -1055,7 +1090,8 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                           date_time: `${formDate}T${formTime}:00Z`, 
                           service_type: selectedServices![0].title + (selectedServices!.length > 1 ? "..." : ""),
                           selected_services: selectedServices,
-                          total_price: selectedServices?.reduce((acc, s) => acc + Number(s.price), 0)
+                          total_price: selectedServices?.reduce((acc, s) => acc + Number(s.price), 0),
+                          total_duration: selectedServices?.reduce((acc, s) => acc + parseInt(s.duration || "0"), 0)
                         });
                     }} 
                     className="flex-1 py-4 bg-gradient-to-r from-gold to-[#d4af37] text-noir rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-gold/20 hover:-translate-y-1 transition-all"
@@ -1123,7 +1159,8 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                           id: sObj.id,
                           title: sObj.title,
                           price: sObj.price,
-                          duration: sObj.duration || "30 min"
+                          duration: sObj.duration || "30 min",
+                          category_name: catData?.categories?.find((c: any) => c.id === cartCategory)?.name
                         }]);
                         setCartService("");
                       }
@@ -1180,6 +1217,14 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                      <div className="px-3 py-1 bg-white/5 border border-white/10 rounded-full text-[9px] font-bold text-cream/40 uppercase tracking-widest">
                        {selectedServices?.length || 0} Servicios
                      </div>
+                     <div className="text-xs font-bold text-gold/60">
+                       🕒 {(() => {
+                         const totalMins = selectedServices?.reduce((acc, s) => acc + parseInt(s.duration || "0"), 0) || 0;
+                         return totalMins >= 60 
+                           ? `${Math.floor(totalMins/60)}H${totalMins%60 > 0 ? ` ${totalMins%60}M` : ''}`
+                           : `${totalMins} MIN`;
+                       })()} TOTAL
+                     </div>
                   </div>
                 </div>
             </div>
@@ -1193,7 +1238,8 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                         client_name: formClientName,
                         phone: formPhone,
                         selected_services: selectedServices,
-                        total_price: selectedServices?.reduce((acc, s) => acc + Number(s.price), 0)
+                        total_price: selectedServices?.reduce((acc, s) => acc + Number(s.price), 0),
+                        total_duration: selectedServices?.reduce((acc, s) => acc + parseInt(s.duration || "0"), 0)
                     })} 
                     className="w-full py-4 bg-gradient-to-r from-gold to-[#d4af37] text-noir rounded-xl font-bold text-[10px] uppercase tracking-widest shadow-xl shadow-gold/10 hover:-translate-y-0.5 transition-all"
                 >

@@ -9,7 +9,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
         const db = getDb();
 
-        const checkPermission = async (id: string, user: any) => {
+        const checkPermission = async (id: string, user: { role: string; permissions: string[] }) => {
             if (user.role === 'admin') return true;
             // Get category name for this appointment
             const res = await db.query('SELECT c.name FROM appointments a LEFT JOIN categories c ON a.category_id = c.id WHERE a.id = $1', [id]);
@@ -22,14 +22,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const { id } = req.query;
             if (!id || typeof id !== 'string') return res.status(400).json({ error: 'Missing appointment ID' });
 
-            if (!await checkPermission(id, user)) {
+            if (!await checkPermission(id, user as { role: string; permissions: string[] })) {
                 return res.status(403).json({ error: 'No tienes permiso para gestionar este servicio' });
             }
 
-            const { status, date_time, service_type, client_name, phone, selected_services, total_price } = req.body;
+            const { status, date_time, service_type, client_name, phone, selected_services, total_price, total_duration } = req.body;
 
             const updates: string[] = [];
-            const values: any[] = [];
+            const values: (string | number | boolean | null)[] = [];
             let index = 1;
 
             if (status !== undefined) {
@@ -51,6 +51,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             if (total_price !== undefined) {
                 updates.push(`total_price = $${index++}`);
                 values.push(total_price);
+            }
+            if (total_duration !== undefined) {
+                updates.push(`total_duration = $${index++}`);
+                values.push(total_duration);
             }
 
             let appointmentResult = null;
@@ -76,7 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
             if (client_name !== undefined || phone !== undefined) {
                 const leadUpdates: string[] = [];
-                const leadValues: any[] = [];
+                const leadValues: (string | number | boolean | null)[] = [];
                 let leadIndex = 1;
 
                 if (client_name !== undefined) {
@@ -103,15 +107,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return res.status(200).json({ appointment });
 
         } else if (req.method === 'POST') {
-            const { lead_id, date_time, service_type, category_id, selected_services, total_price } = req.body;
+            const { lead_id, date_time, service_type, category_id, selected_services, total_price, total_duration } = req.body;
 
             if (!lead_id || !date_time || !service_type) {
                 return res.status(400).json({ error: 'Missing required fields' });
             }
 
             const query = `
-                INSERT INTO appointments (lead_id, date_time, service_type, status, category_id, selected_services, total_price)
-                VALUES ($1, $2, $3, 'confirmed', $4, $5::jsonb, $6)
+                INSERT INTO appointments (lead_id, date_time, service_type, status, category_id, selected_services, total_price, total_duration)
+                VALUES ($1, $2, $3, 'confirmed', $4, $5::jsonb, $6, $7)
                 RETURNING *
             `;
             const result = await db.query(query, [
@@ -120,7 +124,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 service_type, 
                 category_id, 
                 JSON.stringify(selected_services || []), 
-                total_price || 0
+                total_price || 0,
+                total_duration || 0
             ]);
 
             await db.query(`UPDATE leads SET status = 'qualified' WHERE id = $1`, [lead_id]);
@@ -131,7 +136,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const { id } = req.query;
             if (!id || typeof id !== 'string') return res.status(400).json({ error: 'Missing appointment ID' });
 
-            if (!await checkPermission(id, user)) {
+            if (!await checkPermission(id, user as { role: string; permissions: string[] })) {
                 return res.status(403).json({ error: 'No tienes permiso para gestionar este servicio' });
             }
 
