@@ -568,12 +568,18 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                               variant="outline" 
                               className={`
                                 text-[9px] font-black tracking-[0.15em] px-3 py-1 rounded-full border shadow-sm
-                                ${a.status === 'scheduled' 
+                                ${ (a.status === 'scheduled' || a.status === 'confirmed')
                                   ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-400' 
+                                  : a.status === 'completed'
+                                  ? 'border-sky-500/30 bg-sky-500/5 text-sky-400'
+                                  : a.status === 'canceled'
+                                  ? 'border-rose-500/30 bg-rose-500/5 text-rose-400'
                                   : 'border-gold/30 bg-gold/5 text-gold'}
                               `}
                             >
-                              {a.status === 'scheduled' ? 'CONFIRMADA' : 'PENDIENTE'}
+                              { (a.status === 'scheduled' || a.status === 'confirmed') ? 'CONFIRMADA' : 
+                                a.status === 'completed' ? 'REALIZADA' : 
+                                a.status === 'canceled' ? 'CANCELADA' : 'PENDIENTE'}
                             </Badge>
                           </TableCell>
                           <TableCell className="px-6 py-6 text-right">
@@ -609,6 +615,9 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                   <DropdownMenuContent align="end" className="bg-noir-light border-cream/5 text-cream/80">
                                     <DropdownMenuItem className="focus:bg-gold/10 focus:text-gold cursor-pointer" onClick={() => updateAppointment.mutate({ id: a.id, status: 'completed' })}>
                                       <CheckCircle2 className="w-4 h-4 mr-2" /> Marcar como Realizado
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem className="focus:bg-amber-500/10 focus:text-amber-400 cursor-pointer" onClick={() => updateAppointment.mutate({ id: a.id, status: 'pending' })}>
+                                      <Clock className="w-4 h-4 mr-2" /> Marcar como Pendiente
                                     </DropdownMenuItem>
                                     <DropdownMenuItem className="focus:bg-rose/10 focus:text-rose cursor-pointer" onClick={() => updateAppointment.mutate({ id: a.id, status: 'canceled' })}>
                                       <XCircle className="w-4 h-4 mr-2" /> Cancelar Cita
