@@ -58,7 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Fetch appointments with lead and category info
         let appointmentsQuery = `
             SELECT a.*, l.client_name, l.contact_info->>'phone' as phone, l.contact_info->>'email' as email, 
-                   c.name as category_name 
+                   l.is_bot_enabled, c.name as category_name 
             FROM appointments a 
             LEFT JOIN leads l ON a.lead_id = l.id 
             LEFT JOIN categories c ON a.category_id = c.id

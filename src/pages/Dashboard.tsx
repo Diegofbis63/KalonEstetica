@@ -60,7 +60,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Tooltip,
   TooltipContent,
@@ -106,6 +105,7 @@ interface Appointment {
   }>;
   total_price?: number;
   total_duration?: number;
+  is_bot_enabled?: boolean;
 }
 
 interface Category {
@@ -708,6 +708,8 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Fecha y Hora</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Precio</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Estado</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12 text-center">Bot</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12 text-center">Chat</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12 text-right">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -842,6 +844,43 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                 a.status === 'completed' ? 'REALIZADA' : 
                                 a.status === 'canceled' ? 'CANCELADA' : 'PENDIENTE'}
                             </Badge>
+                          </TableCell>
+                          <TableCell className="px-6 py-6 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                                <Switch 
+                                    checked={a.is_bot_enabled} 
+                                    onCheckedChange={(val) => toggleBotMutation.mutate({ leadId: a.lead_id!, isBotEnabled: val })}
+                                    className="data-[state=checked]:bg-gold scale-75"
+                                    disabled={!a.lead_id}
+                                />
+                                <span className={`text-[8px] font-black tracking-widest ${a.is_bot_enabled ? 'text-emerald-400' : 'text-cream/20'}`}>
+                                    {a.is_bot_enabled ? 'ON' : 'OFF'}
+                                </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-6 py-6 text-center">
+                              <button 
+                                onClick={() => { 
+                                  const leadObj: Lead = {
+                                    id: a.lead_id!,
+                                    client_name: a.client_name!,
+                                    contact_info: { phone: a.phone },
+                                    status: a.status,
+                                    intent_score: 100,
+                                    is_bot_enabled: a.is_bot_enabled || false,
+                                    created_at: a.created_at,
+                                    canManage: a.canManage
+                                  };
+                                  setSelectedLeadForChat(leadObj); 
+                                  setIsChatModalOpen(true); 
+                                }}
+                                disabled={!a.lead_id || !a.canManage}
+                                className={`p-2 rounded-lg bg-white/5 border border-white/10 transition-all mx-auto flex items-center justify-center group/btn ${
+                                  a.canManage && a.lead_id ? 'text-cream/40 hover:text-gold hover:border-gold/30' : 'opacity-20 cursor-not-allowed'
+                                }`}
+                              >
+                                <ClipboardList className="w-3.5 h-3.5" />
+                              </button>
                           </TableCell>
                           <TableCell className="px-6 py-6 text-right">
                             {a.canManage && (
