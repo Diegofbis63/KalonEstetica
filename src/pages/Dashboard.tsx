@@ -282,7 +282,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                     {['all', 'hoy', 'tomorrow'].map(f => (
                       <button 
                         key={f} 
-                        onClick={() => setDateFilter(f as any)} 
+                        onClick={() => setDateFilter(f as 'all' | 'hoy' | 'tomorrow')} 
                         className={`px-4 py-1.5 rounded-full text-[10px] uppercase font-bold tracking-widest transition-all ${dateFilter === f ? 'bg-gold text-noir' : 'text-cream/30 hover:text-cream'}`}
                       >
                         {f === 'all' ? 'Ver Todos' : f === 'hoy' ? 'Hoy' : 'Mañana'}
@@ -357,7 +357,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
               <section className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
                 <div className="flex items-center gap-3">
                   <div className="w-1.5 h-6 bg-gold rounded-full" />
-                  <h3 className="text-xl font-serif font-bold">Clientes potenciales</h3>
+                  <h3 className="text-xl font-serif font-bold">Clientes Potenciales</h3>
                 </div>
                 <div className="rounded-2xl border border-cream/5 bg-noir-light/20 overflow-hidden shadow-2xl backdrop-blur-md">
                   <Table>
