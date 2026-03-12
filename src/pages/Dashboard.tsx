@@ -544,20 +544,99 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                             }`} />
 
                             <div className="flex items-center justify-between">
-                              <div className="space-y-1">
-                                <div className="flex items-center gap-3">
+                              <div className="flex-1 min-w-0 pr-4">
+                                <div className="flex items-center gap-3 mb-1.5">
                                   <Clock className={`w-3.5 h-3.5 ${appt.canManage ? 'text-gold' : 'text-cream/20'}`} />
                                   <span className={`text-sm font-bold font-sans ${appt.canManage ? 'text-gold' : 'text-cream/40'}`}>
-                                                                        {new Date(appt.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}hs
+                                    {new Date(appt.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}hs
                                   </span>
                                 </div>
-                                <h4 className={`text-lg font-serif font-bold ${appt.canManage ? 'text-cream' : 'text-cream/30'}`}>
-                                  {appt.canManage ? appt.client_name : `Ocupado — ${appt.category_name}`}
-                                </h4>
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                                  <h4 className={`text-lg font-serif font-bold ${appt.canManage ? 'text-cream' : 'text-cream/30'}`}>
+                                    {appt.canManage ? appt.client_name : `Ocupado — ${appt.category_name}`}
+                                  </h4>
+                                  {appt.canManage && (
+                                    <>
+                                      {appt.phone && (
+                                        <a 
+                                          href={`https://wa.me/${appt.phone.replace(/\D/g, '')}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-[10px] font-bold font-mono hover:bg-emerald-500/10 hover:border-emerald-500/40 transition-all group/wa whitespace-nowrap"
+                                        >
+                                          <Phone className="w-3 h-3 group-hover/wa:scale-110 transition-transform" />
+                                          {appt.phone}
+                                        </a>
+                                      )}
+                                      {appt.total_duration ? (
+                                        <Badge variant="outline" className="px-2 py-1 bg-amber-500/5 border-amber-500/20 text-amber-500/80 font-bold text-[9px] tracking-widest uppercase flex items-center gap-1.5 whitespace-nowrap">
+                                          <Clock className="w-2.5 h-2.5" />
+                                          {appt.total_duration >= 60 
+                                            ? `${Math.floor(appt.total_duration/60)}H ${appt.total_duration%60 > 0 ? `${appt.total_duration%60}m ` : ''}`
+                                            : `${appt.total_duration} MIN `
+                                          } TOTAL
+                                        </Badge>
+                                      ) : null}
+                                    </>
+                                  )}
+                                </div>
                                 {appt.canManage && (
-                                  <div className="flex items-center gap-4 mt-2">
-                                     <span className="text-xs text-cream/40 px-2 py-0.5 rounded bg-noir border border-white/5">{appt.service_type}</span>
-                                     <span className="text-xs text-gold font-sans font-medium">{appt.phone}</span>
+                                  <div className="mt-3">
+                                      <Popover>
+                                        <PopoverTrigger asChild>
+                                          <button className="flex items-center gap-1.5 hover:text-gold transition-colors text-left text-[11px] font-bold uppercase tracking-widest bg-white/5 hover:bg-gold/5 border border-white/10 hover:border-gold/30 px-3 py-1.5 rounded-lg text-cream/50 group/btn">
+                                            <ClipboardList className="w-3.5 h-3.5 group-hover/btn:scale-110 transition-transform" />
+                                            Ver Servicios <span className="text-cream/30 border-l border-white/10 pl-1.5 ml-0.5">({appt.selected_services?.length || 0})</span>
+                                          </button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-72 bg-noir/95 backdrop-blur-xl border-gold/20 shadow-[0_10px_40px_rgba(0,0,0,0.5)] p-0 z-50">
+                                          <div className="p-3 border-b border-white/5 bg-white/5">
+                                            <p className="text-[10px] uppercase font-bold tracking-widest text-gold mb-1">Detalle del Turno</p>
+                                            <p className="text-xs text-cream/60">Servicios agendados:</p>
+                                          </div>
+                                          <ScrollArea className="max-h-48">
+                                            <div className="p-3 space-y-3">
+                                              {appt.selected_services && appt.selected_services.length > 0 ? (
+                                                appt.selected_services.map((s, idx) => (
+                                                  <div key={idx} className="flex justify-between items-start gap-2 group/item">
+                                                    <div className="space-y-0.5">
+                                                      <p className="text-xs font-bold text-cream group-hover/item:text-gold transition-colors">{s.title}</p>
+                                                      <p className="text-[10px] text-cream/40 flex items-center gap-1">
+                                                        <Clock className="w-2.5 h-2.5" /> {s.duration}
+                                                      </p>
+                                                    </div>
+                                                    <p className="text-xs font-sans font-bold text-cream/80 whitespace-nowrap">${Number(s.price).toLocaleString('es-AR')}</p>
+                                                  </div>
+                                                ))
+                                              ) : (
+                                                <div className="text-[10px] text-cream/20 italic py-2">Sin sub-servicios detallados</div>
+                                              )}
+                                            </div>
+                                          </ScrollArea>
+                                          {(appt.total_price || appt.total_duration) && (
+                                            <div className="p-3 border-t border-white/5 bg-gold/5 space-y-2">
+                                              {appt.total_duration && (
+                                                <div className="flex justify-between items-center text-[10px] text-cream/40">
+                                                  <p className="uppercase tracking-widest leading-none">Duración Total</p>
+                                                  <p className="font-bold flex items-center gap-1 leading-none text-cream/80">
+                                                    <Clock className="w-2.5 h-2.5" />
+                                                    {appt.total_duration >= 60 
+                                                      ? `${Math.floor(appt.total_duration/60)}H${appt.total_duration%60 > 0 ? ` ${appt.total_duration%60}M` : ''}`
+                                                      : `${appt.total_duration} MIN`
+                                                    }
+                                                  </p>
+                                                </div>
+                                              )}
+                                              {appt.total_price && appt.total_price > 0 && (
+                                                <div className="flex justify-between items-center">
+                                                  <p className="text-xs font-bold text-gold uppercase tracking-tighter leading-none">Total</p>
+                                                  <p className="text-sm font-sans font-black text-gold whitespace-nowrap leading-none">${Number(appt.total_price).toLocaleString('es-AR')}</p>
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+                                        </PopoverContent>
+                                      </Popover>
                                   </div>
                                 )}
                               </div>
