@@ -1,5 +1,5 @@
-import { getDb } from './utils/db.js';
-import { requireAuth } from './utils/auth.js';
+import { getDb } from '../utils/db.js';
+import { requireAuth } from '../utils/auth.js';
 import bcrypt from 'bcrypt';
 import { VercelRequest, VercelResponse } from '@vercel/node';
 

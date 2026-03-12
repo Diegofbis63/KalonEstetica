@@ -1,4 +1,4 @@
-import { getDb } from './utils/db.js';
+import { getDb } from '../utils/db.js';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import cookie from 'cookie';

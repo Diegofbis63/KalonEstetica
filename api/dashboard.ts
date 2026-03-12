@@ -1,5 +1,5 @@
-import { getDb } from './utils/db.js';
-import { requireAuth } from './utils/auth.js';
+import { getDb } from '../utils/db.js';
+import { requireAuth } from '../utils/auth.js';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
