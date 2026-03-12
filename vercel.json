@@ -1,6 +1,14 @@
 {
     "rewrites": [
         {
+            "source": "/api/messages/pending",
+            "destination": "/api/leads/chat?action=pending"
+        },
+        {
+            "source": "/api/messages/mark-sent",
+            "destination": "/api/leads/chat?action=mark-sent"
+        },
+        {
             "source": "/api/(.*)",
             "destination": "/api/$1"
         },

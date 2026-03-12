@@ -150,6 +150,9 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
   const [selectedAppointmentForEdit, setSelectedAppointmentForEdit] = useState<Appointment | null>(null);
   const [replyMessage, setReplyMessage] = useState("");
   const [isSendingReply, setIsSendingReply] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form states
   const [formDate, setFormDate] = useState("");
@@ -299,7 +302,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
   });
 
   const deleteLead = useMutation({
-    mutationFn: (id: string) => fetch(`/api/leads?id=${id}`, { method: 'DELETE' }),
+    mutationFn: (id: string) => fetch(`/api/leads/chat?leadId=${id}`, { method: 'DELETE' }),
     onSuccess: () => {
         setDeleteConfirmOpen(false);
         queryClient.invalidateQueries({ queryKey: ['dashboard'] });
@@ -340,10 +343,10 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
 
   const toggleBotMutation = useMutation({
     mutationFn: async ({ leadId, isBotEnabled }: { leadId: string, isBotEnabled: boolean }) => {
-      const res = await fetch('/api/leads/toggle-bot', {
+      const res = await fetch(`/api/leads/chat?leadId=${leadId}&action=toggle-bot`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leadId, isBotEnabled })
+        body: JSON.stringify({ isBotEnabled })
       });
       if (!res.ok) throw new Error('Failed to toggle bot');
       return res.json();
@@ -355,11 +358,11 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
   });
 
   const sendReplyMutation = useMutation({
-    mutationFn: async ({ leadId, message }: { leadId: string, message: string }) => {
+    mutationFn: async ({ leadId, message, mediaData }: { leadId: string, message?: string, mediaData?: string }) => {
       const res = await fetch('/api/leads/reply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-        body: JSON.stringify({ leadId, message })
+        body: JSON.stringify({ leadId, message, mediaData })
       });
       if (!res.ok) {
         const err = await res.json();
@@ -386,18 +389,45 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
     },
     onSuccess: () => {
       setReplyMessage("");
+      setIsUploading(false);
       toast.success("Mensaje enviado");
     },
     onSettled: (data, error, variables) => {
       queryClient.invalidateQueries({ queryKey: ['chat', variables.leadId] });
+      setIsUploading(false);
     },
     onError: (err: Error, newReply, context) => {
       if (context?.previousChat) {
         queryClient.setQueryData(['chat', newReply.leadId], context.previousChat);
       }
+      setIsUploading(false);
       toast.error(err.message);
     }
   });
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error("Solo se permiten imágenes");
+      return;
+    }
+
+    setIsUploading(true);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = reader.result as string;
+      sendReplyMutation.mutate({ 
+        leadId: selectedLeadForChat!.id, 
+        message: "", 
+        mediaData: base64 
+      });
+    };
+    reader.readAsDataURL(file);
+    // Reset input for same file selection
+    e.target.value = '';
+  };
 
   const leads: Lead[] = useMemo(() => dashData?.leads || [], [dashData?.leads]);
   const appointments: Appointment[] = useMemo(() => dashData?.appointments || [], [dashData?.appointments]);
@@ -1045,8 +1075,8 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                             <img 
                                               src={m.media_url || m.media_data} 
                                               alt="Comprobante / Multimedia" 
-                                              className="max-w-full h-auto cursor-zoom-in hover:scale-105 transition-transform duration-500" 
-                                              onClick={() => window.open(m.media_url || m.media_data, '_blank')}
+                                               className="max-w-full h-auto cursor-zoom-in hover:scale-105 transition-transform duration-500" 
+                                              onClick={() => setLightboxImage(m.media_url || m.media_data || null)}
                                             />
                                             <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
                                               <Plus className="w-6 h-6 text-white drop-shadow-lg" />
@@ -1076,9 +1106,20 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
 
             <div className="p-4 bg-noir-light/50 border-t border-white/5 backdrop-blur-xl">
               <div className="flex items-center gap-3">
-                <button className="p-3 rounded-xl bg-white/5 border border-white/10 text-cream/40 hover:text-gold transition-colors">
-                  <Paperclip className="w-4 h-4" />
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading || sendReplyMutation.isPending}
+                  className="p-3 rounded-2xl bg-white/5 border border-white/10 text-cream/40 hover:text-gold hover:border-gold/30 transition-all disabled:opacity-20"
+                >
+                  {isUploading ? <div className="w-4 h-4 border-2 border-gold border-t-transparent rounded-full animate-spin" /> : <Paperclip className="w-4 h-4" />}
                 </button>
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  onChange={handleFileUpload} 
+                  accept="image/*" 
+                  className="hidden" 
+                />
                 <div className="flex-1 relative">
                   <input 
                     type="text" 
@@ -1449,6 +1490,25 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
           </AlertDialogContent>
       </AlertDialog>
 
+      {/* 11. Custom Lightbox */}
+      {lightboxImage && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-noir/95 backdrop-blur-md animate-in fade-in duration-300"
+          onClick={() => setLightboxImage(null)}
+        >
+          <button 
+            className="absolute top-8 right-8 p-3 rounded-full bg-white/5 border border-white/10 text-white hover:bg-white/10 transition-all"
+            onClick={() => setLightboxImage(null)}
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <img 
+            src={lightboxImage} 
+            alt="Expanded" 
+            className="max-w-[95vw] max-h-[95vh] object-contain rounded-xl shadow-2xl animate-in zoom-in-95 duration-300 pointer-events-none"
+          />
+        </div>
+      )}
     </div>
   );
 }

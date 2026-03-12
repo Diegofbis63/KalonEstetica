@@ -6,7 +6,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { leadId, action } = req.query;
     const db = getDb();
 
-    // POLLED ACTIONS FOR WHATSAPP BRIDGE (No Auth for internal sync simplified)
+    // 1. POLLED ACTIONS FOR WHATSAPP BRIDGE (No Auth)
     if (req.method === 'GET' && action === 'pending') {
         try {
             const result = await db.query(`
@@ -34,12 +34,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
     }
 
-    // STANDARD CHAT HISTORY (Requires Auth)
+    // 2. AUTHENTICATED ACTIONS (Require Auth)
+    const user = await requireAuth(req, res);
+    if (!user) return;
+
+    // Toggle Bot Logic (Moved from toggle-bot.ts)
+    if (req.method === 'POST' && action === 'toggle-bot') {
+        try {
+            const { isBotEnabled } = req.body;
+            await db.query('UPDATE leads SET is_bot_enabled = $1 WHERE id = $2', [isBotEnabled, leadId]);
+            return res.status(200).json({ success: true });
+        } catch (e) {
+            return res.status(500).json({ error: 'Toggle failed' });
+        }
+    }
+
+    // Delete Lead Logic (Moved from leads.ts)
+    if (req.method === 'DELETE') {
+        try {
+            if (!leadId) return res.status(400).json({ error: 'Missing lead ID' });
+            await db.query('DELETE FROM appointments WHERE lead_id = $1', [leadId]);
+            const result = await db.query('DELETE FROM leads WHERE id = $1 RETURNING *', [leadId]);
+            if (result.rows.length === 0) return res.status(404).json({ error: 'Lead not found' });
+            return res.status(200).json({ message: 'Lead deleted', lead: result.rows[0] });
+        } catch (e) {
+            return res.status(500).json({ error: 'Delete failed' });
+        }
+    }
+
+    // Fetch History
     if (req.method === 'GET') {
         if (!leadId) return res.status(400).json({ error: 'Lead ID missing' });
-        const user = await requireAuth(req, res);
-        if (!user) return;
-
         try {
             const logsRes = await db.query(`
                 SELECT role, content, media_url, media_data, created_at 

@@ -12,10 +12,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     try {
         const db = getDb();
-        const { leadId, message, mediaUrl } = req.body;
+        const { leadId, message, mediaUrl, mediaData } = req.body;
 
-        if (!leadId || (!message && !mediaUrl)) {
-            return res.status(400).json({ error: 'Faltan datos requeridos (leadId, message o mediaUrl)' });
+        if (!leadId || (!message && !mediaUrl && !mediaData)) {
+            return res.status(400).json({ error: 'Faltan datos requeridos (leadId, message, mediaUrl o mediaData)' });
         }
 
         // 1. Get lead and check permissions
@@ -39,23 +39,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return res.status(403).json({ error: 'No tienes permisos para responder a este prospecto' });
         }
 
-        // 2. Prepare new message
-        const newMessage = {
-            role: 'admin',
-            content: message || '',
-            media_url: mediaUrl || null,
-            created_at: new Date().toISOString()
-        };
-
-        // 3. Insert into chat_logs and update leads.updated_at (sent_to_whatsapp = false for bridge to pick it up)
+        // 2. Insert into chat_logs and update leads.updated_at (sent_to_whatsapp = false for bridge to pick it up)
         await db.query(`
-            INSERT INTO chat_logs (lead_id, role, content, media_url, created_at, sent_to_whatsapp)
-            VALUES ($1, $2, $3, $4, $5, false)
-        `, [leadId, newMessage.role, newMessage.content, newMessage.media_url, newMessage.created_at]);
+            INSERT INTO chat_logs (lead_id, role, content, media_url, media_data, created_at, sent_to_whatsapp)
+            VALUES ($1, $2, $3, $4, $5, $6, false)
+        `, [leadId, 'admin', message || '', mediaUrl || null, mediaData || null, new Date().toISOString()]);
 
         await db.query(`UPDATE leads SET updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [leadId]);
 
-        return res.status(200).json({ success: true, message: newMessage });
+        return res.status(200).json({ success: true });
     } catch (e) {
         console.error('Error in lead reply:', e);
         return res.status(500).json({ error: 'Internal server error' });
