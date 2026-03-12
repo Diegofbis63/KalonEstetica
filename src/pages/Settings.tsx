@@ -96,7 +96,9 @@ export default function Settings() {
   const handleEdit = (user: UserAccount) => {
     setSelectedUser(user);
     setUsername(user.username);
-    setPassword("");
+    // User wants to pre-fill, but they are hashed. We set it if available, 
+    // but typically it remains blank for security unless the API provides it.
+    setPassword((user as any).password || ""); 
     setSelectedCats(user.category_ids || []);
     setIsEditModalOpen(true);
     setShowPassword(false);
@@ -200,31 +202,33 @@ export default function Settings() {
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <DialogContent className="bg-noir/95 backdrop-blur-2xl border-cream/10 text-cream max-w-xl">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-serif font-bold text-gold">Editar Cuenta de Staff</DialogTitle>
+            <DialogTitle className="text-2xl font-serif font-bold text-gold">
+              {selectedUser?.role === 'admin' ? 'Editar Cuenta de Admin' : 'Editar Cuenta de Staff'}
+            </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-8 py-4">
             {/* Basic Info */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-6 items-start">
               <div className="space-y-2">
-                <label className="text-[10px] uppercase tracking-widest text-cream/30 font-bold ml-1">Usuario</label>
+                <label className="text-[10px] uppercase tracking-widest text-cream/30 font-bold ml-1 block">Usuario</label>
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gold/40 text-sm">@</span>
                   <input 
-                    className="w-full bg-noir-light border border-white/5 rounded-xl px-9 py-2.5 text-sm focus:outline-none focus:border-gold/30 transition-all font-sans"
+                    className="w-full bg-noir-light border border-white/5 rounded-xl px-9 py-2.5 text-sm focus:outline-none focus:border-gold/30 transition-all font-sans text-cream [&:-webkit-autofill]:shadow-[0_0_0_30px_#0A0A0A_inset] [&:-webkit-autofill]:[-webkit-text-fill-color:#F5F5F1]"
                     value={username}
                     onChange={e => setUsername(e.target.value)}
                   />
                 </div>
               </div>
-              <div className="space-y-2 text-right">
-                <label className="text-[10px] uppercase tracking-widest text-cream/30 font-bold ml-1 text-left block">Password</label>
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase tracking-widest text-cream/30 font-bold ml-1 block">Password</label>
                 <div className="relative">
                   <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gold/40" />
                   <input 
                     type={showPassword ? "text" : "password"}
                     placeholder="••••••••"
-                    className="w-full bg-noir-light border border-white/5 rounded-xl px-11 py-2.5 text-sm focus:outline-none focus:border-gold/30 transition-all font-sans"
+                    className="w-full bg-noir-light border border-white/5 rounded-xl px-11 py-2.5 text-sm focus:outline-none focus:border-gold/30 transition-all font-sans text-cream [&:-webkit-autofill]:shadow-[0_0_0_30px_#0A0A0A_inset] [&:-webkit-autofill]:[-webkit-text-fill-color:#F5F5F1]"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                   />
