@@ -370,9 +370,18 @@ export default async function handler(req: Request) {
         if (userId && !messages.length && incomingMessage) {
             isFirstInteraction = true;
             try {
-                const historyRes = await sql`SELECT chat_history FROM leads WHERE regexp_replace(contact_info->>'phone', '\\D', '', 'g') = ${userId} LIMIT 1` as ChatHistoryResult[];
-                if (historyRes.length > 0 && historyRes[0].chat_history) {
-                    messages = historyRes[0].chat_history;
+                const historyRes = await sql`
+                    SELECT role, content, media_url, created_at 
+                    FROM chat_logs 
+                    WHERE lead_id = (
+                        SELECT id FROM leads 
+                        WHERE regexp_replace(contact_info->>'phone', '\\D', '', 'g') = ${userId}
+                        LIMIT 1
+                    )
+                    ORDER BY created_at ASC
+                ` as any[];
+                if (historyRes.length > 0) {
+                    messages = historyRes;
                 }
             } catch (historyErr) { console.error("History fetch error:", historyErr); }
             messages.push({ role: 'user', content: incomingMessage });
@@ -492,8 +501,8 @@ export default async function handler(req: Request) {
 
                 if (!leadId) {
                     const newLead = await sql`
-                    INSERT INTO leads (client_name, contact_info, status, intent_score, organization_id, chat_history)
-                    VALUES (${state.clientName || 'Cliente WhatsApp'}, ${JSON.stringify({ phone: phoneForQueries, source: 'whatsapp' })}, 'qualified', 90, ${DEFAULT_ORG_ID}, ${JSON.stringify(messages)}::jsonb)
+                    INSERT INTO leads (client_name, contact_info, status, intent_score, organization_id)
+                    VALUES (${state.clientName || 'Cliente WhatsApp'}, ${JSON.stringify({ phone: phoneForQueries, source: 'whatsapp' })}, 'qualified', 90, ${DEFAULT_ORG_ID})
                     RETURNING id
                 ` as LeadIdResult[];
                     leadId = newLead[0].id;
@@ -516,12 +525,26 @@ export default async function handler(req: Request) {
         const phoneToUse = (state.clientPhone === 'CONFIRMED_CURRENT' ? userId : state.clientPhone) || userId;
 
         if (phoneToUse) {
-            const newHistory = [...messages, { role: 'assistant', content: responseText }];
             const intentScore = isBookingConfirmed ? 100 : 80;
             const finalClientName = state.clientName || "Cliente WhatsApp";
-            const existingLeads = await sql`SELECT id FROM leads WHERE contact_info->>'phone' = ${phoneToUse}`;
-            if ((existingLeads as any[]).length > 0) await sql`UPDATE leads SET client_name = ${finalClientName}, intent_score = ${intentScore}, chat_history = ${JSON.stringify(newHistory)}::jsonb WHERE id = ${(existingLeads as any[])[0].id}`;
-            else await sql`INSERT INTO leads (organization_id, client_name, contact_info, status, intent_score, chat_history) VALUES (${DEFAULT_ORG_ID}, ${finalClientName}, ${JSON.stringify({ phone: phoneToUse })}, 'qualified', ${intentScore}, ${JSON.stringify(newHistory)}::jsonb)`;
+            
+            // 1. Get leadId
+            const existingLeads = await sql`SELECT id FROM leads WHERE regexp_replace(contact_info->>'phone', '\\D', '', 'g') = ${phoneToUse.replace(/\D/g, '')} LIMIT 1` as LeadIdResult[];
+            let leadId: string;
+            
+            if (existingLeads.length > 0) {
+                leadId = existingLeads[0].id;
+                await sql`UPDATE leads SET client_name = ${finalClientName}, intent_score = ${intentScore}, updated_at = CURRENT_TIMESTAMP WHERE id = ${leadId}`;
+            } else {
+                const newLead = await sql`INSERT INTO leads (organization_id, client_name, contact_info, status, intent_score) VALUES (${DEFAULT_ORG_ID}, ${finalClientName}, ${JSON.stringify({ phone: phoneToUse })}, 'qualified', ${intentScore}) RETURNING id` as LeadIdResult[];
+                leadId = newLead[0].id;
+            }
+
+            // 2. Log last user message and bot response to chat_logs
+            if (incomingMessage) {
+              await sql`INSERT INTO chat_logs (lead_id, role, content) VALUES (${leadId}, 'user', ${incomingMessage})`;
+            }
+            await sql`INSERT INTO chat_logs (lead_id, role, content) VALUES (${leadId}, 'bot', ${responseText})`;
         }
 
         if (userId) {

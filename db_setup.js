@@ -75,6 +75,19 @@ async function main() {
     );
     `);
 
+    // chat_logs
+    await client.query(`
+        CREATE TABLE IF NOT EXISTS chat_logs (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            lead_id UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+            role VARCHAR(50) NOT NULL,
+            content TEXT,
+            media_url TEXT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_chat_logs_lead_id ON chat_logs(lead_id);
+    `);
+
     // 3. Verificación y Alteración de Columnas Faltantes
     console.log('Verificando integridad de columnas...');
 

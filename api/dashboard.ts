@@ -44,7 +44,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Fetch leads with category info and contact details extracted
         const leadsQuery = `
             SELECT l.*, l.contact_info->>'phone' as phone, l.contact_info->>'email' as email, 
-                   c.name as category_name, l.updated_at
+                   c.name as category_name, l.updated_at,
+                   COALESCE(
+                     (SELECT jsonb_agg(jsonb_build_object('role', role, 'content', content, 'media_url', media_url, 'created_at', created_at) ORDER BY created_at ASC) FROM chat_logs WHERE lead_id = l.id),
+                     '[]'::jsonb
+                   ) as chat_history
             FROM leads l
             LEFT JOIN categories c ON l.category_id = c.id
             ORDER BY COALESCE(l.updated_at, l.created_at) DESC LIMIT 100

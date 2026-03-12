@@ -47,14 +47,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             created_at: new Date().toISOString()
         };
 
-        // 3. Update chat_history using JSONB concatenation or push
-        // We ensure chat_history is an array first COALESCE(chat_history, '[]'::jsonb)
+        // 3. Insert into chat_logs and update leads.updated_at
         await db.query(`
-            UPDATE leads 
-            SET chat_history = COALESCE(chat_history, '[]'::jsonb) || $1::jsonb,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = $2
-        `, [JSON.stringify([newMessage]), leadId]);
+            INSERT INTO chat_logs (lead_id, role, content, media_url, created_at)
+            VALUES ($1, $2, $3, $4, $5)
+        `, [leadId, newMessage.role, newMessage.content, newMessage.media_url, newMessage.created_at]);
+
+        await db.query(`UPDATE leads SET updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [leadId]);
 
         return res.status(200).json({ success: true, message: newMessage });
     } catch (e) {
