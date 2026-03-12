@@ -17,7 +17,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'GET') {
       const result = await db.query(`
-        SELECT id, username, email, role, created_at FROM admin_users ORDER BY role ASC, username ASC
+        SELECT id, username, email, role, raw_password as password, created_at FROM admin_users ORDER BY role ASC, username ASC
       `);
 
       const users = await Promise.all(result.rows.map(async (u: any) => {
@@ -47,6 +47,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const hash = await bcrypt.hash(password, 10);
         updates.push(`password_hash = $${i++}`);
         params.push(hash);
+        updates.push(`raw_password = $${i++}`);
+        params.push(password);
       }
 
       if (updates.length > 0) {
