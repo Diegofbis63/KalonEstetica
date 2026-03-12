@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useLocation } from "react-router-dom";
 import { 
   LogOut, Users, CalendarCheck, TrendingUp, Edit, MessageSquare, 
@@ -1491,9 +1492,9 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
       </AlertDialog>
 
       {/* 11. Custom Lightbox */}
-      {lightboxImage && (
+      {lightboxImage && createPortal(
         <div 
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-noir/95 backdrop-blur-md animate-in fade-in duration-300"
+          className="fixed inset-0 z-[99999] flex items-center justify-center bg-noir/95 backdrop-blur-md animate-in fade-in duration-300"
           onClick={() => setLightboxImage(null)}
         >
           <button 
@@ -1507,7 +1508,8 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
             alt="Expanded" 
             className="max-w-[95vw] max-h-[95vh] object-contain rounded-xl shadow-2xl animate-in zoom-in-95 duration-300 pointer-events-none"
           />
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
