@@ -617,46 +617,39 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                 <div className="rounded-2xl border border-cream/5 bg-noir-light/20 overflow-hidden shadow-2xl backdrop-blur-md">
                   <Table>
                     <TableHeader>
-                      <TableRow className="border-b border-cream/5 hover:bg-transparent">
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Nombre / Contacto</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Categoría</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">I.A. Bot</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Score</TableHead>
+                      <TableRow className="border-b border-white/5 hover:bg-transparent">
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Prospecto</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Contacto</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12 text-center">Intención AI</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12 text-right">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {leads.map((l, i) => (
                         <TableRow key={l.id} className={`border-b border-cream/5 hover:bg-cream/[0.02] group transition-colors animate-in fade-in slide-in-from-bottom-2 ${!l.canManage ? 'opacity-40' : ''}`} style={{ animationDelay: `${i * 50}ms` }}>
-                          <TableCell className="px-6 py-4">
-                            <div className="font-serif font-bold text-cream underline decoration-gold/20 underline-offset-4">
-                              {l.canManage ? l.client_name : `Interesado - ${l.category_name}`}
-                            </div>
-                            <div className="text-[10px] text-cream/20 mt-1 font-mono tracking-tighter">{l.phone || "Oculto"}</div>
+                          <TableCell className="px-6 py-5">
+                            <div className="font-serif font-bold text-cream text-base tracking-tight">{l.canManage ? l.client_name : `Interesado - ${l.category_name}`}</div>
                           </TableCell>
-                          <TableCell className="px-6 py-4">
-                             <Badge variant="outline" className="text-[9px] uppercase tracking-widest border-white/10 text-cream/30">{l.category_name || 'General'}</Badge>
-                          </TableCell>
-                          <TableCell className="px-6 py-4">
-                              <button 
-                                  disabled={!l.canManage}
-                                  onClick={() => toggleBotMutation.mutate({ leadId: l.id, isBotEnabled: !l.is_bot_enabled })}
-                                  className={`px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider transition-all shadow-sm ${
-                                    l.is_bot_enabled 
-                                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20' 
-                                      : 'bg-rose/10 text-rose border border-rose/20 hover:bg-rose/20'
-                                  } disabled:opacity-20`}
-                              >
-                                  {l.is_bot_enabled ? 'Activado' : 'Pausado'}
-                              </button>
-                          </TableCell>
-                          <TableCell className="px-6 py-4">
-                              <div className="flex items-center gap-2">
-                                <div className="w-12 h-1 bg-white/5 rounded-full overflow-hidden shadow-inner">
-                                    <div className="h-full bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.5)]" style={{ width: `${l.intent_score}%` }} />
-                                </div>
-                                <span className="text-[10px] font-bold text-emerald-400/60">{l.intent_score}%</span>
+                          <TableCell className="px-6 py-5">
+                            {l.phone && (
+                              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-[10px] font-bold font-mono">
+                                <Phone className="w-3 h-3" />
+                                {l.phone}
                               </div>
+                            )}
+                          </TableCell>
+                          <TableCell className="px-6 py-5 text-center">
+                            <div className="inline-flex flex-col items-center">
+                              <span className={`text-[10px] font-black tracking-widest mb-1 ${l.intent_score > 70 ? 'text-gold' : 'text-cream/40'}`}>
+                                {l.intent_score}%
+                              </span>
+                              <div className="w-16 h-1 bg-white/5 rounded-full overflow-hidden">
+                                <div 
+                                  className="bg-gold h-full shadow-[0_0_8px_rgba(194,154,91,0.5)] transition-all duration-1000" 
+                                  style={{ width: `${l.intent_score}%` }} 
+                                />
+                              </div>
+                            </div>
                           </TableCell>
                           <TableCell className="px-6 py-4 text-right">
                             {l.canManage && (
