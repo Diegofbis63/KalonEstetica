@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Users, 
   Search, 
@@ -12,8 +12,15 @@ import {
   ArrowUpDown,
   ExternalLink,
   MoreVertical,
-  Activity
+  Activity,
+  Edit,
+  Save,
+  Trash2,
+  X
 } from 'lucide-react';
+import { toast } from 'sonner';
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,7 +49,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { X } from 'lucide-react';
 
 interface Client {
   id: string;
@@ -63,10 +69,15 @@ interface Client {
 export default function Clients() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  
-  // States for filtering
   const [filterType, setFilterType] = useState<'all' | 'new' | 'recurrent' | 'vip'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+
+  const queryClient = useQueryClient();
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editNote, setEditNote] = useState("");
 
   const { data, isLoading } = useQuery({
     queryKey: ['clients-list'],
@@ -76,6 +87,37 @@ export default function Clients() {
       return res.json();
     }
   });
+
+  const updateClient = useMutation({
+    mutationFn: async (clientData: any) => {
+      const res = await fetch(`/api/clients?id=${selectedClient?.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(clientData)
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Error al actualizar');
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['clients-list'] });
+      setSelectedClient(data.client);
+      setIsEditing(false);
+      toast.success("Cliente actualizado correctamente");
+    },
+    onError: (err: any) => toast.error(err.message)
+  });
+
+  const handleEditInit = (client: Client) => {
+    setSelectedClient(client);
+    setEditName(client.client_name);
+    setEditPhone(client.phone || "");
+    setEditEmail(client.email || "");
+    setEditNote(client.note || "");
+    setIsEditing(false);
+  };
 
   const clients: Client[] = data?.clients || [];
   
@@ -266,7 +308,7 @@ export default function Clients() {
                           variant="ghost" 
                           size="sm" 
                           className="text-gold hover:bg-gold/10 hover:text-gold-light font-bold text-xs"
-                          onClick={() => setSelectedClient(client)}
+                          onClick={() => handleEditInit(client)}
                         >
                           VER DETALLES
                           <ChevronRight className="w-4 h-4 ml-1" />
@@ -275,83 +317,160 @@ export default function Clients() {
                       <SheetContent className="bg-noir-light border-l border-white/5 text-cream w-[400px] sm:w-[540px]">
                         {selectedClient && (
                           <div className="h-full flex flex-col pt-8">
-                            <SheetHeader className="mb-8">
-                              <div className="flex items-center gap-4 mb-4">
-                                <div className="w-16 h-16 rounded-2xl bg-gold/5 border border-gold/10 flex items-center justify-center text-gold font-bold text-2xl shadow-xl">
-                                  {selectedClient.client_name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                                </div>
-                                <div className="text-left">
-                                  <SheetTitle className="text-2xl font-serif text-cream">{selectedClient.client_name}</SheetTitle>
-                                  <div className="flex items-center gap-2 mt-1">
-                                    <Badge className="bg-gold/10 text-gold border-gold/20 text-[10px]">CLIENTE PREMIUM</Badge>
-                                    <span className="text-[10px] text-cream/20 uppercase tracking-widest font-black">ID: {selectedClient.id.slice(0,8)}</span>
+                            <SheetHeader className="mb-6">
+                              <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-4">
+                                  <div className="w-16 h-16 rounded-2xl bg-gold/5 border border-gold/10 flex items-center justify-center text-gold font-bold text-2xl shadow-xl">
+                                    {(isEditing ? editName : selectedClient.client_name).split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                  </div>
+                                  <div className="text-left">
+                                    {isEditing ? (
+                                      <SheetTitle className="text-2xl font-serif text-cream">Editando Perfil</SheetTitle>
+                                    ) : (
+                                      <SheetTitle className="text-2xl font-serif text-cream">{selectedClient.client_name}</SheetTitle>
+                                    )}
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <Badge className="bg-gold/10 text-gold border-gold/20 text-[10px]">
+                                        {selectedClient.total_appointments > 5 ? 'CLIENTE VIP' : 'CLIENTE REGULAR'}
+                                      </Badge>
+                                      <span className="text-[10px] text-cream/20 uppercase tracking-widest font-black">ID: {selectedClient.id.slice(0,8)}</span>
+                                    </div>
                                   </div>
                                 </div>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => setIsEditing(!isEditing)}
+                                  className={`rounded-xl border ${isEditing ? 'border-rose/20 text-rose bg-rose/5' : 'border-white/5 text-cream/40 hover:text-gold hover:bg-gold/10 hover:border-gold/20'}`}
+                                >
+                                  {isEditing ? <X className="w-4 h-4" /> : <Edit className="w-4 h-4" />}
+                                </Button>
                               </div>
                             </SheetHeader>
 
-                            <div className="grid grid-cols-2 gap-4 mb-8">
-                              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/5">
-                                <p className="text-[10px] text-cream/40 uppercase tracking-widest mb-1">Total Visitas</p>
-                                <p className="text-2xl font-serif text-gold">{selectedClient.total_appointments}</p>
-                              </div>
-                              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/5">
-                                <p className="text-[10px] text-cream/40 uppercase tracking-widest mb-1">Última vez</p>
-                                <p className="text-lg font-serif text-cream">
-                                  {Math.floor((new Date().getTime() - new Date(selectedClient.last_appointment).getTime()) / (1000 * 60 * 60 * 24))} días
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="space-y-6">
-                              <div>
-                                <h3 className="text-sm font-bold text-cream/60 flex items-center gap-2 mb-4">
-                                  <History className="w-4 h-4" />
-                                  Historial de Turnos
-                                </h3>
-                                <ScrollArea className="h-[450px] pr-4">
-                                  <div className="space-y-3">
-                                    {selectedClient.appointment_history.map((appt, idx) => (
-                                      <div key={appt.id} className="relative pl-6 pb-6 border-l border-white/5 last:pb-0">
-                                        <div className="absolute left-[-5px] top-1 w-2 h-2 rounded-full bg-gold/40 shadow-[0_0_8px_rgba(212,175,55,0.4)]" />
-                                        <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-all">
-                                          <div className="flex justify-between items-start mb-2">
-                                            <p className="font-bold text-cream text-lg">{appt.service_type}</p>
-                                            <Badge variant="outline" className={`text-[9px] ${
-                                              appt.status === 'completed' ? 'border-emerald-500/30 text-emerald-400' :
-                                              appt.status === 'canceled' ? 'border-rose-500/30 text-rose-400' :
-                                              'border-gold/30 text-gold'
-                                            }`}>
-                                              {appt.status.toUpperCase()}
-                                            </Badge>
-                                          </div>
-                                          <div className="flex items-center gap-3 text-xs text-cream/40">
-                                            <div className="flex items-center gap-1">
-                                              <Calendar className="w-3 h-3" />
-                                              {new Date(appt.date_time).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}
-                                            </div>
-                                            <div className="flex items-center gap-1">
-                                              <Activity className="w-3 h-3" />
-                                              {new Date(appt.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}hs
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    ))}
+                            {isEditing ? (
+                              <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                                <div className="space-y-4 bg-white/[0.02] border border-white/5 p-6 rounded-2xl">
+                                  <div className="space-y-2">
+                                    <Label className="text-[10px] uppercase tracking-widest text-cream/30">Nombre Completo</Label>
+                                    <Input 
+                                      value={editName} 
+                                      onChange={e => setEditName(e.target.value)} 
+                                      className="bg-noir-light border-white/10 focus:border-gold/30 h-11"
+                                    />
                                   </div>
-                                </ScrollArea>
-                              </div>
-                            </div>
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                      <Label className="text-[10px] uppercase tracking-widest text-cream/30">WhatsApp / Tel</Label>
+                                      <Input 
+                                        value={editPhone} 
+                                        onChange={e => setEditPhone(e.target.value)} 
+                                        className="bg-noir-light border-white/10 focus:border-gold/30 h-11"
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label className="text-[10px] uppercase tracking-widest text-cream/30">Email</Label>
+                                      <Input 
+                                        value={editEmail} 
+                                        onChange={e => setEditEmail(e.target.value)} 
+                                        className="bg-noir-light border-white/10 focus:border-gold/30 h-11"
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label className="text-[10px] uppercase tracking-widest text-cream/30">Notas Internas / Preferencias</Label>
+                                    <Textarea 
+                                      value={editNote} 
+                                      onChange={e => setEditNote(e.target.value)} 
+                                      className="bg-noir-light border-white/10 focus:border-gold/30 min-h-[100px] resize-none"
+                                      placeholder="Ej: Prefiere turnos por la tarde, alergia a ciertos productos..."
+                                    />
+                                  </div>
+                                </div>
 
-                            <div className="mt-auto pt-6 border-t border-white/5">
-                              <Button 
-                                className="w-full bg-gold hover:bg-gold-light text-noir font-black text-xs tracking-widest h-12 uppercase"
-                                onClick={() => window.open(`https://wa.me/${selectedClient.phone?.replace(/\D/g, '')}`, '_blank')}
-                              >
-                                <Phone className="w-4 h-4 mr-2" />
-                                Contactar vía WhatsApp
-                              </Button>
-                            </div>
+                                <Button 
+                                  className="w-full bg-gold hover:bg-gold-light text-noir font-black h-14 rounded-2xl shadow-xl shadow-gold/20 transition-all active:scale-[0.98] disabled:opacity-50"
+                                  onClick={() => updateClient.mutate({ client_name: editName, phone: editPhone, email: editEmail, note: editNote })}
+                                  disabled={updateClient.isPending || !editName || !editPhone}
+                                >
+                                  {updateClient.isPending ? (
+                                    <Activity className="w-5 h-5 animate-spin" />
+                                  ) : (
+                                    <>
+                                      <Save className="w-5 h-5 mr-2" />
+                                      GUARDAR CAMBIOS
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col h-full animate-in fade-in slide-in-from-left-4 duration-500">
+                                <div className="grid grid-cols-2 gap-4 mb-8">
+                                  <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/5 group hover:border-gold/20 transition-colors">
+                                    <p className="text-[10px] text-cream/40 uppercase tracking-widest mb-1">Total Visitas</p>
+                                    <p className="text-2xl font-serif text-gold">{selectedClient.total_appointments}</p>
+                                  </div>
+                                  <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/5 group hover:border-gold/20 transition-colors">
+                                    <p className="text-[10px] text-cream/40 uppercase tracking-widest mb-1">Última vez</p>
+                                    <p className="text-lg font-serif text-cream">
+                                      {Math.floor((new Date().getTime() - new Date(selectedClient.last_appointment).getTime()) / (1000 * 60 * 60 * 24))} días
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-6 flex-1">
+                                  <div>
+                                    <h3 className="text-sm font-bold text-cream/60 flex items-center gap-2 mb-4">
+                                      <History className="w-4 h-4 text-gold/60" />
+                                      Historial de Turnos
+                                    </h3>
+                                    <ScrollArea className="h-[400px] pr-4">
+                                      <div className="space-y-3">
+                                        {selectedClient.appointment_history?.map((appt, idx) => (
+                                          <div key={appt.id} className="relative pl-6 pb-6 border-l border-white/5 last:pb-0">
+                                            <div className="absolute left-[-5px] top-1 w-2 h-2 rounded-full bg-gold/40 shadow-[0_0_8px_rgba(212,175,55,0.4)]" />
+                                            <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-all">
+                                              <div className="flex justify-between items-start mb-2">
+                                                <p className="font-bold text-cream text-lg">{appt.service_type}</p>
+                                                <Badge variant="outline" className={`text-[9px] ${
+                                                  appt.status === 'completed' ? 'border-emerald-500/30 text-emerald-400' :
+                                                  appt.status === 'canceled' ? 'border-rose-500/30 text-rose-400' :
+                                                  'border-gold/30 text-gold'
+                                                }`}>
+                                                  {appt.status.toUpperCase()}
+                                                </Badge>
+                                              </div>
+                                              <div className="flex items-center gap-3 text-xs text-cream/40">
+                                                <div className="flex items-center gap-1">
+                                                  <Calendar className="w-3 h-3" />
+                                                  {new Date(appt.date_time).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                  <Activity className="w-3 h-3" />
+                                                  {new Date(appt.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}hs
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )) || (
+                                          <p className="text-center text-cream/20 py-10 italic">Sin historial registrado</p>
+                                        )}
+                                      </div>
+                                    </ScrollArea>
+                                  </div>
+                                </div>
+
+                                <div className="mt-auto pt-6 border-t border-white/5">
+                                  <Button 
+                                    className="w-full bg-[#25D366] hover:bg-[#128C7E] text-white font-black text-xs tracking-widest h-14 rounded-2xl uppercase shadow-xl shadow-emerald-500/10"
+                                    onClick={() => window.open(`https://wa.me/${selectedClient.phone?.replace(/\D/g, '')}`, '_blank')}
+                                  >
+                                    <Phone className="w-4 h-4 mr-2" />
+                                    Contactar vía WhatsApp
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </SheetContent>
