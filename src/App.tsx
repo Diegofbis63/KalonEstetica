@@ -6,11 +6,12 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/components/AuthContext";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import DashboardLayout from "./components/layout/DashboardLayout";
 import Dashboard from "./pages/Dashboard";
 import Settings from "./pages/Settings";
 import CategoryDetail from "./pages/CategoryDetail";
 import NotFound from "./pages/NotFound";
-import DashboardLayout from "./components/layout/DashboardLayout";
+import Clients from "./pages/Clients";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -76,7 +77,7 @@ const App = () => {
               >
                 <Route index element={<Dashboard />} />
                 <Route path="appointments" element={<Dashboard />} /> {/* For now reuse Dashboard */}
-                <Route path="clients" element={<PlaceholderPage title="Clientes" />} />
+                <Route path="clients" element={<Clients />} />
                 <Route path="income" element={<PlaceholderPage title="Ingresos" />} />
                 <Route path="services" element={<Dashboard defaultTab="services" />} />
                 <Route path="settings" element={<Settings />} />
