@@ -1,69 +1,73 @@
-# KÂLON MULTIESPACIO ESTETICO 💎
+# KÂLON MULTIESPACIO ESTÉTICO 💎
 
 | Status | Tech Stack | Design System | Deployment |
 | :--- | :--- | :--- | :--- |
-| ![Development](https://img.shields.io/badge/Status-Development-blue?style=for-the-badge) | ![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white) ![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB) | ![Liquid Luxury](https://img.shields.io/badge/Style-Liquid_Luxury-E21D48?style=for-the-badge) | ![Vercel](https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white) |
+| ![Development](https://img.shields.io/badge/Status-Production--Ready-emerald?style=for-the-badge) | ![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white) ![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB) | ![Liquid Luxury](https://img.shields.io/badge/Style-Liquid_Luxury-D4AF37?style=for-the-badge) | ![Vercel](https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white) |
 
 ---
 
 ## ✨ Visión del Proyecto
 
-**KÂLON** representa la excelencia en estética. Esta plataforma no es solo un sitio web; es una experiencia digital de lujo diseñada para reflejar la sofisticación y el cuidado premium del multiespacio. Utilizando nuestra filosofía **Liquid Luxury**, implementamos interfaces dinámicas, animaciones fluidas y una estética minimalista "dark glass".
+**KÂLON** representa la cúspide de la estética moderna. No es simplemente un sitio web, sino un ecosistema digital de alta gama diseñado para automatizar y elevar la gestión de un multiespacio estético. Bajo nuestra filosofía **Liquid Luxury**, cada interacción fluye con elegancia, ofreciendo una experiencia de usuario premium tanto para el cliente final como para el equipo administrativo.
 
-## 🛠️ Stack Tecnológico Senior
+## 🚀 Módulos Principales
 
-- **Frontend Core**: [Vite](https://vitejs.dev/) + [React 18](https://reactjs.org/) + [TypeScript](https://www.typescriptlang.org/)
-- **Estilos & UI**: [Tailwind CSS](https://tailwindcss.com/) + [Shadcn/UI](https://ui.shadcn.com/)
-- **Animaciones**: [Framer Motion](https://www.framer.com/motion/)
-- **Gestión de Estado & Datos**: [TanStack Query](https://tanstack.com/query/latest) + [Zod](https://zod.dev/)
-- **Base de Datos**: [Neon](https://neon.tech/) (Serverless PostgreSQL)
-- **Despliegue**: [Vercel](https://vercel.com/)
+### 1. Landing Page de Alta Conversión
+- **Hero Dinámico**: Impacto visual inmediato con tipografía de lujo y diseño responsivo.
+- **Catálogo de Servicios**: Sistema de categorías con scroll inteligente y visualización premium.
+- **Galería de Resultados**: Muro de transformaciones reales con efectos de hover y diseño cohesivo.
+- **Reseñas y Confianza**: Sección de testimonios y "Por qué elegirnos" con narrativa persuasiva.
 
-## 🚀 Inicio Rápido
+### 2. Dashboard de Gestión Senior
+- **Finanzas e Ingresos**: 
+  - Monitoreo de KPIs en tiempo real (Facturación, Tickets, Citas).
+  - Filtros personalizados por fecha y servicios.
+  - **Exportación Profesional**: Generación instantánea de reportes en **Excel** y **PDF** (plantilla contable).
+- **Gestión de Citas (Agenda)**:
+  - Vista de tabla detallada con estados de confirmación.
+  - Desglose de servicios por turno con scroll funcional para múltiples tratamientos.
+  - Control directo del estado del Asistente Virtual por cliente.
+- **CRM de Leads y Clientes**:
+  - Seguimiento de prospectos con Score de Intención.
+  - Chat en tiempo real integrado con historial de WhatsApp.
+  - Base de datos de clientes con historial de frecuencia y última visita.
+- **Administración del Multiespacio**:
+  - **RBAC (Role Based Access Control)**: Gestión de equipo con permisos específicos por categoría.
+  - Editor de servicios dinámico con sistema de arrastrar y soltar (Drag & Drop).
 
-1. **Clonar e Instalar**
+### 3. Asistente Virtual Inteligente (KÂLON Bot)
+- **Omnicanalidad**: Funciona en la web (SSE Streaming) y mediante integración con WhatsApp.
+- **Agendamiento Automatizado**: Detecta servicios, solicita datos de contacto y propone horarios disponibles consultando la base de datos en tiempo real.
+- **Modo Híbrido**: Switch de sincronización global para alternar entre atención automatizada y manual.
 
-```bash
-npm install
-```
+## 🛠️ Stack Tecnológico
 
-1. **Variables de Env**
-Configura un archivo `.env` o `.env.local` con las credenciales de base de datos de Neon y cualquier otro secret necesario.
-
-1. **Ejecutar en Desarrollo**
-
-```bash
-npm run dev
-```
-
-1. **Scripts Disponibles**
-
-- `npm run dev`: Inicia el servidor de desarrollo Vite.
-- `npm run build`: Genera el bundle de producción.
-- `npm run test`: Ejecuta la suite de pruebas con Vitest.
-- `npm run lint`: Ejecuta el análisis estático de código.
+- **Frontend Core**: React 18 + TypeScript + Vite.
+- **Styling**: Tailwind CSS + Shadcn/UI (Customizado con estética "Dark Glass").
+- **Animaciones**: Framer Motion para transiciones suaves y estados de carga.
+- **Data Layer**: TanStack Query (React Query) para sincronización de estado y caché eficiente.
+- **Backend & DB**: API Routes (Edge Runtime) + Neon Serverless Postgre (SQL).
+- **Reporting**: Biblioteca `jspdf` y `xlsx` para generación de documentos en el cliente.
 
 ## 📁 Estructura del Proyecto
 
 ```text
+api/              # Endpoints Edge centralizados (Citas, Chat, Ingresos, etc.)
 src/
-├── api/          # Funciones de fetching y llamadas a API
-├── components/   # Componentes UI reutilizables (Shadcn + Custom)
-├── hooks/        # Lógica de React personalizada
-├── pages/        # Páginas de la aplicación (SPA)
-├── scripts/      # Utilidades de mantenimiento y seeding
-└── styles/       # Configuración global de CSS y tokens
+├── components/   # UI atomizada, componentes del dashboard y landing
+├── context/      # Proveedores de estado (Auth, Chat)
+├── lib/          # Utilidades core, configuraciones de API y hooks
+├── pages/        # Vistas principales (SPA Routing)
+└── types/        # Definiciones estrictas de TypeScript
 ```
 
 ## 💅 Design System: Liquid Luxury
 
-Este proyecto utiliza un sistema de diseño propio basado en:
-
-- **Colores**: Dark Mode Premium (`#020617`).
-- **Glassmorphism**: Efectos de cristal esmerilado con bordes sutiles.
-- **Interacciones**: Micro-animaciones para feedback instantáneo.
-- **Tipografía**: Jerarquía clara y moderna (Inter/Outfit).
+Implementamos un estándar estético de **Clase Mundial**:
+- **Dark Mode**: Fondo `#020617` con acentos en `Gold (#D4AF37)`.
+- **Glassmorphism**: Capas translúcidas con `backdrop-blur` y bordes de alta definición.
+- **Micro-interacciones**: Feedback visual en cada clic, hover y transición de página.
 
 ---
 
-Desarrollado con pasión para **KÂLON MULTIESPACIO ESTETICO**. 🌟
+Desarrollado para **KÂLON MULTIESPACIO ESTÉTICO**. La elegancia hecha software. 🌟
