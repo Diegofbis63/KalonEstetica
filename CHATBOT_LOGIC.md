@@ -1,78 +1,62 @@
-# 🧠 Estructura y Lógica del Chatbot KÂLON
+# 🧠 Estructura y Lógica del Chatbot KÂLON (Versión Evolucionada)
 
-Este documento detalla el funcionamiento interno del asistente virtual para facilitar su mejora y mantenimiento.
-
----
-
-## 🏗️ Arquitectura de Comunicación
-El bot opera a través de dos canales principales con una lógica compartida en el servidor:
-
-1.  **Web (Client-side)**: Utiliza `src/lib/kalon-chat.ts` para conectar con el servidor mediante **SSE (Server-Sent Events)**, permitiendo una respuesta fluida tipo "streaming" (palabra por palabra).
-2.  **WhatsApp (Bridge)**: Las respuestas se envían formateadas en JSON plano a través del bridge, utilizando un formateador específico para negritas (`*`) e itálicas (`_`) compatibles con WhatsApp.
+Este documento detalla el funcionamiento interno del asistente virtual tras la actualización al sistema de **Multi-Servicios (Carrito)** e integración con **NLP**. 
 
 ---
 
-## ⚙️ El Motor de Estados (State Machine)
-El bot no responde al azar; mantiene un estado de conversación (`ConvState`) que persiste en la memoria de la sesión actual:
+## 🏗️ Nueva Arquitectura de Inteligencia
+El bot ha migrado a un entorno **Node.js Runtime** para soportar el procesador de lenguaje natural.
 
-| Etapa (`stage`) | Gatillo / Requisito | Acción del Bot |
+1.  **Motor NLP (Natural Language Processing)**: Utiliza `node-nlp` con el corpus `corpus-es.json`.
+    - **Detección de Intenciones**: Identifica si el usuario saluda, quiere agendar, lista servicios, o niega una opción.
+    - **Independencia de Canal**: En WhatsApp utiliza NLP puro; en Web mantiene una interfaz híbrida.
+2.  **Streaming SSE**: Mantiene la respuesta palabra por palabra en la web para una experiencia premium.
+
+---
+
+## ⚙️ Máquina de Estados Actualizada (State Machine)
+El flujo ahora permite navegar por jerarquías y acumular servicios:
+
+| Etapa (`stage`) | Descripción | Transición |
 | :--- | :--- | :--- |
-| `greeting` | Inicio de conversación | Saludo y listado de servicios disponibles. |
-| `service_selection` | No se detectó servicio | Pide al usuario elegir un tratamiento del catálogo. |
-| `service_clarification` | Múltiples servicios detectados | Pide confirmar si quiere agendar varios o uno solo. |
-| `name_collection` | Servicio definido, nombre falta | "Un gusto habarte, ¿con quién tengo el placer?" |
-| `phone_collection` | Nombre definido, celular falta | Solicita WhatsApp para enviar confirmación. |
-| `availability_proposal` | Datos completos | Consulta DB y propone el próximo hueco libre. |
-| `done` | Turno confirmado | Registra la cita y se despide. |
+| `greeting` | Bienvenida inicial. | Detecta intención de agendar -> `parent_selection` |
+| `parent_selection` | Lista de **Categorías** (Padres). | El usuario elige categoría -> `sub_service_selection` |
+| `sub_service_selection` | Muestra **Sub-servicios** de la categoría. | El usuario elige servicio -> `cart_confirmation` |
+| `cart_confirmation` | Muestra el "Carrito" acumulado. | "¿Algo más?" (Sí -> `parent_selection`, No -> `name_collection`) |
+| `name_collection` | Solicita nombre completo. | Nombre recibido -> `phone_collection` |
+| `phone_collection` | Solicita/Confirma WhatsApp. | Teléfono recibido -> `availability_proposal` |
+| `availability_proposal` | Busca huecos por **Duración Total**. | Horario aceptado -> `payment_request` |
+| `payment_request` | Pide seña del 50% y Alias. | Espera comprobante -> `waiting_for_receipt` |
+| `waiting_for_receipt` | Bloqueo de espera de imagen. | Recibe imagen -> `done` |
+| `done` | Confirmación final. | Cita confirmada en DB. |
 
 ---
 
-## 🔍 Lógica de Extracción de Datos (`extractState`)
+## 📅 Lógica de Disponibilidad Acumulativa
+A diferencia de la versión anterior, el bot ahora suma la duración de todos los servicios en el carrito:
 
-### 1. Detección de Servicios (Scoring System)
-En lugar de buscar palabras exactas, usamos un sistema de puntaje:
-- **Exact Match**: +10 puntos.
-- **Palabra Clave (Regex)**: +3 puntos por palabra.
-- **Partial Match**: +0.5 puntos.
-- Si el score es > 2.5, se considera un "match". Si hay varios con puntaje alto, se entra en etapa de aclaración.
-
-### 2. Recolección de Datos Personales
-- **Nombre**: Filtra palabras comunes ("soy", "me llamo") y extrae el sustantivo. Valida que no tenga números y tenga entre 1 y 4 palabras.
-- **Teléfono**: 
-  - **Web**: Busca patrones numéricos de 8 a 12 dígitos.
-  - **WhatsApp**: Detecta si el usuario dice "este mismo" o "sí" para usar el número desde donde escribe.
-
-### 3. Persistencia de Teléfono
-El sistema está configurado para que, una vez que el usuario confirma un número, este se mantenga en el estado aunque se cambie de servicio, evitando preguntar dos veces.
+- **Cálculo de Bloques**: Si el usuario eligió "Tratamiento A (60m)" y "Tratamiento B (30m)", el bot busca un bloque libre de **90 minutos** contiguos.
+- **Rango Horario**: Ventana de atención de **09:00hs a 20:00hs**.
+- **Validación**: Verifica colisiones en la tabla `appointments` de Neon DB en tiempo real.
 
 ---
 
-## 📅 Lógica de Agendamiento Automatizado
-
-El bot sigue reglas de negocio estrictas para proponer turnos:
-1.  **Calendario**: Busca a partir de "Mañana" (no agenda para el mismo día).
-2.  **Horarios**: Solo propone entre las **10:00 y las 19:00**.
-3.  **Días Cerrados**: Salta automáticamente los **Domingos**.
-4.  **Colisiones**: Consulta la tabla `appointments` en tiempo real para evitar duplicados en el mismo slot.
-5.  **Memoria de Rechazo**: Si el usuario dice "no puedo en ese horario", el bot guarda esa fecha en `rejectedDates` y busca la siguiente.
-
----
-
-## 🔌 Integración de Persistencia (Base de Datos)
-
-- **Leads**: Si el usuario proporciona sus datos, se crea/actualiza un registro en la tabla `leads` con un `intent_score` alto.
-- **Chat Logs**: Cada mensaje (usuario y bot) se guarda en `chat_logs` asociado al `lead_id`, permitiendo que el staff humano vea el historial completo desde el Dashboard.
-- **Appointments**: Al confirmar, se inserta un registro en la tabla con estado `confirmed`.
+## 💳 Cerrojero de Pago y Validación 24/7
+El bot actúa como un cajero automático para reservas:
+- **Cálculo de Seña**: Calcula automáticamente el 50% del total acumulado.
+- **Detección de Multimedia**: Si el usuario envía una imagen (captura de pantalla) mientras está en estado de pago, el bot:
+    1.  Guarda la URL de la imagen en `chat_logs`.
+    2.  Inserta la cita en `appointments` con la lista completa de servicios.
+    3.  Marca la cita como **Confirmada** sin intervención humana.
 
 ---
 
-## 🛠️ Cómo Mejorar el Bot
-
-1.  **Añadir Contexto**: En `generateResponse`, puedes agregar más variaciones de frases para que se sienta menos mecánico.
-2.  **Nuevos Servicios**: El bot lee los servicios directamente de la tabla `services`. Solo asegúrate de que el nombre del servicio en la DB sea descriptivo para el sistema de scoring.
-3.  **Tratamiento de Negativas**: Puedes ampliar el regex `userRejectsStrict` en `api/chat.ts` para detectar más formas de decir que un horario no sirve.
+## 📂 Persistencia y CRM Integrado
+- **Leads**: Se crean automáticamente con un `intent_score` basado en el progreso del carrito (70-100 puntos).
+- **Categorías**: El bot lee dinámicamente la tabla `categories` para el primer listado.
+- **Servicios**: Los precios y duraciones se obtienen de la tabla `services`.
 
 ---
 
-> [!NOTE]  
-> Este documento es para uso técnico interno. La lógica reside principalmente en `api/chat.ts`.
+> [!IMPORTANT]  
+> Este documento es para uso técnico interno y reside solo en el entorno local del servidor. La lógica principal se encuentra en `api/chat.ts`.

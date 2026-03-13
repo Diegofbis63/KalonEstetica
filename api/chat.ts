@@ -19,12 +19,19 @@ async function getNlpManager() {
     if (manager) return manager;
     manager = new NlpManager({ languages: ['es'], forceNER: false, nlp: { useNativeSentiment: false } });
     
-    // Explicitly using absolute path for Vercel environments
-    const corpusPath = path.join(process.cwd(), 'Entrenamiento NLP', 'corpus-es.json');
-    if (fs.existsSync(corpusPath)) {
-        const corpus = JSON.parse(fs.readFileSync(corpusPath, 'utf8'));
-        manager.addCorpus(corpus);
-        await manager.train();
+    // Optimized: Use pre-trained model to avoid timeouts on serverless cold starts
+    const modelPath = path.join(process.cwd(), 'Entrenamiento NLP', 'model-es.json');
+    if (fs.existsSync(modelPath)) {
+        const data = fs.readFileSync(modelPath, 'utf8');
+        manager.import(data);
+    } else {
+        // Fallback for local development if model is missing
+        const corpusPath = path.join(process.cwd(), 'Entrenamiento NLP', 'corpus-es.json');
+        if (fs.existsSync(corpusPath)) {
+            const corpus = JSON.parse(fs.readFileSync(corpusPath, 'utf8'));
+            manager.addCorpus(corpus);
+            await manager.train();
+        }
     }
     return manager;
 }
