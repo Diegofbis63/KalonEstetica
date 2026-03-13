@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
-  MessageSquare, Clock, Send, Paperclip, X, Plus 
+  MessageSquare, Clock, Send, Paperclip, X, Plus, Sparkles 
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { ChatMessage, Lead } from "@/types/chat";
 
 interface ChatModalProps {
@@ -43,7 +44,7 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
         setStagedMedia(null);
       }
     }
-  }, [open, initialMessage, initialMedia, lead?.id]);
+  }, [open, initialMessage, initialMedia, lead]);
 
   const { data: chatHistoryData } = useQuery({
     queryKey: ['chat', lead?.id],
@@ -60,6 +61,27 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
   });
 
   const chatLogs = useMemo(() => chatHistoryData?.history || [], [chatHistoryData?.history]);
+  const currentBotEnabled = chatHistoryData?.is_bot_enabled ?? lead?.is_bot_enabled ?? false;
+
+  const toggleBotMutation = useMutation({
+    mutationFn: async ({ leadId, isBotEnabled }: { leadId: string, isBotEnabled: boolean }) => {
+      const res = await fetch(`/api/leads/chat?leadId=${leadId}&action=toggle-bot`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ isBotEnabled })
+      });
+      if (!res.ok) throw new Error('Error al cambiar estado del bot');
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['chat', lead?.id] });
+      toast.success(data.is_bot_enabled ? 'Aura AI activado' : 'Aura AI desactivado');
+    },
+    onError: (err: Error) => toast.error(err.message)
+  });
 
   // Scroll to bottom when chat logs change or modal opens
   useEffect(() => {
@@ -97,7 +119,7 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
       await queryClient.cancelQueries({ queryKey: ['chat', newReply.leadId] });
       const previousChat = queryClient.getQueryData(['chat', newReply.leadId]);
       
-      queryClient.setQueryData(['chat', newReply.leadId], (old: any) => ({
+      queryClient.setQueryData(['chat', newReply.leadId], (old: { history: ChatMessage[], is_bot_enabled: boolean } | undefined) => ({
         ...old,
         history: [...(old?.history || []), {
           role: 'admin',
@@ -105,7 +127,7 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
           created_at: new Date().toISOString(),
           isPending: true
         }]
-      }));
+      } as unknown));
 
       return { previousChat };
     },
@@ -119,7 +141,7 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
       queryClient.invalidateQueries({ queryKey: ['chat', variables.leadId] });
       setIsUploading(false);
     },
-    onError: (err: Error, newReply, context: any) => {
+    onError: (err: Error, newReply, context: { previousChat?: unknown } | undefined) => {
       if (context?.previousChat) {
         queryClient.setQueryData(['chat', newReply.leadId], context.previousChat);
       }
@@ -182,13 +204,40 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
                       </div>
                       <div className="text-left">
                         <p className="text-lg font-bold text-cream leading-none mb-1">{lead.client_name}</p>
-                        <p className="text-[10px] text-emerald-400 uppercase tracking-widest font-black flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                          Chat en Vivo • Aura AI
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className={`text-[10px] uppercase tracking-widest font-black flex items-center gap-1.5 ${currentBotEnabled ? 'text-emerald-400' : 'text-amber-500'}`}>
+                            {currentBotEnabled ? (
+                              <>
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                Aura AI Activo
+                              </>
+                            ) : (
+                              <>
+                                <span className="w-2 h-2 rounded-full bg-amber-500" />
+                                Atención Manual
+                              </>
+                            )}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                    <Badge variant="outline" className="border-gold/20 text-gold text-[9px] px-3 py-1 uppercase tracking-widest">ID: {lead.id.slice(0,8)}</Badge>
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-xl border border-white/5">
+                        <Switch
+                          checked={currentBotEnabled}
+                          onCheckedChange={(val) => {
+                            if (lead) {
+                              toggleBotMutation.mutate({ leadId: lead.id, isBotEnabled: val });
+                            }
+                          }}
+                          className="data-[state=checked]:bg-gold scale-75"
+                        />
+                        <span className={`text-[8px] font-black tracking-widest ${currentBotEnabled ? 'text-emerald-400' : 'text-cream/20'}`}>
+                          {currentBotEnabled ? 'IA ON' : 'IA OFF'}
+                        </span>
+                      </div>
+                      <Badge variant="outline" className="border-gold/20 text-gold text-[9px] px-3 py-1 uppercase tracking-widest hidden sm:block">ID: {lead.id.slice(0,8)}</Badge>
+                    </div>
                 </DialogTitle>
                 <DialogDescription className="hidden">Canal de comunicación directa de KÂLON</DialogDescription>
             </DialogHeader>
@@ -196,7 +245,7 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
             <ScrollArea className="flex-1 p-6 bg-[url('https://www.transparenttextures.com/patterns/dark-leather.png')]">
                 <div className="space-y-6">
                   {chatLogs.length > 0 ? (
-                      chatLogs.map((m: any, i: number) => {
+                      chatLogs.map((m: ChatMessage, i: number) => {
                           const isUser = m.role === 'user';
                           const isAdmin = m.role === 'admin';
                           const isBot = m.role === 'bot';

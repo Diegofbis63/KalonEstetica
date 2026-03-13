@@ -26,6 +26,7 @@ import {
   Image as LucideImage
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useChat } from "@/context/ChatContext";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -120,133 +121,13 @@ export default function Clients() {
   const [filterType, setFilterType] = useState<'all' | 'new' | 'recurrent' | 'vip'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
 
+  const { openChat } = useChat();
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editNote, setEditNote] = useState("");
-
-  // Chat integration
-  const [isChatModalOpen, setIsChatModalOpen] = useState(false);
-  const [selectedLeadForChat, setSelectedLeadForChat] = useState<Lead | null>(null);
-  const [replyMessage, setReplyMessage] = useState("");
-  const [isUploading, setIsUploading] = useState(false);
-  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
-  const scrollRef = React.useRef<HTMLDivElement>(null);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
-
-
-  const { data: chatData } = useQuery<{ history: ChatMessage[]; is_bot_enabled: boolean }>({
-    queryKey: ['chat', selectedLeadForChat?.id],
-    queryFn: async () => {
-      if (!selectedLeadForChat?.id) return { history: [], is_bot_enabled: false };
-      const res = await fetch(`/api/leads/chat?leadId=${selectedLeadForChat.id}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      if (!res.ok) throw new Error('Error al cargar chat');
-      const data = await res.json();
-      return {
-        history: data.history || [],
-        is_bot_enabled: data.is_bot_enabled ?? false
-      };
-    },
-    enabled: !!selectedLeadForChat?.id && isChatModalOpen,
-    refetchInterval: isChatModalOpen ? 5000 : false
-  });
-
-  const chatLogs = chatData?.history || [];
-  const currentBotEnabled = chatData?.is_bot_enabled ?? selectedLeadForChat?.is_bot_enabled ?? false;
-
-  // Auto-scroll chat
-  React.useEffect(() => {
-    if (isChatModalOpen && scrollRef.current) {
-      const timeoutId = setTimeout(() => {
-        scrollRef.current?.scrollIntoView({ behavior: 'auto' });
-      }, 50);
-      return () => clearTimeout(timeoutId);
-    }
-  }, [isChatModalOpen, chatLogs.length]);
-
-  const sendReplyMutation = useMutation({
-    mutationFn: async ({ leadId, message, mediaData }: { leadId: string; message: string; mediaData?: string }) => {
-      const res = await fetch('/api/leads/reply', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ leadId, message, mediaData })
-      });
-      if (!res.ok) throw new Error('Error al enviar respuesta');
-      return res.json();
-    },
-    onSuccess: () => {
-      setReplyMessage("");
-      setIsUploading(false);
-      queryClient.invalidateQueries({ queryKey: ['chat', selectedLeadForChat?.id] });
-      setTimeout(() => {
-        scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
-    },
-    onError: (err: Error) => toast.error(err.message)
-  });
-
-  const toggleBotMutation = useMutation({
-    mutationFn: async ({ leadId, isBotEnabled }: { leadId: string, isBotEnabled: boolean }) => {
-      const res = await fetch(`/api/leads/chat?leadId=${leadId}&action=toggle-bot`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ isBotEnabled })
-      });
-      if (!res.ok) throw new Error('Failed to toggle bot');
-      return res.json();
-    },
-    onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['clients-list'] });
-        // Update local state if needed, or rely on invalidation
-        if (selectedLeadForChat) {
-          setSelectedLeadForChat({
-            ...selectedLeadForChat,
-            is_bot_enabled: !selectedLeadForChat.is_bot_enabled
-          });
-        }
-        toast.info("Estado del bot actualizado");
-    }
-  });
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedLeadForChat) return;
-
-    if (!file.type.startsWith('image/')) {
-      toast.error("Solo se permiten imágenes");
-      return;
-    }
-
-    setIsUploading(true);
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      const base64Content = reader.result as string;
-      try {
-        await sendReplyMutation.mutateAsync({
-          leadId: selectedLeadForChat.id,
-          message: "Adjuntó una imagen",
-          mediaData: base64Content
-        });
-        toast.success("Imagen enviada");
-      } catch (err) {
-        toast.error("Error al subir imagen");
-      } finally {
-        setIsUploading(false);
-        if (fileInputRef.current) fileInputRef.current.value = "";
-      }
-    };
-    reader.readAsDataURL(file);
-  };
 
   const { data, isLoading } = useQuery({
     queryKey: ['clients-list'],
@@ -634,13 +515,11 @@ export default function Clients() {
                                     className="w-full bg-[#25D366] hover:bg-[#128C7E] text-white font-black text-xs tracking-widest h-14 rounded-2xl uppercase shadow-xl shadow-emerald-500/10"
                                     onClick={() => {
                                       const leadObj: Lead = {
-                                      id: selectedClient.id,
-                                      client_name: selectedClient.client_name,
-                                      contact_info: { phone: selectedClient.phone },
-                                      canManage: true
-                                    };
-                                    setSelectedLeadForChat(leadObj);
-                                      setIsChatModalOpen(true);
+                                        id: selectedClient.id,
+                                        client_name: selectedClient.client_name,
+                                        contact_info: { phone: selectedClient.phone }
+                                      };
+                                      openChat(leadObj);
                                     }}
                                   >
                                     <Phone className="w-4 h-4 mr-2" />
@@ -672,150 +551,6 @@ export default function Clients() {
         </div>
       </div>
 
-      {/* Chat History Modal Integration */}
-      <Dialog open={isChatModalOpen} onOpenChange={setIsChatModalOpen}>
-        <DialogContent className="bg-noir border border-gold/20 text-cream max-w-lg p-0 overflow-hidden flex flex-col h-[80vh]">
-            <DialogHeader className="p-6 border-b border-white/5">
-                <DialogTitle className="font-serif text-xl flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center">
-                        <Users className="w-5 h-5 text-gold" />
-                      </div>
-                       <div className="text-left">
-                         <p className="text-sm font-bold text-cream leading-none mb-1">{selectedLeadForChat?.client_name}</p>
-                         <p className={`text-[10px] uppercase tracking-widest font-black ${currentBotEnabled ? 'text-emerald-400' : 'text-amber-500'}`}>
-                           {currentBotEnabled ? 'Aura AI Activo' : 'Atención Manual'}
-                         </p>
-                       </div>
-                     </div>
-                     <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-xl border border-white/5">
-                          <Switch
-                              checked={currentBotEnabled}
-                              onCheckedChange={(val) => {
-                                if (selectedLeadForChat) {
-                                  toggleBotMutation.mutate({ leadId: selectedLeadForChat.id, isBotEnabled: val });
-                                }
-                              }}
-                              className="data-[state=checked]:bg-gold scale-75"
-                          />
-                          <span className={`text-[8px] font-black tracking-widest ${currentBotEnabled ? 'text-emerald-400' : 'text-cream/20'}`}>
-                              {currentBotEnabled ? 'IA ON' : 'IA OFF'}
-                          </span>
-                        </div>
-                        <Badge variant="outline" className="border-gold/20 text-gold text-[9px] hidden sm:block">ID: {selectedLeadForChat?.id.slice(0,8)}</Badge>
-                     </div>
-                </DialogTitle>
-            </DialogHeader>
-
-            <ScrollArea className="flex-1 p-6 bg-[url('https://www.transparenttextures.com/patterns/dark-leather.png')]">
-                <div className="space-y-6">
-                  {chatLogs.length > 0 ? (
-                      chatLogs.map((m: ChatMessage, i: number) => {
-                          const isUser = m.role === 'user';
-                          const isAdmin = m.role === 'admin';
-                          const isBot = m.role === 'bot';
-
-                          return (
-                            <div key={i} className={`flex ${isUser ? 'justify-start' : 'justify-end'}`}>
-                                <div className={`max-w-[85%] space-y-1 ${isUser ? 'items-start' : 'items-end'} flex flex-col`}>
-                                    <div className={`p-4 rounded-2xl text-sm leading-relaxed shadow-xl border backdrop-blur-md transition-all ${
-                                        isUser
-                                          ? 'bg-noir-light/60 border-white/5 text-cream/80 rounded-tl-none ring-1 ring-white/5'
-                                          : isAdmin
-                                          ? 'bg-gradient-to-br from-emerald-600/90 to-emerald-800/90 text-white rounded-tr-none border-emerald-400/20'
-                                          : 'bg-gradient-to-br from-gold/30 to-gold/10 text-gold rounded-tr-none border-gold/40'
-                                    } ${m.isPending ? 'opacity-50 scale-95' : 'opacity-100'}`}>
-                                        <div className="flex items-center justify-between gap-4 mb-2">
-                                            <span className={`text-[9px] font-black uppercase tracking-widest ${isUser ? 'text-cream/40' : isAdmin ? 'text-white/60' : 'text-gold'}`}>
-                                                {isUser ? 'Cliente' : isAdmin ? 'Staff' : 'Aura I.A.'}
-                                            </span>
-                                        </div>
-
-                                        {(m.media_url || m.media_data) && (
-                                          <div className="mb-3 rounded-xl overflow-hidden border border-white/10 bg-black/40 shadow-inner group/img relative">
-                                            <img 
-                                              src={(m.media_url || m.media_data) as string} 
-                                              alt="Comprobante / Multimedia" 
-                                               className="max-w-full h-auto cursor-zoom-in hover:scale-105 transition-transform duration-500" 
-                                              onClick={() => setLightboxImage((m.media_url || m.media_data) as string)}
-                                            />
-                                          </div>
-                                        )}
-                                        
-                                        <p className="font-medium whitespace-pre-wrap">{m.content}</p>
-                                    </div>
-                                    <span className="text-[9px] text-cream/20 font-bold px-1 italic">
-                                      {m.created_at ? new Date(m.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : 'Enviando...'}
-                                    </span>
-                                </div>
-                            </div>
-                          );
-                      })
-                  ) : (
-                      <div className="h-full flex flex-col items-center justify-center opacity-20 italic py-20 text-center">
-                          <MessageSquare className="w-12 h-12 mb-4 opacity-10" />
-                          <p className="text-sm uppercase tracking-widest font-black">Sin mensajes recientes</p>
-                      </div>
-                  )}
-                  <div ref={scrollRef} />
-                </div>
-            </ScrollArea>
-
-            <div className="p-4 bg-noir-light/50 border-t border-white/5 backdrop-blur-xl">
-              <div className="flex items-center gap-3">
-                <button 
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading || sendReplyMutation.isPending}
-                  className="p-3 rounded-2xl bg-white/5 border border-white/10 text-cream/40 hover:text-gold hover:border-gold/30 transition-all disabled:opacity-20"
-                >
-                  {isUploading ? <div className="w-4 h-4 border-2 border-gold border-t-transparent rounded-full animate-spin" /> : <Paperclip className="w-4 h-4" />}
-                </button>
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  onChange={handleFileUpload} 
-                  accept="image/*" 
-                  className="hidden" 
-                />
-                <div className="flex-1 relative">
-                  <input 
-                    type="text" 
-                    placeholder="Escribe una respuesta manual..."
-                    value={replyMessage}
-                    onChange={(e) => setReplyMessage(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && replyMessage.trim()) {
-                        sendReplyMutation.mutate({ leadId: selectedLeadForChat!.id, message: replyMessage });
-                      }
-                    }}
-                    className="w-full bg-noir border border-white/10 rounded-2xl py-3 px-5 text-sm outline-none focus:border-gold/50 transition-all pr-12"
-                  />
-                  <button 
-                    onClick={() => {
-                      if (replyMessage.trim()) {
-                        sendReplyMutation.mutate({ leadId: selectedLeadForChat!.id, message: replyMessage });
-                      }
-                    }}
-                    disabled={!replyMessage.trim() || sendReplyMutation.isPending}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg bg-gold text-noir hover:scale-105 active:scale-95 disabled:opacity-30 disabled:grayscale transition-all"
-                  >
-                    <Send className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Lightbox for images */}
-      <Dialog open={!!lightboxImage} onOpenChange={() => setLightboxImage(null)}>
-        <DialogContent className="max-w-[90vw] max-h-[90vh] p-0 bg-transparent border-none">
-          {lightboxImage && (
-            <img src={lightboxImage} alt="Fullscreen" className="w-full h-full object-contain" />
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
