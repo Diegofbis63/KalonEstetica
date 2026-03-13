@@ -323,15 +323,20 @@ export default function Clients() {
                   </TableCell>
                   <TableCell className="py-5">
                     <div className="space-y-1">
-                      <a
-                        href={`https://wa.me/${client.phone?.replace(/\D/g, '')}`}
-                        target="_blank"
-                        rel="noreferrer"
+                      <button
+                        onClick={() => {
+                          const leadObj: Lead = {
+                            id: client.id,
+                            client_name: client.client_name,
+                            contact_info: { phone: client.phone }
+                          };
+                          openChat(leadObj);
+                        }}
                         className="flex items-center gap-2 text-sm text-cream/60 hover:text-emerald-400 transition-colors"
                       >
                         <Phone className="w-3.5 h-3.5" />
                         {client.phone}
-                      </a>
+                      </button>
                       {client.email && (
                         <div className="flex items-center gap-2 text-[11px] text-cream/30">
                           <Mail className="w-3.5 h-3.5" />

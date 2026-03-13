@@ -11,6 +11,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/AuthContext";
 import { toast } from "sonner";
+import { useChat } from "@/context/ChatContext";
 import ServicesManagement from "@/components/dashboard/ServicesManagement";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -140,19 +141,14 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
     return defaultTab;
   }, [location.pathname, defaultTab]);
 
+  const { openChat } = useChat();
   const [dateFilter, setDateFilter] = useState<'all' | 'hoy' | 'tomorrow'>('all');
 
   // Dialog states
-  const [isChatModalOpen, setIsChatModalOpen] = useState(false);
-  const [selectedLeadForChat, setSelectedLeadForChat] = useState<Lead | null>(null);
   const [isNewAppointmentModalOpen, setIsNewAppointmentModalOpen] = useState(false);
   const [selectedLeadForAppt, setSelectedLeadForAppt] = useState<Lead | null>(null);
   const [isEditAppointmentModalOpen, setIsEditAppointmentModalOpen] = useState(false);
   const [selectedAppointmentForEdit, setSelectedAppointmentForEdit] = useState<Appointment | null>(null);
-  const [replyMessage, setReplyMessage] = useState("");
-  const [isSendingReply, setIsSendingReply] = useState(false);
-  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form states
@@ -214,35 +210,6 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
     queryFn: () => fetch(`/api/services?category_id=${cartCategory}`).then(res => res.json()),
     enabled: !!cartCategory
   });
-
-  // --- Start: NEW CHAT POLLING LOGIC ---
-  const { data: chatHistoryData, refetch: refetchChat } = useQuery({
-    queryKey: ['chat', selectedLeadForChat?.id],
-    queryFn: async () => {
-      if (!selectedLeadForChat) return { history: [] };
-      const res = await fetch(`/api/leads/chat?leadId=${selectedLeadForChat.id}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      if (!res.ok) throw new Error('Failed to fetch chat logs');
-      return res.json();
-    },
-    enabled: !!selectedLeadForChat && isChatModalOpen,
-    refetchInterval: isChatModalOpen ? 1000 : false, // Poll every 1s while open for fluid UX
-  });
-
-  const chatLogs = useMemo(() => chatHistoryData?.history || [], [chatHistoryData?.history]);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (isChatModalOpen && scrollRef.current) {
-        // Instant scroll when opening or payload changes
-        const timeoutId = setTimeout(() => {
-            scrollRef.current?.scrollIntoView({ behavior: 'auto' });
-        }, 50);
-        return () => clearTimeout(timeoutId);
-    }
-  }, [isChatModalOpen, chatLogs.length]);
-  // --- End: CHAT POLLING LOGIC ---
 
   const services: Service[] = useMemo(() => servData?.services || [], [servData?.services]);
 
@@ -558,15 +525,25 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                   {appt.canManage && (
                                     <>
                                       {appt.phone && (
-                                        <a 
-                                          href={`https://wa.me/${appt.phone.replace(/\D/g, '')}`}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
+                                        <button 
+                                          onClick={() => {
+                                            const leadObj: Lead = {
+                                              id: appt.lead_id!,
+                                              client_name: appt.client_name!,
+                                              contact_info: { phone: appt.phone },
+                                              status: appt.status,
+                                              intent_score: 100,
+                                              is_bot_enabled: appt.is_bot_enabled || false,
+                                              created_at: appt.created_at,
+                                              canManage: appt.canManage
+                                            };
+                                            openChat(leadObj);
+                                          }}
                                           className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-[10px] font-bold font-mono hover:bg-emerald-500/10 hover:border-emerald-500/40 transition-all group/wa whitespace-nowrap"
                                         >
-                                          <Phone className="w-3 h-3 group-hover/wa:scale-110 transition-transform" />
-                                          {appt.phone}
-                                        </a>
+                                          <MessageSquare className="w-3 h-3 group-hover/wa:scale-110 transition-transform" />
+                                          Chat WhatsApp
+                                        </button>
                                       )}
                                       {appt.total_duration ? (
                                         <div className="inline-flex items-center gap-4 px-5 py-3 rounded-2xl bg-gold/10 border border-gold/30 shadow-[0_0_30px_rgba(194,154,91,0.15)] group/duration hover:bg-gold/15 transition-all">
@@ -848,15 +825,25 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                           </TableCell>
                           <TableCell className="px-5 py-6">
                             {a.canManage && a.phone && (
-                              <a 
-                                href={`https://wa.me/${a.phone.replace(/\D/g, '')}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                              <button 
+                                onClick={() => {
+                                  const leadObj: Lead = {
+                                    id: a.lead_id!,
+                                    client_name: a.client_name!,
+                                    contact_info: { phone: a.phone },
+                                    status: a.status,
+                                    intent_score: 100,
+                                    is_bot_enabled: a.is_bot_enabled || false,
+                                    created_at: a.created_at,
+                                    canManage: a.canManage
+                                  };
+                                  openChat(leadObj);
+                                }}
                                 className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-xs font-bold font-mono hover:bg-emerald-500/10 hover:border-emerald-500/40 transition-all group/wa whitespace-nowrap"
                               >
                                 <Phone className="w-3 h-3 group-hover/wa:scale-110 transition-transform" />
                                 {a.phone}
-                              </a>
+                              </button>
                             )}
                           </TableCell>
                           <TableCell className="px-5 py-6">
@@ -992,8 +979,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                       created_at: a.created_at,
                                       canManage: a.canManage
                                     };
-                                    setSelectedLeadForChat(leadObj); 
-                                    setIsChatModalOpen(true); 
+                                    openChat(leadObj);
                                   }}
                                   disabled={!a.lead_id || !a.canManage}
                                   className={`px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 transition-all mx-auto flex items-center justify-center gap-2 group/btn ${
@@ -1046,8 +1032,20 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                       <XCircle className="w-4 h-4 mr-2" /> Cancelar Cita
                                     </DropdownMenuItem>
                                     <DropdownMenuSeparator className="bg-white/5" />
-                                    <DropdownMenuItem className="focus:bg-emerald-500/10 focus:text-emerald-400 cursor-pointer" onClick={() => window.open(`https://wa.me/${a.phone?.replace(/\D/g, '')}`, '_blank')}>
-                                      <MessageSquare className="w-4 h-4 mr-2" /> Enviar Recordatorio
+                                    <DropdownMenuItem className="focus:bg-emerald-500/10 focus:text-emerald-400 cursor-pointer" onClick={() => {
+                                      const leadObj: Lead = {
+                                        id: a.lead_id!,
+                                        client_name: a.client_name!,
+                                        contact_info: { phone: a.phone },
+                                        status: a.status,
+                                        intent_score: 100,
+                                        is_bot_enabled: a.is_bot_enabled || false,
+                                        created_at: a.created_at,
+                                        canManage: a.canManage
+                                      };
+                                      openChat(leadObj);
+                                    }}>
+                                      <MessageSquare className="w-4 h-4 mr-2" /> Abrir Chat de WhatsApp
                                     </DropdownMenuItem>
                                   </DropdownMenuContent>
                                 </DropdownMenu>
@@ -1095,15 +1093,25 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                           </TableCell>
                           <TableCell className="px-5 py-6">
                             {l.phone && (
-                              <a 
-                                href={`https://wa.me/${l.phone.replace(/\D/g, '')}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                              <button 
+                                onClick={() => {
+                                  const leadObj: Lead = {
+                                    id: l.id,
+                                    client_name: l.client_name,
+                                    contact_info: { phone: l.phone },
+                                    status: l.status,
+                                    intent_score: l.intent_score,
+                                    is_bot_enabled: l.is_bot_enabled,
+                                    created_at: l.created_at,
+                                    canManage: l.canManage
+                                  };
+                                  openChat(leadObj);
+                                }}
                                 className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-xs font-bold font-mono hover:bg-emerald-500/10 hover:border-emerald-500/40 transition-all group/wa whitespace-nowrap"
                               >
                                 <Phone className="w-3 h-3 group-hover/wa:scale-110 transition-transform" />
                                 {l.phone}
-                              </a>
+                              </button>
                             )}
                           </TableCell>
                           <TableCell className="px-5 py-6 text-center">
@@ -1191,132 +1199,6 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
 
       {/* --- MODALS --- */}
       
-      {/* 1. Chat History Modal */}
-      <Dialog open={isChatModalOpen} onOpenChange={setIsChatModalOpen}>
-        <DialogContent className="bg-noir border border-gold/20 text-cream max-w-lg p-0 overflow-hidden flex flex-col h-[80vh]">
-            <DialogHeader className="p-6 border-b border-white/5">
-                <DialogTitle className="font-serif text-xl flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center">
-                        <Users className="w-5 h-5 text-gold" />
-                      </div>
-                      <div className="text-left">
-                        <p className="text-sm font-bold text-cream leading-none mb-1">{selectedLeadForChat?.client_name}</p>
-                        <p className="text-[10px] text-emerald-400 uppercase tracking-widest font-black">Online • Aura AI Activo</p>
-                      </div>
-                    </div>
-                    <Badge variant="outline" className="border-gold/20 text-gold text-[9px]">ID: {selectedLeadForChat?.id.slice(0,8)}</Badge>
-                </DialogTitle>
-            </DialogHeader>
-
-            <ScrollArea className="flex-1 p-6 bg-[url('https://www.transparenttextures.com/patterns/dark-leather.png')]">
-                <div className="space-y-6">
-                  {chatLogs.length > 0 ? (
-                      chatLogs.map((m, i) => {
-                          const isUser = m.role === 'user';
-                          const isAdmin = m.role === 'admin';
-                          const isBot = m.role === 'bot';
-
-                          return (
-                            <div key={i} className={`flex ${isUser ? 'justify-start' : 'justify-end'}`}>
-                                <div className={`max-w-[85%] space-y-1 ${isUser ? 'items-start' : 'items-end'} flex flex-col`}>
-                                    <div className={`p-4 rounded-2xl text-sm leading-relaxed shadow-xl border backdrop-blur-md transition-all ${
-                                        isUser 
-                                          ? 'bg-noir-light/60 border-white/5 text-cream/80 rounded-tl-none ring-1 ring-white/5' 
-                                          : isAdmin 
-                                          ? 'bg-gradient-to-br from-emerald-600/90 to-emerald-800/90 text-white rounded-tr-none border-emerald-400/20'
-                                          : 'bg-gradient-to-br from-gold/30 to-gold/10 text-gold rounded-tr-none border-gold/40'
-                                    } ${m.isPending ? 'opacity-50 scale-95' : 'opacity-100'}`}>
-                                        <div className="flex items-center justify-between gap-4 mb-2">
-                                          <p className="text-[8px] uppercase tracking-[0.2em] font-black opacity-40">
-                                            {isUser ? 'Cliente' : isAdmin ? 'Soporte KÂLON' : 'Aura I.A.'}
-                                          </p>
-                                          {m.isPending && <Clock className="w-2.5 h-2.5 animate-spin opacity-30" />}
-                                        </div>
-                                        
-                                        {(m.media_url || m.media_data) && (
-                                          <div className="mb-3 rounded-xl overflow-hidden border border-white/10 bg-black/40 shadow-inner group/img relative">
-                                            <img 
-                                              src={m.media_url || m.media_data} 
-                                              alt="Comprobante / Multimedia" 
-                                               className="max-w-full h-auto cursor-zoom-in hover:scale-105 transition-transform duration-500" 
-                                              onClick={() => setLightboxImage(m.media_url || m.media_data || null)}
-                                            />
-                                            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                                              <Plus className="w-6 h-6 text-white drop-shadow-lg" />
-                                            </div>
-                                          </div>
-                                        )}
-                                        
-                                        <p className="font-medium whitespace-pre-wrap">{m.content}</p>
-                                    </div>
-                                    <span className="text-[9px] text-cream/20 font-bold px-1 italic">
-                                      {m.created_at ? new Date(m.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : 'Enviando...'}
-                                    </span>
-                                </div>
-                            </div>
-                          );
-                      })
-                  ) : (
-                      <div className="h-full flex flex-col items-center justify-center opacity-20 italic py-20 text-center">
-                          <MessageSquare className="w-12 h-12 mb-4 opacity-10" />
-                          <p className="text-sm uppercase tracking-widest font-black">Silencio en el canal</p>
-                          <p className="text-[10px] mt-2">Inicia una conversación o espera un mensaje del cliente.</p>
-                      </div>
-                  )}
-                  <div ref={scrollRef} />
-                </div>
-            </ScrollArea>
-
-            <div className="p-4 bg-noir-light/50 border-t border-white/5 backdrop-blur-xl">
-              <div className="flex items-center gap-3">
-                <button 
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading || sendReplyMutation.isPending}
-                  className="p-3 rounded-2xl bg-white/5 border border-white/10 text-cream/40 hover:text-gold hover:border-gold/30 transition-all disabled:opacity-20"
-                >
-                  {isUploading ? <div className="w-4 h-4 border-2 border-gold border-t-transparent rounded-full animate-spin" /> : <Paperclip className="w-4 h-4" />}
-                </button>
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  onChange={handleFileUpload} 
-                  accept="image/*" 
-                  className="hidden" 
-                />
-                <div className="flex-1 relative">
-                  <input 
-                    type="text" 
-                    placeholder="Escribe una respuesta manual..."
-                    value={replyMessage}
-                    onChange={(e) => setReplyMessage(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && replyMessage.trim()) {
-                        sendReplyMutation.mutate({ leadId: selectedLeadForChat!.id, message: replyMessage });
-                      }
-                    }}
-                    className="w-full bg-noir border border-white/10 rounded-2xl py-3 px-5 text-sm outline-none focus:border-gold/50 transition-all pr-12"
-                  />
-                  <button 
-                    onClick={() => {
-                      if (replyMessage.trim()) {
-                        sendReplyMutation.mutate({ leadId: selectedLeadForChat!.id, message: replyMessage });
-                      }
-                    }}
-                    disabled={!replyMessage.trim() || sendReplyMutation.isPending}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg bg-gold text-noir hover:scale-105 active:scale-95 disabled:opacity-30 disabled:grayscale transition-all"
-                  >
-                    <Send className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-              <p className="text-[8px] text-center text-cream/20 uppercase tracking-widest font-bold mt-3">
-                Al responder manualmente, el bot se pausará para este cliente (Próximamente)
-              </p>
-            </div>
-        </DialogContent>
-      </Dialog>
-
       {/* 2. New Appointment Modal */}
       <Dialog open={isNewAppointmentModalOpen} onOpenChange={setIsNewAppointmentModalOpen}>
         <DialogContent className="bg-noir border border-gold/20 text-cream max-w-xl">

@@ -86,18 +86,30 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
   // Scroll to bottom when chat logs change or modal opens
   useEffect(() => {
     if (open && scrollRef.current) {
-      const scrollBottom = () => {
-        scrollRef.current?.scrollIntoView({ behavior: 'instant', block: 'end' });
+      const scrollToBottom = () => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollIntoView({ behavior: 'auto', block: 'end' });
+          
+          // Fallback: Also try to scroll the parent container directly if possible
+          const viewport = scrollRef.current.closest('[data-radix-scroll-area-viewport]');
+          if (viewport) {
+            viewport.scrollTop = viewport.scrollHeight;
+          }
+        }
       };
-      
-      // Multiple attempts to ensure it scrolls after rendering
-      scrollBottom();
-      const t1 = setTimeout(scrollBottom, 100);
-      const t2 = setTimeout(scrollBottom, 300);
+
+      // Execution in multiple waves to battle layout shifts and lazy loading
+      scrollToBottom();
+      const t1 = setTimeout(scrollToBottom, 50);
+      const t2 = setTimeout(scrollToBottom, 150);
+      const t3 = setTimeout(scrollToBottom, 400);
+      const t4 = setTimeout(scrollToBottom, 1000); // Guard for slow image loading
       
       return () => {
         clearTimeout(t1);
         clearTimeout(t2);
+        clearTimeout(t3);
+        clearTimeout(t4);
       };
     }
   }, [open, chatLogs.length, lead?.id]);
