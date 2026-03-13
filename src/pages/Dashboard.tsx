@@ -329,77 +329,6 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
     }
   });
 
-  const sendReplyMutation = useMutation({
-    mutationFn: async ({ leadId, message, mediaData }: { leadId: string, message?: string, mediaData?: string }) => {
-      const res = await fetch('/api/leads/reply', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-        body: JSON.stringify({ leadId, message, mediaData })
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Error al enviar mensaje');
-      }
-      return res.json();
-    },
-    onMutate: async (newReply) => {
-      // Optimistic update
-      await queryClient.cancelQueries({ queryKey: ['chat', newReply.leadId] });
-      const previousChat = queryClient.getQueryData(['chat', newReply.leadId]);
-      
-      queryClient.setQueryData(['chat', newReply.leadId], (old: { history: Array<{ role: string; content: string; media_url?: string; media_data?: string; created_at?: string; isPending?: boolean }> } | undefined) => ({
-        ...old,
-        history: [...(old?.history || []), {
-          role: 'admin',
-          content: newReply.message,
-          created_at: new Date().toISOString(),
-          isPending: true
-        }]
-      }));
-
-      return { previousChat };
-    },
-    onSuccess: () => {
-      setReplyMessage("");
-      setIsUploading(false);
-      toast.success("Mensaje enviado");
-    },
-    onSettled: (data, error, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['chat', variables.leadId] });
-      setIsUploading(false);
-    },
-    onError: (err: Error, newReply, context) => {
-      if (context?.previousChat) {
-        queryClient.setQueryData(['chat', newReply.leadId], context.previousChat);
-      }
-      setIsUploading(false);
-      toast.error(err.message);
-    }
-  });
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      toast.error("Solo se permiten imágenes");
-      return;
-    }
-
-    setIsUploading(true);
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64 = reader.result as string;
-      sendReplyMutation.mutate({ 
-        leadId: selectedLeadForChat!.id, 
-        message: "", 
-        mediaData: base64 
-      });
-    };
-    reader.readAsDataURL(file);
-    // Reset input for same file selection
-    e.target.value = '';
-  };
 
   const leads: Lead[] = useMemo(() => dashData?.leads || [], [dashData?.leads]);
   const appointments: Appointment[] = useMemo(() => dashData?.appointments || [], [dashData?.appointments]);
@@ -640,8 +569,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                           created_at: appt.created_at,
                                           canManage: appt.canManage
                                         };
-                                        setSelectedLeadForChat(leadObj); 
-                                        setIsChatModalOpen(true); 
+                                        openChat(leadObj);
                                       }}
                                       disabled={!appt.lead_id || !appt.canManage}
                                       className={`p-3 rounded-xl bg-white/5 border border-white/10 transition-all flex items-center justify-center group/btn hover:text-gold hover:border-gold/30 ${
@@ -1151,7 +1079,19 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                             {l.canManage && (
                               <div className="flex justify-end gap-2">
                                   <button 
-                                    onClick={() => { setSelectedLeadForChat(l); setIsChatModalOpen(true); }}
+                                    onClick={() => {
+                                      const leadObj: Lead = {
+                                        id: l.id,
+                                        client_name: l.client_name,
+                                        contact_info: { phone: l.phone },
+                                        status: l.status,
+                                        intent_score: l.intent_score,
+                                        is_bot_enabled: l.is_bot_enabled,
+                                        created_at: l.created_at,
+                                        canManage: l.canManage
+                                      };
+                                      openChat(leadObj);
+                                    }}
                                     disabled={!l.canManage}
                                     className={`px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs font-bold font-mono uppercase transition-all flex items-center gap-2 group/btn ${
                                       l.canManage ? 'text-cream/40 hover:text-gold hover:border-gold/30' : 'opacity-20 cursor-not-allowed'
@@ -1536,26 +1476,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
           </AlertDialogContent>
       </AlertDialog>
 
-      {/* 11. Custom Lightbox */}
-      {lightboxImage && createPortal(
-        <div 
-          className="fixed inset-0 z-[99999] flex items-center justify-center bg-noir/95 backdrop-blur-md animate-in fade-in duration-300"
-          onClick={() => setLightboxImage(null)}
-        >
-          <button 
-            className="absolute top-8 right-8 p-3 rounded-full bg-white/5 border border-white/10 text-white hover:bg-white/10 transition-all"
-            onClick={() => setLightboxImage(null)}
-          >
-            <X className="w-6 h-6" />
-          </button>
-          <img 
-            src={lightboxImage} 
-            alt="Expanded" 
-            className="max-w-[95vw] max-h-[95vh] object-contain rounded-xl shadow-2xl animate-in zoom-in-95 duration-300 pointer-events-none"
-          />
-        </div>,
-        document.body
-      )}
+
     </div>
   );
 }
