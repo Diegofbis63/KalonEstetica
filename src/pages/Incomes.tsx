@@ -680,12 +680,9 @@ export default function Incomes() {
               {voidPaymentMutation.isPending ? "Anulando..." : "Sí, Anular Pago"}
             </Button>
           </DialogFooter>
-          <button 
-            onClick={() => setIsVoidConfirmOpen(false)}
-            className="absolute top-6 right-6 p-2 rounded-full hover:bg-white/5 text-cream/20 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+        </DialogContent>
+      </Dialog>
+
       {/* Hidden Receipt Template for Capture - Using fixed but off-view to avoid layout issues */}
       <div style={{ position: 'fixed', top: 0, left: 0, pointerEvents: 'none', zIndex: -1000, opacity: 0.01 }}>
         {selectedPayment && (
@@ -702,8 +699,6 @@ export default function Incomes() {
           />
         )}
       </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
