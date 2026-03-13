@@ -83,11 +83,18 @@ export const ReceiptTemplate = React.forwardRef<HTMLDivElement, ReceiptTemplateP
               padding: '24px 28px', 
               backgroundColor: '#ffffff07', 
               borderRadius: '24px', 
-              border: '1px solid #ffffff05' 
+              border: '1px solid #ffffff05',
+              gap: '20px'
             }}
           >
-            <span style={{ fontSize: '17px', fontWeight: '600', color: '#f5f5f0dd' }}>{service.title}</span>
-            <span style={{ fontSize: '17px', fontWeight: '900', color: '#c29a5b' }}>
+            <span style={{ fontSize: '17px', fontWeight: '600', color: '#f5f5f0dd', flex: 1 }}>{service.title}</span>
+            <span style={{ 
+              fontSize: '17px', 
+              fontWeight: '900', 
+              color: '#c29a5b', 
+              whiteSpace: 'nowrap',
+              textAlign: 'right'
+            }}>
               $ {service.price.toLocaleString('es-AR')}
             </span>
           </div>
@@ -103,10 +110,18 @@ export const ReceiptTemplate = React.forwardRef<HTMLDivElement, ReceiptTemplateP
         padding: '30px 35px', 
         borderRadius: '28px', 
         border: '1px solid #c29a5b20',
-        marginBottom: '30px'
+        marginBottom: '30px',
+        gap: '20px'
       }}>
         <span style={{ fontSize: '18px', textTransform: 'uppercase', fontWeight: '900', letterSpacing: '0.2em', color: '#c29a5b' }}>Total Abonado</span>
-        <span style={{ fontSize: '38px', fontWeight: 'bold', color: '#c29a5b', fontStyle: 'italic' }}>
+        <span style={{ 
+          fontSize: '38px', 
+          fontWeight: 'bold', 
+          color: '#c29a5b', 
+          fontStyle: 'italic',
+          whiteSpace: 'nowrap',
+          textAlign: 'right'
+        }}>
           $ {payment.amount.toLocaleString('es-AR')}
         </span>
       </div>
