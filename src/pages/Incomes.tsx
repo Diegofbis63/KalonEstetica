@@ -184,16 +184,19 @@ export default function Incomes() {
       // Set as selected to update the ReceiptTemplate hidden component
       setSelectedPayment(payment);
       
-      // Wait for React to render the template and for detailData to sync if possible
-      // If we don't have services, we'll use a 400ms delay to try and fetch them/render
-      await new Promise(resolve => setTimeout(resolve, services ? 100 : 400));
+      // Wait for React to render the template
+      // We need a longer delay to ensure fonts and styles are applied for a premium look
+      await new Promise(resolve => setTimeout(resolve, 800));
       
-      if (!receiptRef.current) return;
+      if (!receiptRef.current) {
+        console.error('receiptRef.current is null');
+        return;
+      }
 
       const dataUrl = await toPng(receiptRef.current, { 
         cacheBust: true,
-        backgroundColor: '#050505',
-        pixelRatio: 2, // High quality
+        backgroundColor: '#1a1814', // Match the new template background
+        pixelRatio: 3, // Very high quality for professional look
       });
       
       const text = `Hola ${payment.client_name}, te enviamos el comprobante de tu pago en KÂLON por el servicio de ${payment.parent_service}. ✨`;
@@ -683,22 +686,24 @@ export default function Incomes() {
           >
             <X className="w-5 h-5" />
           </button>
+      {/* Hidden Receipt Template for Capture - Using fixed but off-view to avoid layout issues */}
+      <div style={{ position: 'fixed', top: 0, left: 0, pointerEvents: 'none', zIndex: -1000, opacity: 0.01 }}>
+        {selectedPayment && (
+          <ReceiptTemplate 
+            ref={receiptRef} 
+            payment={{
+              client_name: selectedPayment.client_name,
+              parent_service: selectedPayment.parent_service,
+              selected_services: selectedPayment.selected_services || [{ title: selectedPayment.parent_service, price: selectedPayment.amount }],
+              date: selectedPayment.date,
+              amount: selectedPayment.amount,
+              payment_method: selectedPayment.payment_method
+            }} 
+          />
+        )}
+      </div>
         </DialogContent>
       </Dialog>
-      {/* Hidden Receipt Template for Capture */}
-      {selectedPayment && (
-        <ReceiptTemplate 
-          ref={receiptRef}
-          payment={{
-            client_name: selectedPayment.client_name,
-            parent_service: selectedPayment.parent_service,
-            selected_services: selectedPayment.selected_services || [{ title: selectedPayment.parent_service, price: selectedPayment.amount }],
-            date: selectedPayment.date,
-            amount: selectedPayment.amount,
-            payment_method: selectedPayment.payment_method
-          }}
-        />
-      )}
     </div>
   );
 }

@@ -1,7 +1,6 @@
 import React from 'react';
 import { format } from "date-fns";
-import { es } from "date-fns/locale";
-import { Receipt, CreditCard, Wallet, Calendar, User } from 'lucide-react';
+import { FileText, Filter, CreditCard, Wallet } from 'lucide-react';
 
 interface ReceiptTemplateProps {
   payment: {
@@ -23,128 +22,118 @@ const formatCurrency = (val: number) => {
 };
 
 export const ReceiptTemplate = React.forwardRef<HTMLDivElement, ReceiptTemplateProps>(({ payment }, ref) => {
+  // Use a stable date to avoid hydration mismatches or errors with invalid dates
+  const displayDate = React.useMemo(() => {
+    try {
+      return format(new Date(payment.date), "dd/MM/yyyy HH:mm");
+    } catch (e) {
+      return format(new Date(), "dd/MM/yyyy HH:mm");
+    }
+  }, [payment.date]);
+
   return (
     <div 
       ref={ref}
       style={{
         width: '500px',
-        backgroundColor: '#050505',
+        backgroundColor: '#1a1814', // Specific dark brown from screenshot
         color: '#f5f5f0',
-        padding: '40px',
-        fontFamily: 'serif',
-        border: '1px solid #c29a5b30',
-        borderRadius: '24px',
-        position: 'fixed',
-        left: '-5000px', // Far off-screen but still 'visible' for capture
-        top: '0',
-        zIndex: -100,
+        padding: '50px 40px',
+        fontFamily: "'Playfair Display', serif",
+        boxSizing: 'border-box'
       }}
     >
       {/* Header */}
-      <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-        <div style={{ 
-          display: 'inline-flex', 
-          padding: '12px', 
-          backgroundColor: '#c29a5b10', 
-          borderRadius: '16px', 
-          border: '1px solid #c29a5b30',
-          marginBottom: '16px' 
-        }}>
-          <Receipt style={{ width: '32px', height: '32px', color: '#c29a5b' }} />
-        </div>
-        <h1 style={{ fontSize: '28px', color: '#f5f5f0', margin: '0 0 4px 0', letterSpacing: '0.05em' }}>KÂLON</h1>
-        <p style={{ fontSize: '12px', color: '#c29a5b', textTransform: 'uppercase', fontStyle: 'italic', letterSpacing: '0.2em', margin: 0 }}>Estética & Bienestar</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '60px' }}>
+        <FileText style={{ width: '30px', height: '30px', color: '#c29a5b' }} />
+        <h1 style={{ fontSize: '36px', fontWeight: 'bold', margin: 0, fontStyle: 'italic', letterSpacing: '-0.02em' }}>
+          Detalle de Transacción
+        </h1>
       </div>
 
-      {/* Main Info */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <p style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: '900', letterSpacing: '0.2em', color: '#c29a5b80', margin: 0 }}>Cliente</p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <User style={{ width: '12px', height: '12px', color: '#c29a5b40' }} />
-            <p style={{ fontSize: '16px', fontWeight: 'bold', margin: 0 }}>{payment.client_name}</p>
+      {/* Info Rows */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '40px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <p style={{ fontSize: '11px', textTransform: 'uppercase', fontWeight: '900', letterSpacing: '0.15em', color: '#c29a5b80', margin: 0 }}>Cliente</p>
+          <p style={{ fontSize: '24px', fontWeight: 'bold', margin: 0, letterSpacing: '0.02em' }}>{payment.client_name}</p>
+        </div>
+        <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <p style={{ fontSize: '11px', textTransform: 'uppercase', fontWeight: '900', letterSpacing: '0.15em', color: '#c29a5b80', margin: 0 }}>Fecha</p>
+          <p style={{ fontSize: '18px', fontWeight: 'bold', margin: 0, color: '#f5f5f0cc' }}>{displayDate}</p>
+        </div>
+      </div>
+
+      {/* Services Title */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+        <Filter style={{ width: '14px', height: '14px', color: '#c29a5b' }} />
+        <p style={{ fontSize: '12px', textTransform: 'uppercase', fontWeight: '900', letterSpacing: '0.2em', color: '#c29a5b', margin: 0 }}>
+          Desglose de Servicios
+        </p>
+      </div>
+
+      {/* List */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '50px' }}>
+        {payment.selected_services?.map((service, idx) => (
+          <div 
+            key={idx} 
+            style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              padding: '24px 28px', 
+              backgroundColor: '#ffffff07', 
+              borderRadius: '24px', 
+              border: '1px solid #ffffff05' 
+            }}
+          >
+            <span style={{ fontSize: '17px', fontWeight: '600', color: '#f5f5f0dd' }}>{service.title}</span>
+            <span style={{ fontSize: '17px', fontWeight: '900', color: '#c29a5b' }}>
+              $ {service.price.toLocaleString('es-AR')}
+            </span>
           </div>
-        </div>
-        <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <p style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: '900', letterSpacing: '0.2em', color: '#c29a5b80', margin: 0 }}>Fecha</p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end' }}>
-            <Calendar style={{ width: '12px', height: '12px', color: '#c29a5b40' }} />
-            <p style={{ fontSize: '14px', color: '#f5f5f0cc', fontWeight: '600', margin: 0 }}>
-              {format(new Date(payment.date), "dd/MM/yyyy HH:mm")}
-            </p>
-          </div>
-        </div>
+        ))}
       </div>
 
-      {/* Services Breakdown */}
-      <div style={{ marginBottom: '32px' }}>
-        <p style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: '900', letterSpacing: '0.2em', color: '#c29a5b80', marginBottom: '16px' }}>Detalle de Servicios</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {payment.selected_services?.map((service, idx) => (
-            <div 
-              key={idx} 
-              style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center', 
-                padding: '16px', 
-                backgroundColor: '#ffffff05', 
-                borderRadius: '16px', 
-                border: '1px solid #ffffff05' 
-              }}
-            >
-              <span style={{ fontSize: '14px', fontWeight: '500', color: '#f5f5f0cc' }}>{service.title}</span>
-              <span style={{ fontSize: '14px', fontWeight: '900', color: '#c29a5b', fontFamily: 'monospace' }}>{formatCurrency(service.price)}</span>
-            </div>
-          ))}
-        </div>
+      {/* Total Card */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        backgroundColor: '#26221b', 
+        padding: '30px 35px', 
+        borderRadius: '28px', 
+        border: '1px solid #c29a5b20',
+        marginBottom: '30px'
+      }}>
+        <span style={{ fontSize: '18px', textTransform: 'uppercase', fontWeight: '900', letterSpacing: '0.2em', color: '#c29a5b' }}>Total Abonado</span>
+        <span style={{ fontSize: '38px', fontWeight: 'bold', color: '#c29a5b', fontStyle: 'italic' }}>
+          $ {payment.amount.toLocaleString('es-AR')}
+        </span>
       </div>
 
-      {/* Total Footer */}
-      <div style={{ paddingTop: '24px', borderTop: '1px solid #ffffff05' }}>
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center', 
-          backgroundColor: '#c29a5b10', 
-          padding: '20px', 
-          borderRadius: '20px', 
-          border: '1px solid #c29a5b20',
-          marginBottom: '16px'
-        }}>
-          <span style={{ fontSize: '14px', textTransform: 'uppercase', fontWeight: '900', letterSpacing: '0.2em', color: '#c29a5b' }}>Total Abonado</span>
-          <span style={{ fontSize: '24px', fontWeight: '900', color: '#c29a5b' }}>{formatCurrency(payment.amount)}</span>
-        </div>
-        
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: '8px', 
-          justifyContent: 'center', 
-          fontSize: '10px', 
-          textTransform: 'uppercase', 
-          fontWeight: '900', 
-          letterSpacing: '0.1em', 
-          color: '#f5f5f030' 
-        }}>
-          {payment.payment_method === 'Efectivo' ? (
-            <>
-              <Wallet style={{ width: '12px', height: '12px' }} />
-              Pago vía Efectivo
-            </>
-          ) : (
-            <>
-              <CreditCard style={{ width: '12px', height: '12px' }} />
-              Pago vía {payment.payment_method}
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Aesthetic Footer Note */}
-      <div style={{ textAlign: 'center', marginTop: '40px' }}>
-        <p style={{ fontSize: '11px', color: '#c29a5b', fontStyle: 'italic', margin: 0, opacity: 0.6 }}>¡Gracias por elegir la experiencia Kâlon!</p>
-        <p style={{ fontSize: '9px', color: '#ffffff20', textTransform: 'uppercase', marginTop: '8px', letterSpacing: '0.1em' }}>Comprobante Digital Válido para Kâlon Estética</p>
+      {/* Method Footer */}
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: '12px', 
+        justifyContent: 'center', 
+        fontSize: '13px', 
+        textTransform: 'uppercase', 
+        fontWeight: '900', 
+        letterSpacing: '0.15em', 
+        color: '#f5f5f040' 
+      }}>
+        {payment.payment_method === 'Efectivo' ? (
+          <>
+            <Wallet style={{ width: '16px', height: '16px' }} />
+            Pago vía Efectivo
+          </>
+        ) : (
+          <>
+            <CreditCard style={{ width: '16px', height: '16px' }} />
+            Pago vía {payment.payment_method}
+          </>
+        )}
       </div>
     </div>
   );
