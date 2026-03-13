@@ -81,6 +81,31 @@ interface Client {
   }>;
 }
 
+interface Lead {
+  id: string;
+  client_name: string;
+  contact_info: {
+    email?: string;
+    phone?: string;
+  };
+  status?: string;
+  intent_score?: number;
+  created_at?: string;
+  is_bot_enabled?: boolean;
+  canManage?: boolean;
+  phone?: string;
+  chat_history?: { role: string; content: string; media_url?: string; created_at?: string }[];
+}
+
+interface ChatMessage {
+  role: string;
+  content: string;
+  media_url?: string;
+  media_data?: string;
+  created_at?: string;
+  isPending?: boolean;
+}
+
 interface ClientUpdateData {
   client_name: string;
   phone: string;
@@ -103,7 +128,7 @@ export default function Clients() {
 
   // Chat integration
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
-  const [selectedLeadForChat, setSelectedLeadForChat] = useState<any>(null);
+  const [selectedLeadForChat, setSelectedLeadForChat] = useState<Lead | null>(null);
   const [replyMessage, setReplyMessage] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
@@ -119,26 +144,35 @@ export default function Clients() {
     }
   }, [isChatModalOpen, selectedLeadForChat]);
 
-  const { data: chatData } = useQuery({
+  const { data: chatData } = useQuery<{ history: ChatMessage[]; is_bot_enabled: boolean }>({
     queryKey: ['chat', selectedLeadForChat?.id],
     queryFn: async () => {
-      if (!selectedLeadForChat?.id) return [];
-      const res = await fetch(`/api/chat-history?leadId=${selectedLeadForChat.id}`);
+      if (!selectedLeadForChat?.id) return { history: [], is_bot_enabled: false };
+      const res = await fetch(`/api/leads/chat?leadId=${selectedLeadForChat.id}`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
       if (!res.ok) throw new Error('Error al cargar chat');
       const data = await res.json();
-      return data.history || [];
+      return {
+        history: data.history || [],
+        is_bot_enabled: data.is_bot_enabled ?? false
+      };
     },
     enabled: !!selectedLeadForChat?.id && isChatModalOpen,
     refetchInterval: isChatModalOpen ? 5000 : false
   });
 
-  const chatLogs = chatData || [];
+  const chatLogs = chatData?.history || [];
+  const currentBotEnabled = chatData?.is_bot_enabled ?? selectedLeadForChat?.is_bot_enabled ?? false;
 
   const sendReplyMutation = useMutation({
     mutationFn: async ({ leadId, message, mediaData }: { leadId: string; message: string; mediaData?: string }) => {
-      const res = await fetch('/api/chat/manual-reply', {
+      const res = await fetch('/api/leads/reply', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
         body: JSON.stringify({ leadId, message, mediaData })
       });
       if (!res.ok) throw new Error('Error al enviar respuesta');
@@ -146,12 +180,39 @@ export default function Clients() {
     },
     onSuccess: () => {
       setReplyMessage("");
+      setIsUploading(false);
       queryClient.invalidateQueries({ queryKey: ['chat', selectedLeadForChat?.id] });
       setTimeout(() => {
         scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, 100);
     },
     onError: (err: Error) => toast.error(err.message)
+  });
+
+  const toggleBotMutation = useMutation({
+    mutationFn: async ({ leadId, isBotEnabled }: { leadId: string, isBotEnabled: boolean }) => {
+      const res = await fetch(`/api/leads/chat?leadId=${leadId}&action=toggle-bot`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ isBotEnabled })
+      });
+      if (!res.ok) throw new Error('Failed to toggle bot');
+      return res.json();
+    },
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['clients-list'] });
+        // Update local state if needed, or rely on invalidation
+        if (selectedLeadForChat) {
+          setSelectedLeadForChat({
+            ...selectedLeadForChat,
+            is_bot_enabled: !selectedLeadForChat.is_bot_enabled
+          });
+        }
+        toast.info("Estado del bot actualizado");
+    }
   });
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -225,11 +286,11 @@ export default function Clients() {
   };
 
   const clients: Client[] = data?.clients || [];
-  
+
   const filteredClients = clients.filter(c => {
     const matchesSearch = c.client_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           (c.phone && c.phone.includes(searchTerm));
-    
+
     let matchesType = true;
     if (filterType === 'new') matchesType = Number(c.total_appointments) === 1;
     else if (filterType === 'recurrent') matchesType = Number(c.total_appointments) > 1 && Number(c.total_appointments) <= 5;
@@ -262,22 +323,22 @@ export default function Clients() {
           </h1>
           <p className="text-cream/40 mt-1 font-sans">Gestión y seguimiento de clientes registrados en KÂLON.</p>
         </div>
-        
+
         <div className="flex items-center gap-2">
           <div className="relative group">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-cream/20 group-focus-within:text-gold transition-colors" />
-            <Input 
-              placeholder="Buscar por nombre o teléfono..." 
+            <Input
+              placeholder="Buscar por nombre o teléfono..."
               className="pl-10 bg-noir border-cream/5 focus:border-gold/30 text-cream w-full md:w-[300px] transition-all"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className={`border-cream/5 bg-noir hover:bg-white/5 text-cream/60 ${(filterType !== 'all' || filterStatus !== 'all') ? 'border-gold/30 text-gold' : ''}`}
               >
                 <Filter className="w-4 h-4 mr-2" />
@@ -303,9 +364,9 @@ export default function Clients() {
               <DropdownMenuCheckboxItem checked={filterType === 'vip'} onCheckedChange={() => setFilterType('vip')}>
                 V.I.P. (+5 visitas)
               </DropdownMenuCheckboxItem>
-              
+
               <DropdownMenuSeparator className="bg-white/5" />
-              
+
               <DropdownMenuLabel className="text-[10px] uppercase tracking-widest text-cream/30">Estado de Actividad</DropdownMenuLabel>
               <DropdownMenuCheckboxItem checked={filterStatus === 'all'} onCheckedChange={() => setFilterStatus('all')}>
                 Cualquier estado
@@ -320,8 +381,8 @@ export default function Clients() {
               {hasActiveFilters && (
                 <>
                   <DropdownMenuSeparator className="bg-white/5" />
-                  <Button 
-                    variant="ghost" 
+                  <Button
+                    variant="ghost"
                     className="w-full text-[10px] h-8 text-rose hover:bg-rose/10 hover:text-rose uppercase tracking-tighter"
                     onClick={clearFilters}
                   >
@@ -378,9 +439,9 @@ export default function Clients() {
                   </TableCell>
                   <TableCell className="py-5">
                     <div className="space-y-1">
-                      <a 
-                        href={`https://wa.me/${client.phone?.replace(/\D/g, '')}`} 
-                        target="_blank" 
+                      <a
+                        href={`https://wa.me/${client.phone?.replace(/\D/g, '')}`}
+                        target="_blank"
                         rel="noreferrer"
                         className="flex items-center gap-2 text-sm text-cream/60 hover:text-emerald-400 transition-colors"
                       >
@@ -409,9 +470,9 @@ export default function Clients() {
                   <TableCell className="py-5 text-right pr-8">
                     <Sheet>
                       <SheetTrigger asChild>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           className="text-gold hover:bg-gold/10 hover:text-gold-light font-bold text-xs"
                           onClick={() => handleEditInit(client)}
                         >
@@ -442,8 +503,8 @@ export default function Clients() {
                                     </div>
                                   </div>
                                 </div>
-                                <Button 
-                                  variant="ghost" 
+                                <Button
+                                  variant="ghost"
                                   size="icon"
                                   onClick={() => setIsEditing(!isEditing)}
                                   className={`rounded-xl border ${isEditing ? 'border-rose/20 text-rose bg-rose/5' : 'border-white/5 text-cream/40 hover:text-gold hover:bg-gold/10 hover:border-gold/20'}`}
@@ -458,42 +519,42 @@ export default function Clients() {
                                 <div className="space-y-4 bg-white/[0.02] border border-white/5 p-6 rounded-2xl">
                                   <div className="space-y-2">
                                     <Label className="text-[10px] uppercase tracking-widest text-cream/30">Nombre Completo</Label>
-                                    <Input 
-                                      value={editName} 
-                                      onChange={e => setEditName(e.target.value)} 
+                                    <Input
+                                      value={editName}
+                                      onChange={e => setEditName(e.target.value)}
                                       className="bg-noir-light border-white/10 focus:border-gold/30 h-11"
                                     />
                                   </div>
                                   <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-2">
                                       <Label className="text-[10px] uppercase tracking-widest text-cream/30">WhatsApp / Tel</Label>
-                                      <Input 
-                                        value={editPhone} 
-                                        onChange={e => setEditPhone(e.target.value)} 
+                                      <Input
+                                        value={editPhone}
+                                        onChange={e => setEditPhone(e.target.value)}
                                         className="bg-noir-light border-white/10 focus:border-gold/30 h-11"
                                       />
                                     </div>
                                     <div className="space-y-2">
                                       <Label className="text-[10px] uppercase tracking-widest text-cream/30">Email</Label>
-                                      <Input 
-                                        value={editEmail} 
-                                        onChange={e => setEditEmail(e.target.value)} 
+                                      <Input
+                                        value={editEmail}
+                                        onChange={e => setEditEmail(e.target.value)}
                                         className="bg-noir-light border-white/10 focus:border-gold/30 h-11"
                                       />
                                     </div>
                                   </div>
                                   <div className="space-y-2">
                                     <Label className="text-[10px] uppercase tracking-widest text-cream/30">Notas Internas / Preferencias</Label>
-                                    <Textarea 
-                                      value={editNote} 
-                                      onChange={e => setEditNote(e.target.value)} 
+                                    <Textarea
+                                      value={editNote}
+                                      onChange={e => setEditNote(e.target.value)}
                                       className="bg-noir-light border-white/10 focus:border-gold/30 min-h-[100px] resize-none"
                                       placeholder="Ej: Prefiere turnos por la tarde, alergia a ciertos productos..."
                                     />
                                   </div>
                                 </div>
 
-                                <Button 
+                                <Button
                                   className="w-full bg-gold hover:bg-gold-light text-noir font-black h-14 rounded-2xl shadow-xl shadow-gold/20 transition-all active:scale-[0.98] disabled:opacity-50"
                                   onClick={() => updateClient.mutate({ client_name: editName, phone: editPhone, email: editEmail, note: editNote })}
                                   disabled={updateClient.isPending || !editName || !editPhone}
@@ -566,19 +627,16 @@ export default function Clients() {
                                 </div>
 
                                 <div className="mt-auto pt-6 border-t border-white/5">
-                                  <Button 
+                                  <Button
                                     className="w-full bg-[#25D366] hover:bg-[#128C7E] text-white font-black text-xs tracking-widest h-14 rounded-2xl uppercase shadow-xl shadow-emerald-500/10"
                                     onClick={() => {
-                                      const leadObj = {
-                                        id: selectedClient.id,
-                                        client_name: selectedClient.client_name,
-                                        contact_info: { phone: selectedClient.phone },
-                                        status: 'client',
-                                        intent_score: 100,
-                                        is_bot_enabled: true,
-                                        created_at: selectedClient.last_appointment
-                                      };
-                                      setSelectedLeadForChat(leadObj);
+                                      const leadObj: Lead = {
+                                      id: selectedClient.id,
+                                      client_name: selectedClient.client_name,
+                                      contact_info: { phone: selectedClient.phone },
+                                      canManage: true
+                                    };
+                                    setSelectedLeadForChat(leadObj);
                                       setIsChatModalOpen(true);
                                     }}
                                   >
@@ -620,37 +678,57 @@ export default function Clients() {
                       <div className="w-10 h-10 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center">
                         <Users className="w-5 h-5 text-gold" />
                       </div>
-                      <div className="text-left">
-                        <p className="text-sm font-bold text-cream leading-none mb-1">{selectedLeadForChat?.client_name}</p>
-                        <p className="text-[10px] text-emerald-400 uppercase tracking-widest font-black">Cliente Registrado • Aura AI</p>
-                      </div>
-                    </div>
+                       <div className="text-left">
+                         <p className="text-sm font-bold text-cream leading-none mb-1">{selectedLeadForChat?.client_name}</p>
+                         <p className={`text-[10px] uppercase tracking-widest font-black ${currentBotEnabled ? 'text-emerald-400' : 'text-amber-500'}`}>
+                           {currentBotEnabled ? 'Aura AI Activo' : 'Atención Manual'}
+                         </p>
+                       </div>
+                     </div>
+                     <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-xl border border-white/5">
+                          <Switch
+                              checked={currentBotEnabled}
+                              onCheckedChange={(val) => {
+                                if (selectedLeadForChat) {
+                                  toggleBotMutation.mutate({ leadId: selectedLeadForChat.id, isBotEnabled: val });
+                                }
+                              }}
+                              className="data-[state=checked]:bg-gold scale-75"
+                          />
+                          <span className={`text-[8px] font-black tracking-widest ${currentBotEnabled ? 'text-emerald-400' : 'text-cream/20'}`}>
+                              {currentBotEnabled ? 'IA ON' : 'IA OFF'}
+                          </span>
+                        </div>
+                        <Badge variant="outline" className="border-gold/20 text-gold text-[9px] hidden sm:block">ID: {selectedLeadForChat?.id.slice(0,8)}</Badge>
+                     </div>
                 </DialogTitle>
             </DialogHeader>
 
             <ScrollArea className="flex-1 p-6 bg-[url('https://www.transparenttextures.com/patterns/dark-leather.png')]">
                 <div className="space-y-6">
                   {chatLogs.length > 0 ? (
-                      chatLogs.map((m: any, i: number) => {
+                      chatLogs.map((m: ChatMessage, i: number) => {
                           const isUser = m.role === 'user';
                           const isAdmin = m.role === 'admin';
+                          const isBot = m.role === 'bot';
 
                           return (
                             <div key={i} className={`flex ${isUser ? 'justify-start' : 'justify-end'}`}>
                                 <div className={`max-w-[85%] space-y-1 ${isUser ? 'items-start' : 'items-end'} flex flex-col`}>
                                     <div className={`p-4 rounded-2xl text-sm leading-relaxed shadow-xl border backdrop-blur-md transition-all ${
-                                        isUser 
-                                          ? 'bg-noir-light/60 border-white/5 text-cream/80 rounded-tl-none ring-1 ring-white/5' 
-                                          : isAdmin 
+                                        isUser
+                                          ? 'bg-noir-light/60 border-white/5 text-cream/80 rounded-tl-none ring-1 ring-white/5'
+                                          : isAdmin
                                           ? 'bg-gradient-to-br from-emerald-600/90 to-emerald-800/90 text-white rounded-tr-none border-emerald-400/20'
                                           : 'bg-gradient-to-br from-gold/30 to-gold/10 text-gold rounded-tr-none border-gold/40'
-                                    }`}>
+                                    } ${m.isPending ? 'opacity-50 scale-95' : 'opacity-100'}`}>
                                         <div className="flex items-center justify-between gap-4 mb-2">
-                                          <p className="text-[8px] uppercase tracking-[0.2em] font-black opacity-40">
-                                            {isUser ? 'Cliente' : isAdmin ? 'Soporte KÂLON' : 'Aura I.A.'}
-                                          </p>
+                                            <span className={`text-[9px] font-black uppercase tracking-widest ${isUser ? 'text-cream/40' : isAdmin ? 'text-white/60' : 'text-gold'}`}>
+                                                {isUser ? 'Cliente' : isAdmin ? 'Staff' : 'Aura I.A.'}
+                                            </span>
                                         </div>
-                                        
+
                                         {(m.media_url || m.media_data) && (
                                           <div className="mb-3 rounded-xl overflow-hidden border border-white/10 bg-black/40 shadow-inner group/img relative">
                                             <img 

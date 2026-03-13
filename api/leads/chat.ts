@@ -66,13 +66,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'GET') {
         if (!leadId) return res.status(400).json({ error: 'Lead ID missing' });
         try {
+            const leadRes = await db.query(`SELECT is_bot_enabled FROM leads WHERE id = $1`, [leadId]);
             const logsRes = await db.query(`
                 SELECT role, content, media_url, media_data, created_at 
                 FROM chat_logs 
                 WHERE lead_id = $1 
                 ORDER BY created_at ASC
             `, [leadId]);
-            return res.status(200).json({ history: logsRes.rows });
+            return res.status(200).json({ 
+                history: logsRes.rows,
+                is_bot_enabled: leadRes.rows[0]?.is_bot_enabled 
+            });
         } catch (e) {
             return res.status(500).json({ error: 'Fetch failed' });
         }
