@@ -645,8 +645,9 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                 <button 
                                   onClick={() => {
                                     setSelectedAppointmentForEdit(appt);
-                                    setFormDate(new Date(appt.date_time).toISOString().split('T')[0]);
-                                    setFormTime(new Date(appt.date_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }));
+                                    const d = new Date(appt.date_time);
+                                    setFormDate(d.toLocaleDateString('sv-SE'));
+                                    setFormTime(d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }));
                                     setFormService(appt.service_type);
                                     setFormClientName(appt.client_name || "");
                                     setFormPhone(appt.phone || "");
@@ -963,8 +964,9 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                 <button 
                                   onClick={() => {
                                     setSelectedAppointmentForEdit(a);
-                                    setFormDate(new Date(a.date_time).toISOString().split('T')[0]);
-                                    setFormTime(new Date(a.date_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }));
+                                    const d = new Date(a.date_time);
+                                    setFormDate(d.toLocaleDateString('sv-SE'));
+                                    setFormTime(d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }));
                                     setFormService(a.service_type);
                                     setFormClientName(a.client_name || "");
                                     setFormPhone(a.phone || "");
@@ -1417,7 +1419,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                         }
                         createAppointment.mutate({ 
                           lead_id: selectedLeadForAppt!.id, 
-                          date_time: `${formDate}T${formTime}:00Z`, 
+                          date_time: new Date(`${formDate}T${formTime}`).toISOString(), 
                           service_type: selectedServices![0].title + (selectedServices!.length > 1 ? "..." : ""),
                           selected_services: selectedServices,
                           total_price: selectedServices?.reduce((acc, s) => acc + Number(s.price), 0),
@@ -1563,7 +1565,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                     disabled={updateAppointment.isPending || !selectedServices?.length}
                     onClick={() => updateAppointment.mutate({ 
                         id: selectedAppointmentForEdit!.id,
-                        date_time: `${formDate}T${formTime}:00Z`,
+                        date_time: new Date(`${formDate}T${formTime}`).toISOString(),
                         service_type: selectedServices![0].title + (selectedServices!.length > 1 ? "..." : ""),
                         client_name: formClientName,
                         phone: formPhone,
