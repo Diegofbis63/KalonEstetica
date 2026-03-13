@@ -54,15 +54,18 @@ const PlaceholderPage = ({ title }: { title: string }) => (
   </div>
 );
 
+import { ChatProvider } from "./context/ChatContext";
+
 const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <Routes>
+        <ChatProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/servicios/:category" element={<CategoryDetail />} />
@@ -89,6 +92,7 @@ const App = () => {
             </Routes>
           </BrowserRouter>
         </TooltipProvider>
+        </ChatProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

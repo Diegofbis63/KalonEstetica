@@ -6,6 +6,8 @@ import {
   FileText, Copy, Share2, Check, ExternalLink, X
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useChat } from "@/context/ChatContext";
+import { Lead } from "@/types/chat";
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, 
   Tooltip as RechartsTooltip, ResponsiveContainer 
@@ -68,6 +70,7 @@ interface Payment {
   status: string;
   payment_method: string;
   phone?: string;
+  lead_id: string;
 }
 
 const formatCurrency = (val: number) => {
@@ -81,6 +84,7 @@ const formatCurrency = (val: number) => {
 export default function Incomes() {
   const [period, setPeriod] = useState<'hoy' | 'semana' | 'mes' | 'año' | 'personalizado'>('mes');
   const queryClient = useQueryClient();
+  const { openChat } = useChat();
 
   // Modal States
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
@@ -173,15 +177,21 @@ export default function Incomes() {
   };
 
   const handleShareWhatsApp = (payment: Payment) => {
-    const text = encodeURIComponent(`*COMPROBANTE DE PAGO - KÂLON*\n\n` +
+    const text = `*COMPROBANTE DE PAGO - KÂLON*\n\n` +
       `*Cliente:* ${payment.client_name}\n` +
       `*Fecha:* ${format(new Date(payment.date), "dd/MM/yyyy HH:mm")}\n` +
       `*Servicios:* ${payment.parent_service}\n` +
       `*Monto:* ${formatCurrency(payment.amount)}\n` +
       `*Método:* ${payment.payment_method}\n\n` +
-      `¡Gracias por elegir Kâlon Estética! ✨`);
+      `¡Gracias por elegir Kâlon Estética! ✨`;
     
-    window.open(`https://wa.me/?text=${text}`, '_blank');
+    // Open internal chat
+    const lead: Lead = {
+      id: payment.lead_id,
+      client_name: payment.client_name
+    };
+    
+    openChat(lead, text);
   };
 
   return (

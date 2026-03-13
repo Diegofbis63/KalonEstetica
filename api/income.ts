@@ -57,6 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const paymentsQuery = `
             SELECT 
                 a.id,
+                a.lead_id,
                 l.client_name,
                 c.name as parent_service,
                 a.selected_services,

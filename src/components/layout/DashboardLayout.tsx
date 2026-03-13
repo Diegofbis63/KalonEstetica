@@ -1,9 +1,21 @@
 import Sidebar from "./Sidebar";
 import { Outlet } from "react-router-dom";
+import { useChat } from "@/context/ChatContext";
+import ChatModal from "@/components/chat/ChatModal";
 
 export default function DashboardLayout() {
+  const { isChatModalOpen, setIsChatModalOpen, selectedLeadForChat, initialMessage } = useChat();
+
   return (
     <div className="flex min-h-screen bg-noir text-cream overflow-hidden">
+      {/* Global Chat Modal */}
+      <ChatModal 
+        open={isChatModalOpen} 
+        onOpenChange={setIsChatModalOpen} 
+        lead={selectedLeadForChat}
+        initialMessage={initialMessage}
+      />
+      
       {/* Fixed Sidebar */}
       <Sidebar />
 
