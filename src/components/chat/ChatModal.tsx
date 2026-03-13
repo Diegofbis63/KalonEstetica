@@ -64,14 +64,21 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
   // Scroll to bottom when chat logs change or modal opens
   useEffect(() => {
     if (open && scrollRef.current) {
-      const scrollContainer = scrollRef.current.closest('.flex-1');
-      if (scrollContainer) {
-        setTimeout(() => {
-          scrollContainer.scrollTop = scrollContainer.scrollHeight;
-        }, 150);
-      }
+      const scrollBottom = () => {
+        scrollRef.current?.scrollIntoView({ behavior: 'instant', block: 'end' });
+      };
+      
+      // Multiple attempts to ensure it scrolls after rendering
+      scrollBottom();
+      const t1 = setTimeout(scrollBottom, 100);
+      const t2 = setTimeout(scrollBottom, 300);
+      
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
     }
-  }, [open, chatLogs.length]);
+  }, [open, chatLogs.length, lead?.id]);
 
   const sendReplyMutation = useMutation({
     mutationFn: async ({ leadId, message, mediaData }: { leadId: string, message?: string, mediaData?: string }) => {
@@ -153,8 +160,20 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="bg-noir border border-gold/20 text-cream max-w-2xl h-[85vh] flex flex-col p-0 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+      <Dialog open={open} onOpenChange={(val) => {
+        // Prevent closing if lightbox is open
+        if (lightboxImage && !val) return;
+        onOpenChange(val);
+      }}>
+        <DialogContent 
+          onPointerDownOutside={(e) => {
+            if (lightboxImage) e.preventDefault();
+          }}
+          onInteractOutside={(e) => {
+            if (lightboxImage) e.preventDefault();
+          }}
+          className="bg-noir border border-gold/20 text-cream max-w-2xl h-[85vh] flex flex-col p-0 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]"
+        >
             <DialogHeader className="p-6 border-b border-white/5 bg-noir-light/30 backdrop-blur-xl shrink-0">
                 <DialogTitle className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
@@ -286,40 +305,36 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
                 Canal de comunicación seguro cifrado por KÂLON
               </p>
             </div>
+
+            {/* Lightbox - Inside DialogContent to avoid closing the modal when clicking image */}
+            {lightboxImage && (
+              <div 
+                className="absolute inset-0 z-[100] bg-black/95 backdrop-blur-3xl flex items-center justify-center p-4 animate-in fade-in duration-300"
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  setLightboxImage(null); 
+                }}
+              >
+                <div className="relative max-w-full max-h-full flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+                  <button 
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      setLightboxImage(null); 
+                    }}
+                    className="absolute -top-14 -right-4 text-cream/60 hover:text-gold transition-colors p-3 bg-white/5 rounded-full backdrop-blur-md z-[110]"
+                  >
+                    <X className="w-8 h-8" />
+                  </button>
+                  <img 
+                    src={lightboxImage} 
+                    alt="Fullscreen" 
+                    className="max-w-[95%] max-h-[80vh] rounded-2xl shadow-[0_0_100px_rgba(0,0,0,0.8)] border border-white/10 animate-in zoom-in duration-300 object-contain" 
+                  />
+                </div>
+              </div>
+            )}
         </DialogContent>
       </Dialog>
-
-      {/* Lightbox - Fixed double-click closing issue by using a dedicated overlay outside Dialog logic */}
-      {lightboxImage && (
-        <div 
-          className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-3xl flex items-center justify-center p-4 animate-in fade-in duration-300"
-          onMouseDown={(e) => {
-            // Use onMouseDown to intercept before Dialog's click outside logic
-            e.stopPropagation();
-          }}
-          onClick={(e) => { 
-            e.stopPropagation(); 
-            setLightboxImage(null); 
-          }}
-        >
-          <div className="relative max-w-5xl max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
-            <button 
-              onClick={(e) => { 
-                e.stopPropagation(); 
-                setLightboxImage(null); 
-              }}
-              className="absolute -top-14 -right-4 text-cream/60 hover:text-gold transition-colors p-3 bg-white/5 rounded-full backdrop-blur-md"
-            >
-              <X className="w-8 h-8" />
-            </button>
-            <img 
-              src={lightboxImage} 
-              alt="Fullscreen" 
-              className="max-w-full max-h-[85vh] rounded-2xl shadow-[0_0_100px_rgba(0,0,0,0.8)] border border-white/10 animate-in zoom-in duration-300" 
-            />
-          </div>
-        </div>
-      )}
     </>
   );
 }
