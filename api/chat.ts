@@ -230,10 +230,10 @@ function generateResponse(
     messages: Array<{ role: string; content: string; media_url?: string; created_at?: string }> = []
 ): string {
     if (isBookingConfirmed) {
-        return `¡Excelente! 🎉 He confirmado tu turno para *${state.interestedService}* el día *${state.pendingDate}* a las *${state.pendingTime}hs*. Estaremos esperándote en NOVA Estética para brindarte una experiencia única de lujo.\n\nQue tengas un día maravilloso. ✨ ¡Adiós!`;
+        return `¡Excelente! 🎉 He confirmado tu turno para *${state.interestedService}* el día *${state.pendingDate}* a las *${state.pendingTime}hs*. Estaremos esperándote en KÂLON Estética para brindarte una experiencia única de lujo.\n\nQue tengas un día maravilloso. ✨ ¡Adiós!`;
     }
 
-    const welcomeHeader = isFirstResponse ? "¡Hola! Bienvenido a *NOVA Estética*. 😊 " : "";
+    const welcomeHeader = isFirstResponse ? "¡Hola! Bienvenido a *KÂLON Estética*. 😊 " : "";
 
     if (state.lastMessageChangedService && state.interestedService) {
         const nextMissing = !state.clientName
@@ -292,7 +292,7 @@ function generateResponse(
             }
             return "Por el momento no tengo más espacios esta semana. 🗓️ ¿Te gustaría que busquemos para más adelante o que te avise si se libera un lugar? 😊";
         default:
-            return "Entiendo. ¿Hay algo más en lo que pueda asistirte para que tu experiencia en NOVA sea perfecta? ✨";
+            return "Entiendo. ¿Hay algo más en lo que pueda asistirte para que tu experiencia en KÂLON sea perfecta? ✨";
     }
 }
 

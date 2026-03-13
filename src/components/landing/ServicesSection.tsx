@@ -27,7 +27,7 @@ const CATEGORIES = [
     title: "Pestañas",
     slug: "Pestañas",
     desc: "Curvatura y volumen para resaltar tu belleza natural.",
-    image: "https://images.unsplash.com/photo-1582213726892-2aa05a3fc551?q=80&w=800"
+    image: "https://images.unsplash.com/photo-1512496015851-a90fb38ba796?q=80&w=800"
   },
   {
     title: "Corporal",

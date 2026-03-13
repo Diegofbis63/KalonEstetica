@@ -56,10 +56,10 @@ const GallerySection = () => {
           </div>
 
           {/* Results */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-stretch">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
             {galleryItems.map((item, i) => (
-              <ScrollReveal key={i} delay={i * 0.1} className="h-full">
-                <div className="h-full rounded-2xl border border-cream/8 bg-noir-light/50 backdrop-blur-sm overflow-hidden group hover:border-gold/20 transition-all duration-500 flex flex-col">
+              <ScrollReveal key={i} delay={i * 0.1} className="flex h-full">
+                <div className="w-full rounded-2xl border border-cream/8 bg-noir-light/50 backdrop-blur-sm overflow-hidden group hover:border-gold/20 transition-all duration-500 flex flex-col">
                   <div className="relative h-64 overflow-hidden shrink-0">
                     <img
                       src={item.image}
@@ -71,10 +71,12 @@ const GallerySection = () => {
                       <span className="text-[10px] font-sans text-gold uppercase tracking-wider">Resultado</span>
                     </div>
                   </div>
-                  <div className="p-5 flex-1 flex flex-col">
-                    <h3 className="text-sm font-serif font-semibold text-cream mb-1">{item.title}</h3>
-                    <p className="text-[11px] text-gold/60 font-sans mb-2 uppercase tracking-wider">{item.treatment}</p>
-                    <p className="text-xs text-cream/35 leading-relaxed font-sans mt-auto">{item.description}</p>
+                  <div className="p-5 flex-1 flex flex-col justify-between">
+                    <div>
+                      <h3 className="text-sm font-serif font-semibold text-cream mb-1">{item.title}</h3>
+                      <p className="text-[11px] text-gold/60 font-sans mb-3 uppercase tracking-wider">{item.treatment}</p>
+                    </div>
+                    <p className="text-xs text-cream/35 leading-relaxed font-sans">{item.description}</p>
                   </div>
                 </div>
               </ScrollReveal>

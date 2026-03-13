@@ -575,7 +575,7 @@ export default function ServicesManagement() {
                 />
             </div>
             <div className="md:col-span-2 space-y-2">
-                <label className="text-[10px] uppercase tracking-widest text-cream/30">Descripción (IA Context)</label>
+                <label className="text-[10px] uppercase tracking-widest text-cream/30">Descripción (Contexto Bot)</label>
                 <Textarea 
                     value={editingService?.description || ''} 
                     onChange={e => setEditingService({ ...editingService, description: e.target.value })}

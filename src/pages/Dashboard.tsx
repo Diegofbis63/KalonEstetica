@@ -733,8 +733,9 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                 </div>
 
                 <div className="rounded-2xl border border-cream/5 bg-noir-light/20 overflow-hidden shadow-2xl backdrop-blur-md">
-                  <Table>
-                    <TableHeader>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
                       <TableRow className="border-b border-cream/5 hover:bg-transparent">
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14">Cliente</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14">Contacto</TableHead>
@@ -795,7 +796,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                       <p className="text-[10px] uppercase font-bold tracking-widest text-gold mb-1">Detalle del Turno</p>
                                       <p className="text-xs text-cream/60">Servicios seleccionados:</p>
                                     </div>
-                                    <ScrollArea className="max-h-[280px] overflow-y-auto">
+                                    <ScrollArea className="h-48 md:h-64">
                                       <div className="p-3 space-y-3">
                                         {a.selected_services && a.selected_services.length > 0 ? (
                                           a.selected_services.map((s, idx) => (
@@ -895,7 +896,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                     disabled={!a.lead_id}
                                 />
                                 <span className={`text-[8px] font-black tracking-widest ${a.is_bot_enabled ? 'text-emerald-400' : 'text-cream/20'}`}>
-                                    {a.is_bot_enabled ? 'ON' : 'OFF'}
+                                    {a.is_bot_enabled ? 'BOT ON' : 'BOT OFF'}
                                 </span>
                             </div>
                           </TableCell>
@@ -997,6 +998,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                       )}
                     </TableBody>
                   </Table>
+                  </div>
                 </div>
               </section>
 
@@ -1007,7 +1009,8 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                   <h3 className="text-xl font-serif font-bold">Clientes Potenciales</h3>
                 </div>
                 <div className="rounded-2xl border border-cream/5 bg-noir-light/20 overflow-hidden shadow-2xl backdrop-blur-md">
-                  <Table>
+                  <div className="overflow-x-auto">
+                    <Table>
                     <TableHeader>
                       <TableRow className="border-b border-white/5 hover:bg-transparent">
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14">Prospecto</TableHead>
@@ -1063,7 +1066,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                     className="data-[state=checked]:bg-gold scale-75"
                                 />
                                 <span className={`text-[8px] font-black tracking-widest ${l.is_bot_enabled ? 'text-emerald-400' : 'text-cream/20'}`}>
-                                    {l.is_bot_enabled ? 'ON' : 'OFF'}
+                                    {l.is_bot_enabled ? 'BOT ON' : 'BOT OFF'}
                                 </span>
                             </div>
                           </TableCell>
@@ -1129,6 +1132,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                       ))}
                     </TableBody>
                   </Table>
+                  </div>
                 </div>
               </section>
              </div>

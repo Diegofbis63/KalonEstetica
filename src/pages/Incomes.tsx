@@ -57,6 +57,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
 import { DateRange } from "react-day-picker";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface IncomeStats {
   revenue: number;
@@ -96,6 +97,7 @@ export default function Incomes() {
   const queryClient = useQueryClient();
   const { openChat } = useChat();
   const receiptRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
 
   const toggleBotMutation = useMutation({
     mutationFn: async ({ leadId, isBotEnabled }: { leadId: string, isBotEnabled: boolean }) => {
@@ -374,9 +376,9 @@ export default function Incomes() {
                   </button>
                 </PopoverTrigger>
                 <PopoverContent 
-                  className="w-auto p-2 bg-[#080808] border-gold/30 shadow-[0_20px_70px_rgba(0,0,0,1)] z-[100] rounded-3xl" 
+                  className="w-auto p-4 bg-[#080808]/95 backdrop-blur-2xl border border-gold/40 shadow-[0_25px_80px_rgba(0,0,0,0.8)] z-[100] rounded-[2rem] overflow-hidden" 
                   align="end"
-                  sideOffset={15}
+                  sideOffset={20}
                 >
                   <Calendar
                     initialFocus
@@ -389,7 +391,7 @@ export default function Incomes() {
                         setPeriod('personalizado');
                       }
                     }}
-                    numberOfMonths={2}
+                    numberOfMonths={isMobile ? 1 : 2}
                     locale={es}
                     className="bg-transparent"
                     classNames={{
@@ -560,7 +562,8 @@ export default function Incomes() {
           </div>
 
           <div className="rounded-[2rem] border border-white/[0.05] bg-noir-light/5 overflow-hidden shadow-2xl">
-            <Table>
+            <div className="overflow-x-auto">
+              <Table>
               <TableHeader className="bg-white/[0.03]">
                 <TableRow className="hover:bg-transparent border-white/5 h-16">
                   <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4">Cliente</TableHead>
@@ -899,5 +902,6 @@ export default function Incomes() {
         )}
       </div>
     </div>
-  );
+  </div>
+);
 }

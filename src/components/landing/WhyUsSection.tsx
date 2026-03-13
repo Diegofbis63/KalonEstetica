@@ -4,7 +4,7 @@ import ScrollReveal from "./ScrollReveal";
 const features = [
   { icon: Brain, title: "Profesionales Certificados", desc: "Equipo médico con más de 10 años de experiencia en estética avanzada." },
   { icon: Shield, title: "Productos Premium", desc: "Trabajamos con marcas líderes: Allergan, Teoxane, SkinCeuticals." },
-  { icon: Zap, title: "Agendamiento Inteligente", desc: "Reserva tu cita 24/7 con nuestra asistente virtual impulsada por IA." },
+  { icon: Zap, title: "Agendamiento Inteligente", desc: "Reserva tu cita 24/7 con nuestra asistente virtual automatizada." },
 ];
 
 const WhyUsSection = () => {

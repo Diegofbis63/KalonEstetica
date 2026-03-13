@@ -303,8 +303,9 @@ export default function Clients() {
 
       {/* Main Table Container */}
       <div className="bg-noir/40 backdrop-blur-md border border-white/5 rounded-3xl overflow-hidden shadow-2xl">
-        <Table>
-          <TableHeader className="bg-white/5">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader className="bg-white/5">
             <TableRow className="border-cream/5 hover:bg-transparent">
               <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4 pl-8">Cliente</TableHead>
               <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4">Contacto</TableHead>
@@ -578,6 +579,7 @@ export default function Clients() {
             )}
           </TableBody>
         </Table>
+        </div>
       </div>
 
       {/* Footer Info */}
