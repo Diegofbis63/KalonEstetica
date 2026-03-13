@@ -12,20 +12,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     try {
         const db = getDb();
-        const { period = 'month' } = req.query;
-
-        // Base query for all appointments
-        // We'll calculate stats in JS or SQL. SQL is better for large datasets.
+        const { period = 'mes', startDate, endDate } = req.query;
         
         let dateFilter = '';
         if (period === 'hoy') {
-            dateFilter = "AND a.date_time >= CURRENT_DATE";
+            dateFilter = "AND a.date_time >= CURRENT_DATE AND a.date_time < CURRENT_DATE + INTERVAL '1 day'";
         } else if (period === 'semana') {
             dateFilter = "AND a.date_time >= date_trunc('week', CURRENT_DATE)";
         } else if (period === 'mes') {
             dateFilter = "AND a.date_time >= date_trunc('month', CURRENT_DATE)";
         } else if (period === 'año') {
             dateFilter = "AND a.date_time >= date_trunc('year', CURRENT_DATE)";
+        } else if (period === 'personalizado' && startDate && endDate) {
+            dateFilter = `AND a.date_time >= '${startDate}' AND a.date_time <= '${endDate} 23:59:59'`;
         }
 
         // 1. KPI Stats
@@ -47,7 +46,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 SUM(total_price) as revenue
             FROM appointments a
             WHERE status = 'REALIZADA' 
-            AND a.date_time >= date_trunc('month', CURRENT_DATE)
+            ${dateFilter || "AND a.date_time >= date_trunc('month', CURRENT_DATE)"}
             GROUP BY DATE(a.date_time)
             ORDER BY DATE(a.date_time) ASC
         `;
@@ -68,9 +67,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             FROM appointments a
             LEFT JOIN leads l ON a.lead_id = l.id
             LEFT JOIN categories c ON a.category_id = c.id
-            WHERE a.status = 'REALIZADA'
+            WHERE a.status = 'REALIZADA' ${dateFilter}
             ORDER BY a.date_time DESC
-            LIMIT 50
+            LIMIT 100
         `;
         const paymentsRes = await db.query(paymentsQuery);
 

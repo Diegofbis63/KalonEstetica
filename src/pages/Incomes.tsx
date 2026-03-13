@@ -1,9 +1,10 @@
 import { useState, useMemo, useRef } from "react";
 import { 
-  TrendingUp, Calendar, DollarSign,
+  TrendingUp, Calendar as CalendarIcon, DollarSign,
   ChevronDown, RefreshCw, Filter, MoreHorizontal,
   CreditCard, Wallet, Receipt, Eye, Edit3, Trash2, 
-  FileText, Copy, Share2, Check, ExternalLink, X
+  FileText, Copy, Share2, Check, ExternalLink, X,
+  Download, FileDown, FileJson
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useChat } from "@/context/ChatContext";
@@ -14,6 +15,10 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, 
   Tooltip as RechartsTooltip, ResponsiveContainer 
 } from 'recharts';
+import { Calendar } from "@/components/ui/calendar";
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -99,13 +104,25 @@ export default function Incomes() {
   const [editAmount, setEditAmount] = useState<string>("");
   const [editMethod, setEditMethod] = useState<string>("");
 
+  const [date, setDate] = useState<{ from: Date | undefined; to: Date | undefined }>({
+    from: undefined,
+    to: undefined,
+  });
+
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['income', period],
+    queryKey: ['income', period, date?.from, date?.to],
     queryFn: async () => {
-      const res = await fetch(`/api/income?period=${period}`);
+      let url = `/api/income?period=${period}`;
+      if (period === 'personalizado' && date?.from && date?.to) {
+        url += `&startDate=${format(date.from, 'yyyy-MM-dd')}&endDate=${format(date.to, 'yyyy-MM-dd')}`;
+      }
+      const res = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
       if (!res.ok) throw new Error('Failed to load income data');
       return res.json() as Promise<{ stats: IncomeStats, evolution: EvolutionData[], payments: Payment[] }>;
-    }
+    },
+    enabled: period !== 'personalizado' || (!!date?.from && !!date?.to)
   });
 
   const updatePaymentMutation = useMutation({
@@ -213,6 +230,84 @@ export default function Incomes() {
       toast.error("Error al generar el comprobante visual");
     }
   };
+  const handleExportExcel = () => {
+    if (!payments || payments.length === 0) {
+      toast.error("No hay datos para exportar");
+      return;
+    }
+
+    const exportData = payments.map(p => ({
+      Cliente: p.client_name,
+      Servicio: p.parent_service,
+      Fecha: format(new Date(p.date), 'dd/MM/yyyy HH:mm'),
+      Monto: p.amount,
+      Método: p.payment_method,
+      Estado: p.status
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Ingresos");
+    XLSX.writeFile(wb, `Ingresos_Kalon_${period}_${format(new Date(), 'yyyyMMdd')}.xlsx`);
+    toast.success("Excel generado correctamente");
+  };
+
+  const handleExportPDF = () => {
+    if (!payments || payments.length === 0) {
+      toast.error("No hay datos para exportar");
+      return;
+    }
+
+    const doc = new jsPDF();
+    
+    // Header
+    doc.setFontSize(22);
+    doc.setTextColor(194, 154, 91); // #c29a5b
+    doc.text("KÂLON ESTÉTICA", 105, 20, { align: 'center' });
+    
+    doc.setFontSize(14);
+    doc.setTextColor(100, 100, 100);
+    doc.text("Reporte de Ingresos y Finanzas", 105, 30, { align: 'center' });
+    
+    doc.setFontSize(10);
+    const periodText = period === 'personalizado' && date?.from && date?.to 
+      ? `Desde: ${format(date.from, 'dd/MM/yyyy')} Hasta: ${format(date.to, 'dd/MM/yyyy')}`
+      : `Período: ${period.toUpperCase()}`;
+    doc.text(periodText, 105, 38, { align: 'center' });
+    
+    // Stats Summary
+    if (stats) {
+      doc.setFillColor(245, 245, 240);
+      doc.rect(14, 45, 182, 20, 'F');
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(11);
+      doc.text(`Total Facturado: ${formatCurrency(stats.revenue)}`, 20, 57);
+      doc.text(`Citas: ${stats.count}`, 100, 57);
+      doc.text(`Ticket Promedio: ${formatCurrency(stats.ticket)}`, 140, 57);
+    }
+
+    // Table
+    const tableData = payments.map(p => [
+      p.client_name,
+      p.parent_service,
+      format(new Date(p.date), 'dd/MM/yyyy HH:mm'),
+      formatCurrency(p.amount),
+      p.payment_method,
+      p.status
+    ]);
+
+    autoTable(doc, {
+      startY: 75,
+      head: [['Cliente', 'Servicio', 'Fecha', 'Monto', 'Método', 'Estado']],
+      body: tableData,
+      headStyles: { fillColor: [194, 154, 91], textColor: [255, 255, 255], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [250, 250, 245] },
+      margin: { top: 75 },
+    });
+
+    doc.save(`Reporte_Ingresos_Kalon_${format(new Date(), 'yyyyMMdd')}.pdf`);
+    toast.success("PDF generado correctamente");
+  };
 
   return (
     <div className="h-full flex flex-col items-center animate-in fade-in duration-700 overflow-y-auto custom-scrollbar bg-noir/20">
@@ -228,7 +323,7 @@ export default function Incomes() {
           
           <div className="flex items-center gap-4">
             <div className="flex items-center bg-noir-light/40 border border-white/5 p-1.5 rounded-2xl backdrop-blur-xl shadow-2xl">
-              {(['hoy', 'semana', 'mes', 'año', 'personalizado'] as const).map((p) => (
+              {(['hoy', 'semana', 'mes', 'año'] as const).map((p) => (
                 <button
                   key={p}
                   onClick={() => setPeriod(p)}
@@ -241,13 +336,61 @@ export default function Incomes() {
                   {p}
                 </button>
               ))}
+              
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] transition-all duration-300 ${
+                      period === 'personalizado' 
+                        ? 'bg-gold text-noir shadow-[0_8px_20px_rgba(194,154,91,0.3)]' 
+                        : 'text-cream/30 hover:text-cream/60 hover:bg-white/5'
+                    }`}
+                  >
+                    Personalizado
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0 bg-noir-light border-gold/20" align="end">
+                  <Calendar
+                    initialFocus
+                    mode="range"
+                    defaultMonth={date?.from}
+                    selected={date as any}
+                    onSelect={(range: any) => {
+                      setDate(range);
+                      if (range?.from && range?.to) {
+                        setPeriod('personalizado');
+                      }
+                    }}
+                    numberOfMonths={2}
+                    locale={es}
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
             
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-gold text-noir font-bold text-xs uppercase tracking-widest hover:scale-105 transition-all shadow-lg shadow-gold/20">
+                  <Download className="w-4 h-4" />
+                  Exportar
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="bg-noir-light border-white/5 text-cream rounded-2xl p-2 min-w-[160px]">
+                <DropdownMenuItem onClick={handleExportExcel} className="rounded-xl h-11 gap-3 focus:bg-gold/10 focus:text-gold cursor-pointer">
+                  <FileJson className="w-4 h-4" /> Excel (.xlsx)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportPDF} className="rounded-xl h-11 gap-3 focus:bg-gold/10 focus:text-gold cursor-pointer">
+                  <FileDown className="w-4 h-4" /> PDF Reporte
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             <button 
               onClick={() => refetch()}
               className="p-3 rounded-2xl bg-noir-light border border-white/5 hover:border-gold/30 transition-all group shadow-xl"
+              title="Actualizar datos"
             >
-              <RefreshCw className="w-5 h-5 text-gold/30 group-hover:text-gold transition-colors" />
+              <RefreshCw className={`w-5 h-5 text-gold/30 group-hover:text-gold transition-colors ${isLoading ? 'animate-spin text-gold' : ''}`} />
             </button>
           </div>
         </div>
