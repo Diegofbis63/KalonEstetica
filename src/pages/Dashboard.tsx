@@ -594,7 +594,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                             <p className="text-[10px] uppercase font-bold tracking-widest text-gold mb-1">Detalle del Turno</p>
                                             <p className="text-xs text-cream/60">Servicios agendados:</p>
                                           </div>
-                                          <ScrollArea className="max-h-48">
+                                          <ScrollArea className="h-[180px]">
                                             <div className="p-3 space-y-3">
                                               {appt.selected_services && appt.selected_services.length > 0 ? (
                                                 appt.selected_services.map((s, idx) => (
@@ -685,7 +685,16 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                               <div>
                                 <p className="text-[10px] font-sans text-white/40 uppercase tracking-widest mb-1">Empieza en aprox.</p>
                                 <p className="text-3xl font-serif font-bold text-gold">
-                                   {Math.max(0, Math.floor((new Date(upNext.date_time).getTime() - new Date().getTime()) / (1000 * 60)))} min
+                                    {(() => {
+                                      const diffMs = new Date(upNext.date_time).getTime() - new Date().getTime();
+                                      const diffMins = Math.max(0, Math.floor(diffMs / (1000 * 60)));
+                                      if (diffMins >= 60) {
+                                        const h = Math.floor(diffMins / 60);
+                                        const m = diffMins % 60;
+                                        return `${h}h ${m > 0 ? `${m}m` : ''}`;
+                                      }
+                                      return `${diffMins} min`;
+                                    })()}
                                 </p>
                               </div>
                               <div className="space-y-1">
