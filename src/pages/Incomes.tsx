@@ -55,6 +55,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
+import { DateRange } from "react-day-picker";
 
 interface IncomeStats {
   revenue: number;
@@ -104,7 +105,7 @@ export default function Incomes() {
   const [editAmount, setEditAmount] = useState<string>("");
   const [editMethod, setEditMethod] = useState<string>("");
 
-  const [date, setDate] = useState<{ from: Date | undefined; to: Date | undefined }>({
+  const [date, setDate] = useState<DateRange | undefined>({
     from: undefined,
     to: undefined,
   });
@@ -196,7 +197,7 @@ export default function Incomes() {
     toast.success("Resumen copiado al portapapeles");
   };
 
-  const handleShareWhatsApp = async (payment: Payment, services?: any[]) => {
+  const handleShareWhatsApp = async (payment: Payment, _services?: Array<{ title: string, price: number }>) => {
     try {
       // Set as selected to update the ReceiptTemplate hidden component
       setSelectedPayment(payment);
@@ -349,13 +350,17 @@ export default function Incomes() {
                     Personalizado
                   </button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0 bg-noir-light border-gold/20" align="end">
+                <PopoverContent 
+                  className="w-auto p-2 bg-[#080808] border-gold/30 shadow-[0_20px_70px_rgba(0,0,0,1)] z-[100] rounded-3xl" 
+                  align="end"
+                  sideOffset={15}
+                >
                   <Calendar
                     initialFocus
                     mode="range"
                     defaultMonth={date?.from}
-                    selected={date as any}
-                    onSelect={(range: any) => {
+                    selected={date}
+                    onSelect={(range: DateRange | undefined) => {
                       setDate(range);
                       if (range?.from && range?.to) {
                         setPeriod('personalizado');
@@ -363,6 +368,20 @@ export default function Incomes() {
                     }}
                     numberOfMonths={2}
                     locale={es}
+                    className="bg-transparent"
+                    classNames={{
+                      caption_label: "text-sm font-bold text-cream",
+                      nav_button: "border border-white/10 hover:border-gold/50 text-cream/50 hover:text-gold transition-colors rounded-lg h-8 w-8",
+                      head_cell: "text-cream/30 font-bold uppercase text-[10px] tracking-tighter w-10 pb-2",
+                      day: "text-cream/80 font-medium hover:bg-gold/10 hover:text-gold transition-all w-10 h-10 flex items-center justify-center rounded-xl",
+                      day_selected: "bg-gold text-noir font-black hover:bg-gold hover:text-noir shadow-lg shadow-gold/20",
+                      day_range_middle: "bg-gold/15 text-gold font-bold rounded-none",
+                      day_today: "text-gold underline decoration-2 underline-offset-4 font-black bg-gold/5",
+                      day_outside: "text-cream/10 opacity-30",
+                      day_disabled: "text-cream/5 opacity-20",
+                      month: "space-y-4 px-2",
+                      table: "w-full border-collapse space-y-1",
+                    }}
                   />
                 </PopoverContent>
               </Popover>
