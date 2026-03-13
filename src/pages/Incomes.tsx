@@ -454,7 +454,7 @@ export default function Incomes() {
           <div className="p-10 rounded-[2rem] border border-white/[0.05] bg-gradient-to-br from-noir-light/40 to-noir/10 backdrop-blur-xl relative overflow-hidden group shadow-2xl transition-all hover:scale-[1.02] hover:border-indigo-500/20">
             <div className="absolute top-0 right-0 p-6">
               <div className="p-3 rounded-2xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                <Calendar className="w-5 h-5" />
+                <CalendarIcon className="w-5 h-5" />
               </div>
             </div>
             <p className="text-[11px] text-cream/30 uppercase tracking-[0.25em] font-black mb-6">Citas en Período</p>
