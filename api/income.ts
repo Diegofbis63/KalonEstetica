@@ -83,10 +83,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 date: r.date,
                 revenue: parseFloat(r.revenue)
             })),
-            payments: paymentsRes.rows.map(r => ({
-                ...r,
-                amount: parseFloat(r.amount)
-            }))
+            payments: paymentsRes.rows.map(r => {
+                const services = r.selected_services || [];
+                const categories = Array.from(new Set(services.map((s: { category_name?: string }) => s.category_name))).filter(Boolean);
+                const displayService = categories.length > 0 ? categories.join(" + ") : (r.parent_service || 'Servicio General');
+
+                return {
+                    ...r,
+                    parent_service: displayService,
+                    amount: parseFloat(r.amount)
+                };
+            })
         });
 
     } catch (e) {

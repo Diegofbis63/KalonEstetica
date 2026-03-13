@@ -954,7 +954,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                 text-[9px] font-black tracking-[0.15em] px-3 py-1 rounded-full border shadow-sm mx-auto
                                 ${ (a.status === 'scheduled' || a.status === 'confirmed')
                                   ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-400' 
-                                  : a.status === 'completed'
+                                  : (a.status === 'completed' || a.status === 'REALIZADA')
                                   ? 'border-sky-500/30 bg-sky-500/5 text-sky-400'
                                   : a.status === 'canceled'
                                   ? 'border-rose-500/30 bg-rose-500/5 text-rose-400'
@@ -962,7 +962,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                               `}
                             >
                               { (a.status === 'scheduled' || a.status === 'confirmed') ? 'CONFIRMADA' : 
-                                a.status === 'completed' ? 'REALIZADA' : 
+                                (a.status === 'completed' || a.status === 'REALIZADA') ? 'REALIZADA' : 
                                 a.status === 'canceled' ? 'CANCELADA' : 'PENDIENTE'}
                             </Badge>
                           </TableCell>
