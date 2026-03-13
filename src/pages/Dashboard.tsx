@@ -507,7 +507,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                             <p className="text-[10px] uppercase font-bold tracking-widest text-gold mb-1">Detalle del Turno</p>
                                             <p className="text-xs text-cream/60">Servicios agendados:</p>
                                           </div>
-                                          <ScrollArea className="h-[180px]">
+                                          <ScrollArea className="max-h-[280px] overflow-y-auto">
                                             <div className="p-3 space-y-3">
                                               {appt.selected_services && appt.selected_services.length > 0 ? (
                                                 appt.selected_services.map((s, idx) => (
@@ -790,7 +790,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                       <p className="text-[10px] uppercase font-bold tracking-widest text-gold mb-1">Detalle del Turno</p>
                                       <p className="text-xs text-cream/60">Servicios seleccionados:</p>
                                     </div>
-                                    <ScrollArea className="max-h-48">
+                                    <ScrollArea className="max-h-[280px] overflow-y-auto">
                                       <div className="p-3 space-y-3">
                                         {a.selected_services && a.selected_services.length > 0 ? (
                                           a.selected_services.map((s, idx) => (
@@ -1206,7 +1206,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                     Tratamientos Añadidos
                     <span>{selectedServices?.length || 0} items</span>
                   </label>
-                  <ScrollArea className="h-40 rounded-xl border border-white/5 bg-noir-light/30 p-2">
+                  <ScrollArea className="h-[200px] rounded-xl border border-white/5 bg-noir-light/30 p-2">
                     {selectedServices && selectedServices.length > 0 ? (
                       <div className="space-y-2">
                         {selectedServices.map((s, idx) => (
@@ -1372,7 +1372,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                 </div>
 
                 {/* List of services */}
-                <ScrollArea className="h-32 border border-white/5 rounded-xl bg-noir-light/30 p-1">
+                <ScrollArea className="h-[200px] border border-white/5 rounded-xl bg-noir-light/30 p-1">
                   <div className="space-y-1.5">
                     {selectedServices && selectedServices.length > 0 ? (
                       selectedServices.map((s, idx) => (
