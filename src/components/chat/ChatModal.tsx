@@ -22,6 +22,7 @@ interface ChatModalProps {
 export default function ChatModal({ open, onOpenChange, lead, initialMessage = "", initialMedia = "" }: ChatModalProps) {
   const [replyMessage, setReplyMessage] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [stagedMedia, setStagedMedia] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -31,16 +32,15 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
   useEffect(() => {
     if (open && lead) {
       if (initialMedia) {
-        // Automatically send the image
-        sendReplyMutation.mutate({ 
-          leadId: lead.id, 
-          message: initialMessage, 
-          mediaData: initialMedia 
-        });
-      } else if (initialMessage) {
+        setStagedMedia(initialMedia);
+      }
+      if (initialMessage) {
         setReplyMessage(initialMessage);
-      } else {
+      }
+      
+      if (!initialMedia && !initialMessage) {
         setReplyMessage("");
+        setStagedMedia(null);
       }
     }
   }, [open, initialMessage, initialMedia, lead?.id]);
@@ -101,6 +101,7 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
     },
     onSuccess: () => {
       setReplyMessage("");
+      setStagedMedia(null);
       setIsUploading(false);
       toast.success("Mensaje enviado");
     },
@@ -126,18 +127,23 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
       return;
     }
 
-    setIsUploading(true);
     const reader = new FileReader();
     reader.onloadend = () => {
-      const base64 = reader.result as string;
-      sendReplyMutation.mutate({ 
-        leadId: lead.id, 
-        message: "", 
-        mediaData: base64 
-      });
+      setStagedMedia(reader.result as string);
+      setIsUploading(false);
     };
     reader.readAsDataURL(file);
     e.target.value = '';
+  };
+
+  const handleSend = () => {
+    if ((replyMessage.trim() || stagedMedia) && lead) {
+      sendReplyMutation.mutate({ 
+        leadId: lead.id, 
+        message: replyMessage.trim(), 
+        mediaData: stagedMedia || undefined 
+      });
+    }
   };
 
   if (!lead) return null;
@@ -222,6 +228,22 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
             </ScrollArea>
 
             <div className="p-6 bg-noir-light/50 border-t border-white/5 backdrop-blur-xl shrink-0">
+              {/* Staged Media Preview */}
+              {stagedMedia && (
+                <div className="mb-4 relative inline-block group">
+                  <div className="w-32 h-32 rounded-2xl overflow-hidden border-2 border-gold/50 shadow-2xl bg-black">
+                    <img src={stagedMedia} alt="Staged" className="w-full h-full object-cover" />
+                  </div>
+                  <button 
+                    onClick={() => setStagedMedia(null)}
+                    className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-rose-600 text-white flex items-center justify-center shadow-lg hover:bg-rose-700 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                  <div className="absolute inset-0 bg-gold/10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+                </div>
+              )}
+
               <div className="flex items-center gap-4">
                 <button 
                   onClick={() => fileInputRef.current?.click()}
@@ -244,19 +266,13 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
                     value={replyMessage}
                     onChange={(e) => setReplyMessage(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' && replyMessage.trim()) {
-                        sendReplyMutation.mutate({ leadId: lead.id, message: replyMessage });
-                      }
+                      if (e.key === 'Enter') handleSend();
                     }}
                     className="w-full bg-noir border border-white/10 rounded-2xl py-4 px-6 text-sm outline-none focus:border-gold/50 transition-all pr-16 shadow-inner"
                   />
                   <button 
-                    onClick={() => {
-                      if (replyMessage.trim()) {
-                        sendReplyMutation.mutate({ leadId: lead.id, message: replyMessage });
-                      }
-                    }}
-                    disabled={!replyMessage.trim() || sendReplyMutation.isPending}
+                    onClick={handleSend}
+                    disabled={(!replyMessage.trim() && !stagedMedia) || sendReplyMutation.isPending}
                     className="absolute right-3 top-1/2 -translate-y-1/2 p-2.5 rounded-xl bg-gold text-noir hover:scale-105 active:scale-95 disabled:opacity-30 disabled:grayscale transition-all shadow-lg"
                   >
                     <Send className="w-5 h-5" />
@@ -270,16 +286,25 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
         </DialogContent>
       </Dialog>
 
-      {/* Lightbox */}
+      {/* Lightbox - Portalled-like behavior with stop propagation to avoid Dialog interference */}
       {lightboxImage && (
         <div 
-          className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-2xl flex items-center justify-center p-4"
-          onClick={() => setLightboxImage(null)}
+          className="fixed inset-0 z-[120] bg-black/95 backdrop-blur-3xl flex items-center justify-center p-4 animate-in fade-in duration-300"
+          onClick={(e) => { e.stopPropagation(); setLightboxImage(null); }}
         >
-          <button className="absolute top-8 right-8 text-cream hover:text-gold">
-            <X className="w-10 h-10" />
-          </button>
-          <img src={lightboxImage} alt="Fullscreen" className="max-w-full max-h-[90vh] rounded-2xl shadow-2xl animate-in zoom-in duration-300" />
+          <div className="relative max-w-5xl max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+            <button 
+              onClick={(e) => { e.stopPropagation(); setLightboxImage(null); }}
+              className="absolute -top-12 -right-4 text-cream/60 hover:text-gold transition-colors p-2"
+            >
+              <X className="w-10 h-10" />
+            </button>
+            <img 
+              src={lightboxImage} 
+              alt="Fullscreen" 
+              className="max-w-full max-h-[85vh] rounded-2xl shadow-[0_0_100px_rgba(194,154,91,0.2)] border border-white/10 animate-in zoom-in duration-300" 
+            />
+          </div>
         </div>
       )}
     </>

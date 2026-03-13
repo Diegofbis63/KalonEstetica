@@ -35,11 +35,9 @@ export const ReceiptTemplate = React.forwardRef<HTMLDivElement, ReceiptTemplateP
         border: '1px solid #c29a5b30',
         borderRadius: '24px',
         position: 'fixed',
-        left: '0',
+        left: '-5000px', // Far off-screen but still 'visible' for capture
         top: '0',
         zIndex: -100,
-        opacity: 0,
-        pointerEvents: 'none'
       }}
     >
       {/* Header */}
