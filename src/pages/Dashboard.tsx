@@ -1036,7 +1036,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                     </button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end" className="bg-noir-light border-cream/5 text-cream/80">
-                                    <DropdownMenuItem className="focus:bg-gold/10 focus:text-gold cursor-pointer" onClick={() => updateAppointment.mutate({ id: a.id, status: 'completed' })}>
+                                    <DropdownMenuItem className="focus:bg-gold/10 focus:text-gold cursor-pointer" onClick={() => updateAppointment.mutate({ id: a.id, status: 'REALIZADA' })}>
                                       <CheckCircle2 className="w-4 h-4 mr-2" /> Marcar como Realizado
                                     </DropdownMenuItem>
                                     <DropdownMenuItem className="focus:bg-amber-500/10 focus:text-amber-400 cursor-pointer" onClick={() => updateAppointment.mutate({ id: a.id, status: 'pending' })}>

@@ -12,6 +12,7 @@ import Settings from "./pages/Settings";
 import CategoryDetail from "./pages/CategoryDetail";
 import NotFound from "./pages/NotFound";
 import Clients from "./pages/Clients";
+import Incomes from "./pages/Incomes";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -78,7 +79,7 @@ const App = () => {
                 <Route index element={<Dashboard />} />
                 <Route path="appointments" element={<Dashboard />} /> {/* For now reuse Dashboard */}
                 <Route path="clients" element={<Clients />} />
-                <Route path="income" element={<PlaceholderPage title="Ingresos" />} />
+                <Route path="income" element={<Incomes />} />
                 <Route path="services" element={<Dashboard defaultTab="services" />} />
                 <Route path="settings" element={<Settings />} />
               </Route>
