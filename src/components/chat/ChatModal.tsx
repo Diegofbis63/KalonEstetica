@@ -61,12 +61,15 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
 
   const chatLogs = useMemo(() => chatHistoryData?.history || [], [chatHistoryData?.history]);
 
+  // Scroll to bottom when chat logs change or modal opens
   useEffect(() => {
     if (open && scrollRef.current) {
-        const timeoutId = setTimeout(() => {
-            scrollRef.current?.scrollIntoView({ behavior: 'auto' });
-        }, 100);
-        return () => clearTimeout(timeoutId);
+      const scrollContainer = scrollRef.current.closest('.flex-1');
+      if (scrollContainer) {
+        setTimeout(() => {
+          scrollContainer.scrollTop = scrollContainer.scrollHeight;
+        }, 150);
+      }
     }
   }, [open, chatLogs.length]);
 
@@ -286,23 +289,33 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
         </DialogContent>
       </Dialog>
 
-      {/* Lightbox - Portalled-like behavior with stop propagation to avoid Dialog interference */}
+      {/* Lightbox - Fixed double-click closing issue by using a dedicated overlay outside Dialog logic */}
       {lightboxImage && (
         <div 
-          className="fixed inset-0 z-[120] bg-black/95 backdrop-blur-3xl flex items-center justify-center p-4 animate-in fade-in duration-300"
-          onClick={(e) => { e.stopPropagation(); setLightboxImage(null); }}
+          className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-3xl flex items-center justify-center p-4 animate-in fade-in duration-300"
+          onMouseDown={(e) => {
+            // Use onMouseDown to intercept before Dialog's click outside logic
+            e.stopPropagation();
+          }}
+          onClick={(e) => { 
+            e.stopPropagation(); 
+            setLightboxImage(null); 
+          }}
         >
           <div className="relative max-w-5xl max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
             <button 
-              onClick={(e) => { e.stopPropagation(); setLightboxImage(null); }}
-              className="absolute -top-12 -right-4 text-cream/60 hover:text-gold transition-colors p-2"
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                setLightboxImage(null); 
+              }}
+              className="absolute -top-14 -right-4 text-cream/60 hover:text-gold transition-colors p-3 bg-white/5 rounded-full backdrop-blur-md"
             >
-              <X className="w-10 h-10" />
+              <X className="w-8 h-8" />
             </button>
             <img 
               src={lightboxImage} 
               alt="Fullscreen" 
-              className="max-w-full max-h-[85vh] rounded-2xl shadow-[0_0_100px_rgba(194,154,91,0.2)] border border-white/10 animate-in zoom-in duration-300" 
+              className="max-w-full max-h-[85vh] rounded-2xl shadow-[0_0_100px_rgba(0,0,0,0.8)] border border-white/10 animate-in zoom-in duration-300" 
             />
           </div>
         </div>
