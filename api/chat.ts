@@ -17,7 +17,7 @@ const corsHeaders = {
 let manager: any = null;
 async function getNlpManager() {
     if (manager) return manager;
-    manager = new NlpManager({ languages: ['es'], forceNER: false, nlp: { useNativeSentiment: false } });
+    manager = new NlpManager({ languages: ['es'], autoSave: false, forceNER: false, nlp: { useNativeSentiment: false } });
     
     // Optimized: Use pre-trained model to avoid timeouts on serverless cold starts
     const modelPath = path.join(process.cwd(), 'Entrenamiento NLP', 'model-es.json');
@@ -73,13 +73,15 @@ interface ConvState {
     requestedTime: string | null;
     requestedAllOptions: boolean;
     lastIntent?: string;
+    isBotEnabled?: boolean;
 }
 
 // ─── State Extraction Logic ──────────────────────────────────────────────────
 async function extractState(
     messages: Array<{ role: string; content: string }>, 
     categories: any[], 
-    services: any[]
+    services: any[],
+    defaultIsBotEnabled: boolean = true
 ): Promise<ConvState> {
     const state: ConvState = {
         clientName: null,
@@ -91,7 +93,8 @@ async function extractState(
         pendingTime: null,
         rejectedDates: [],
         requestedTime: null,
-        requestedAllOptions: false
+        requestedAllOptions: false,
+        isBotEnabled: defaultIsBotEnabled
     };
 
     if (messages.length === 0) return state;
@@ -103,7 +106,7 @@ async function extractState(
         const msg = messages[i];
         const normalizedContent = normalizeText(msg.content);
 
-        if (msg.role === 'assistant') {
+        if (msg.role === 'assistant' || msg.role === 'bot') {
             const botText = msg.content.toLowerCase();
             if (botText.includes("elegir una categoria") || botText.includes("nuestras categorias")) currentBotAsked = 'category';
             else if (botText.includes("servicios de") || botText.includes("estos son los tratamientos")) currentBotAsked = 'sub_service';
@@ -226,7 +229,7 @@ function generateResponse(
             const cat = categories.find(c => c.id === state.currentCategoryId);
             const subServices = services.filter(s => s.category_id === state.currentCategoryId);
             const list = subServices.map(s => `• *${s.title}* ($${s.price}) - ${s.duration} min`).join('\n');
-            return `Estos son los tratamientos de *${cat?.name}*. ¿Cuál te gustaría realizarte?\n\n${list}\n\nEscribe el nombre del tratamiento para agregarlo a tu reserva.`;
+            return `Estos son los tratamientos de ${cat?.name}. ¿Cuál te gustaría realizarte?\n\n${list}\n\nEscribe el nombre del tratamiento para agregarlo a tu reserva.`;
         }
         case 'cart_confirmation': {
              const selectedNames = services.filter(s => state.selectedServiceIds.includes(s.id)).map(s => s.title).join(', ');
@@ -244,7 +247,7 @@ function generateResponse(
         case 'availability_proposal': {
             if (availableSlots.length > 0) {
                 const slot = availableSlots[0];
-                const totalDur = services.filter(s => state.selectedServiceIds.includes(s.id)).reduce((a, b) => a + b.duration, 0);
+                const totalDur = services.filter(s => state.selectedServiceIds.includes(s.id)).reduce((a, b) => a + (Number(b.duration)||60), 0);
                 return `Tengo disponibilidad para tus servicios (Duración: *${totalDur} min*) el día *${slot.date}* a las *${slot.time}hs*. 🗓️\n\n¿Te queda bien este horario para confirmar?`;
             }
             return "Lo siento, no encuentro horarios disponibles esta semana para esa duración total. 🗓️ ¿Te gustaría que busquemos para la próxima semana?";
@@ -252,7 +255,7 @@ function generateResponse(
         case 'payment_request': {
             const selectedSvc = services.filter(s => state.selectedServiceIds.includes(s.id));
             const totalPrice = selectedSvc.reduce((a, b) => a + b.price, 0);
-            const totalDur = selectedSvc.reduce((a, b) => a + Number(b.duration), 0);
+            const totalDur = selectedSvc.reduce((a, b) => a + (Number(b.duration) || 60), 0);
             const deposit = totalPrice * 0.5;
             const hours = Math.floor(totalDur / 60);
             const mins = totalDur % 60;
@@ -294,27 +297,57 @@ export default async function handler(req: Request) {
         const categories = await sql`SELECT id, name FROM categories WHERE active = true ORDER BY sort_order ASC`;
         const services = await sql`SELECT id, category_id, title, price, duration FROM services WHERE active = true ORDER BY sort_order ASC`;
         
+        // Fetch Lead if exists
+        let leadId = null;
+        let isBotEnabled = true;
+        if (userId) {
+            const phone = userId.replace(/\D/g, '');
+            const leadSearch = await sql`SELECT id, is_bot_enabled FROM leads WHERE regexp_replace(contact_info->>'phone', '\\D', '', 'g') LIKE ${'%' + phone} LIMIT 1` as any[];
+            if (leadSearch.length > 0) {
+                leadId = leadSearch[0].id;
+                isBotEnabled = leadSearch[0].is_bot_enabled !== false;
+            }
+        }
+
         // Fetch history if from WhatsApp
         let messages = body.messages || [];
         if (userId && !messages.length && incomingMessage) {
-            const history = await sql`
-                SELECT role, content, media_url FROM chat_logs 
-                WHERE lead_id = (
-                    SELECT id FROM leads 
-                    WHERE regexp_replace(contact_info->>'phone', '\\D', '', 'g') LIKE ${'%' + userId}
-                    LIMIT 1
-                ) ORDER BY created_at ASC
-            ` as any[];
-            messages = history.length > 0 ? history : [];
+            if (leadId) {
+                const history = await sql`
+                    SELECT role, content FROM chat_logs 
+                    WHERE lead_id = ${leadId}
+                    ORDER BY created_at ASC
+                ` as any[];
+                messages = history.length > 0 ? history : [];
+            }
             messages.push({ role: 'user', content: incomingMessage });
         }
 
-        const state = await extractState(messages, categories, services);
+        const state = await extractState(messages, categories, services, isBotEnabled);
         
+        // Log user message to DB
+        if (leadId) {
+            await sql`INSERT INTO chat_logs (lead_id, role, content, media_url, sent_to_whatsapp) 
+                      VALUES (${leadId}, 'user', ${incomingMessage}, ${incomingMediaUrl}, ${!!userId})`;
+        } else if (userId || (body.clientPhone)) {
+             const phone = (userId || body.clientPhone || '').replace(/\D/g, '');
+             const res = await sql`INSERT INTO leads (organization_id, client_name, contact_info, status, intent_score) 
+                                   VALUES (${DEFAULT_ORG_ID}, 'Cliente', ${JSON.stringify({ phone: phone, source: userId ? 'whatsapp' : 'web' })}, 'qualified', 70) 
+                                   RETURNING id` as any[];
+             leadId = res[0].id;
+             await sql`INSERT INTO chat_logs (lead_id, role, content, media_url, sent_to_whatsapp) 
+                       VALUES (${leadId}, 'user', ${incomingMessage}, ${incomingMediaUrl}, ${!!userId})`;
+        }
+
+        // If BoT is disabled, stop here (but we logged the user message)
+        if (!state.isBotEnabled) {
+            return new Response(JSON.stringify({ status: 'bot_disabled' }), { headers: corsHeaders });
+        }
+
         // Availability Logic with Multi-service Duration
         const foundSlots: any[] = [];
         if (state.stage === 'availability_proposal' && state.selectedServiceIds.length > 0) {
-            const totalDur = services.filter(s => state.selectedServiceIds.includes(s.id)).reduce((a, b) => a + b.duration, 0);
+            const totalDur = services.filter(s => state.selectedServiceIds.includes(s.id)).reduce((a, b) => a + (Number(b.duration)||60), 0);
             const blocksNeeded = Math.ceil(totalDur / 60);
             
             let searchDate = new Date();
@@ -345,10 +378,7 @@ export default async function handler(req: Request) {
         // Automatic receipt handling
         let isFinalConfirmation = false;
         if ((state.stage === 'waiting_for_receipt' || state.stage === 'payment_request') && (incomingMediaUrl || body.mediaData)) {
-            const phone = (userId || state.clientPhone || '').replace(/\D/g, '');
-            const leadRes = await sql`SELECT id FROM leads WHERE regexp_replace(contact_info->>'phone', '\\D', '', 'g') LIKE ${'%' + phone} LIMIT 1` as any[];
-            if (leadRes.length > 0) {
-                const leadId = leadRes[0].id;
+            if (leadId) {
                 const svcTitles = services.filter(s => state.selectedServiceIds.includes(s.id)).map(s => s.title).join(' + ');
                 const dateTime = `${state.pendingDate}T${state.pendingTime}:00Z`;
                 
@@ -361,25 +391,10 @@ export default async function handler(req: Request) {
 
         const responseText = generateResponse(state, categories, services, foundSlots, !!userId, !!(incomingMediaUrl || body.mediaData));
         
-        // Log to DB
-        if (userId || state.clientPhone) {
-            const phone = (userId || state.clientPhone || '').replace(/\D/g, '');
-            const leadSearch = await sql`SELECT id FROM leads WHERE regexp_replace(contact_info->>'phone', '\\D', '', 'g') LIKE ${'%' + phone} LIMIT 1` as any[];
-            let leadId = leadSearch.length > 0 ? leadSearch[0].id : null;
-            
-            if (!leadId && (state.clientName || userId)) {
-                const res = await sql`INSERT INTO leads (organization_id, client_name, contact_info, status, intent_score) 
-                                      VALUES (${DEFAULT_ORG_ID}, ${state.clientName || 'Cliente'}, ${JSON.stringify({ phone: phone, source: userId ? 'whatsapp' : 'web' })}, 'qualified', 70) 
-                                      RETURNING id` as any[];
-                leadId = res[0].id;
-            }
-
-            if (leadId) {
-                await sql`INSERT INTO chat_logs (lead_id, role, content, media_url, sent_to_whatsapp) 
-                          VALUES (${leadId}, 'user', ${incomingMessage}, ${incomingMediaUrl}, ${!!userId})`;
-                await sql`INSERT INTO chat_logs (lead_id, role, content, sent_to_whatsapp) 
-                          VALUES (${leadId}, 'bot', ${responseText}, ${!!userId})`;
-            }
+        // Log bot response to DB
+        if (leadId) {
+            await sql`INSERT INTO chat_logs (lead_id, role, content, sent_to_whatsapp) 
+                      VALUES (${leadId}, 'bot', ${responseText}, ${!!userId})`;
         }
 
         if (userId) {
