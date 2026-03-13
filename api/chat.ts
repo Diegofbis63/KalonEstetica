@@ -587,7 +587,7 @@ export default async function handler(req: Request) {
                         VALUES (${leadId}, 'user', ${incomingMessage}, ${incomingMediaUrl}, ${incomingMediaData}, true)`;
             }
             await sql`INSERT INTO chat_logs (lead_id, role, content, sent_to_whatsapp) 
-                      VALUES (${leadId}, 'bot', ${responseText}, false)`; // Bot messages might need pushing too if bridged differently
+                      VALUES (${leadId}, 'bot', ${responseText}, ${!!userId})`;
         }
 
         if (userId) {
