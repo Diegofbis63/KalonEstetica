@@ -76,9 +76,14 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
       if (!res.ok) throw new Error('Error al cambiar estado del bot');
       return res.json();
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
+      // Invalidate all related queries to keep UI synchronized
       queryClient.invalidateQueries({ queryKey: ['chat', lead?.id] });
-      toast.success(data.is_bot_enabled ? 'Aura AI activado' : 'Aura AI desactivado');
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['timeline'] });
+      queryClient.invalidateQueries({ queryKey: ['clients-list'] });
+      queryClient.invalidateQueries({ queryKey: ['income'] });
+      toast.success("Estado del BOT actualizado");
     },
     onError: (err: Error) => toast.error(err.message)
   });
@@ -221,12 +226,12 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
                             {currentBotEnabled ? (
                               <>
                                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                                Aura AI Activo
+                                BOT ON
                               </>
                             ) : (
                               <>
                                 <span className="w-2 h-2 rounded-full bg-amber-500" />
-                                Atención Manual
+                                BOT OFF
                               </>
                             )}
                           </p>
@@ -245,7 +250,7 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
                           className="data-[state=checked]:bg-gold scale-75"
                         />
                         <span className={`text-[8px] font-black tracking-widest ${currentBotEnabled ? 'text-emerald-400' : 'text-cream/20'}`}>
-                          {currentBotEnabled ? 'IA ON' : 'IA OFF'}
+                          {currentBotEnabled ? 'BOT ON' : 'BOT OFF'}
                         </span>
                       </div>
                       <Badge variant="outline" className="border-gold/20 text-gold text-[9px] px-3 py-1 uppercase tracking-widest hidden sm:block">ID: {lead.id.slice(0,8)}</Badge>
@@ -274,7 +279,7 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
                                     } ${m.isPending ? 'opacity-50 scale-95' : 'opacity-100'}`}>
                                         <div className="flex items-center justify-between gap-4 mb-2">
                                           <p className="text-[8px] uppercase tracking-[0.2em] font-black opacity-40">
-                                            {isUser ? 'Cliente' : isAdmin ? 'Soporte KÂLON' : 'Aura I.A.'}
+                                            {isUser ? 'Cliente' : isAdmin ? 'Soporte KÂLON' : 'BOT'}
                                           </p>
                                           {m.isPending && <Clock className="w-2.5 h-2.5 animate-spin opacity-30" />}
                                         </div>

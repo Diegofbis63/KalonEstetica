@@ -324,8 +324,13 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
       return res.json();
     },
     onSuccess: () => {
+        // Invalidate all related queries to keep UI synchronized
         queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-        toast.info("Estado del bot actualizado");
+        queryClient.invalidateQueries({ queryKey: ['timeline'] });
+        queryClient.invalidateQueries({ queryKey: ['clients-list'] });
+        queryClient.invalidateQueries({ queryKey: ['income'] });
+        queryClient.invalidateQueries({ queryKey: ['chat'] });
+        toast.info("Estado del BOT actualizado");
     }
   });
 
@@ -738,7 +743,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center">Fecha / Hora</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center">Precio</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center">Estado</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-4 h-14 text-center">Bot</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-4 h-14 text-center">BOT</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-4 h-14 text-center">Wsp</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-right">Acciones</TableHead>
                       </TableRow>
@@ -1008,7 +1013,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14">Prospecto</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14">Contacto</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center">Interés</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center">Estado Bot</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center">BOT</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center">Última Interacción</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-right">Gestión</TableHead>
                       </TableRow>

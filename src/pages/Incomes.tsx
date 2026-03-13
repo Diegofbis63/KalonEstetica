@@ -108,8 +108,13 @@ export default function Incomes() {
       return res.json();
     },
     onSuccess: () => {
+      // Invalidate all related queries to keep UI synchronized
       queryClient.invalidateQueries({ queryKey: ['income'] });
-      toast.info("Estado del bot actualizado");
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['timeline'] });
+      queryClient.invalidateQueries({ queryKey: ['clients-list'] });
+      queryClient.invalidateQueries({ queryKey: ['chat'] });
+      toast.info("Estado del BOT actualizado");
     }
   });
 
@@ -560,7 +565,7 @@ export default function Incomes() {
                 <TableRow className="hover:bg-transparent border-white/5 h-16">
                   <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4">Cliente</TableHead>
                   <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4">Servicio</TableHead>
-                  <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4 text-center">Bot Aura</TableHead>
+                  <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4 text-center">BOT</TableHead>
                   <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4">Fecha</TableHead>
                   <TableHead className="text-[11px] text-cream/30 px-8 py-5 uppercase tracking-[0.25em] font-black">Monto</TableHead>
                   <TableHead className="text-[11px] text-cream/30 px-8 py-5 uppercase tracking-[0.25em] font-black">Estado</TableHead>
@@ -619,7 +624,7 @@ export default function Incomes() {
                           disabled={!payment.lead_id}
                         />
                         <span className={`text-[8px] font-black tracking-widest ${payment.is_bot_enabled ? 'text-emerald-400' : 'text-cream/20'}`}>
-                          {payment.is_bot_enabled ? 'ON' : 'OFF'}
+                          {payment.is_bot_enabled ? 'BOT ON' : 'BOT OFF'}
                         </span>
                       </div>
                     </TableCell>

@@ -172,8 +172,13 @@ export default function Clients() {
       return res.json();
     },
     onSuccess: () => {
+      // Invalidate all related queries to keep UI synchronized
       queryClient.invalidateQueries({ queryKey: ['clients-list'] });
-      toast.info("Estado del bot actualizado");
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['timeline'] });
+      queryClient.invalidateQueries({ queryKey: ['income'] });
+      queryClient.invalidateQueries({ queryKey: ['chat'] });
+      toast.info("Estado del BOT actualizado");
     }
   });
 
@@ -303,7 +308,7 @@ export default function Clients() {
             <TableRow className="border-cream/5 hover:bg-transparent">
               <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4 pl-8">Cliente</TableHead>
               <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4">Contacto</TableHead>
-              <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4 text-center">Bot Aura</TableHead>
+              <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4 text-center">BOT</TableHead>
               <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4">Frecuencia</TableHead>
               <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4">Última Cita</TableHead>
               <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4 text-right pr-8">Acciones</TableHead>
@@ -371,7 +376,7 @@ export default function Clients() {
                         className="data-[state=checked]:bg-gold scale-75"
                       />
                       <span className={`text-[8px] font-black tracking-widest ${client.is_bot_enabled ? 'text-emerald-400' : 'text-cream/20'}`}>
-                        {client.is_bot_enabled ? 'AURA ON' : 'AURA OFF'}
+                        {client.is_bot_enabled ? 'BOT ON' : 'BOT OFF'}
                       </span>
                     </div>
                   </TableCell>
