@@ -649,21 +649,50 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                               </div>
                               
                               {appt.canManage && (
-                                <button 
-                                  onClick={() => {
-                                    setSelectedAppointmentForEdit(appt);
-                                    const d = new Date(appt.date_time);
-                                    setFormDate(d.toLocaleDateString('sv-SE'));
-                                    setFormTime(d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }));
-                                    setFormService(appt.service_type);
-                                    setFormClientName(appt.client_name || "");
-                                    setFormPhone(appt.phone || "");
-                                    setIsEditAppointmentModalOpen(true);
-                                  }}
-                                  className="p-3 rounded-xl bg-gold text-noir hover:scale-110 active:scale-95 transition-all shadow-lg shadow-gold/10"
-                                >
-                                  <Edit className="w-4 h-4" />
-                                </button>
+                                <div className="flex items-center gap-2">
+                                  {appt.canManage && (
+                                    <button 
+                                      onClick={() => { 
+                                        const leadObj: Lead = {
+                                          id: appt.lead_id!,
+                                          client_name: appt.client_name!,
+                                          contact_info: { phone: appt.phone },
+                                          status: appt.status,
+                                          intent_score: 100,
+                                          is_bot_enabled: appt.is_bot_enabled || false,
+                                          created_at: appt.created_at,
+                                          canManage: appt.canManage
+                                        };
+                                        setSelectedLeadForChat(leadObj); 
+                                        setIsChatModalOpen(true); 
+                                      }}
+                                      disabled={!appt.lead_id || !appt.canManage}
+                                      className={`p-3 rounded-xl bg-white/5 border border-white/10 transition-all flex items-center justify-center group/btn hover:text-gold hover:border-gold/30 ${
+                                        appt.canManage && appt.lead_id ? '' : 'opacity-20 cursor-not-allowed'
+                                      }`}
+                                    >
+                                      <MessageSquare className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+                                    </button>
+                                  )}
+                                  {appt.canManage && (
+                                    <button 
+                                      onClick={() => {
+                                        setSelectedAppointmentForEdit(appt);
+                                        const d = new Date(appt.date_time);
+                                        setFormDate(d.toLocaleDateString('sv-SE'));
+                                        setFormTime(d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }));
+                                        setFormService(appt.service_type);
+                                        setFormClientName(appt.client_name || "");
+                                        setFormPhone(appt.phone || "");
+                                        setSelectedServices(appt.selected_services || []);
+                                        setIsEditAppointmentModalOpen(true);
+                                      }}
+                                      className="p-3 rounded-xl bg-gold text-noir hover:scale-110 active:scale-95 transition-all shadow-lg shadow-gold/10"
+                                    >
+                                      <Edit className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                </div>
                               )}
                             </div>
                           </div>
@@ -805,7 +834,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center">Precio</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center">Estado</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-4 h-14 text-center">Bot</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-4 h-14 text-center">Chat</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-4 h-14 text-center">Wsp</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-right">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -952,27 +981,27 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                           </TableCell>
                           <TableCell className="px-4 py-6 text-center">
                               <button 
-                                onClick={() => { 
-                                  const leadObj: Lead = {
-                                    id: a.lead_id!,
-                                    client_name: a.client_name!,
-                                    contact_info: { phone: a.phone },
-                                    status: a.status,
-                                    intent_score: 100,
-                                    is_bot_enabled: a.is_bot_enabled || false,
-                                    created_at: a.created_at,
-                                    canManage: a.canManage
-                                  };
-                                  setSelectedLeadForChat(leadObj); 
-                                  setIsChatModalOpen(true); 
-                                }}
-                                disabled={!a.lead_id || !a.canManage}
-                                className={`p-2 rounded-lg bg-white/5 border border-white/10 transition-all mx-auto flex items-center justify-center group/btn ${
-                                  a.canManage && a.lead_id ? 'text-cream/40 hover:text-gold hover:border-gold/30' : 'opacity-20 cursor-not-allowed'
-                                }`}
-                              >
-                                <ClipboardList className="w-4 h-4" />
-                              </button>
+                                  onClick={() => { 
+                                    const leadObj: Lead = {
+                                      id: a.lead_id!,
+                                      client_name: a.client_name!,
+                                      contact_info: { phone: a.phone },
+                                      status: a.status,
+                                      intent_score: 100,
+                                      is_bot_enabled: a.is_bot_enabled || false,
+                                      created_at: a.created_at,
+                                      canManage: a.canManage
+                                    };
+                                    setSelectedLeadForChat(leadObj); 
+                                    setIsChatModalOpen(true); 
+                                  }}
+                                  disabled={!a.lead_id || !a.canManage}
+                                  className={`px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 transition-all mx-auto flex items-center justify-center gap-2 group/btn ${
+                                    a.canManage && a.lead_id ? 'text-cream/40 hover:text-gold hover:border-gold/30' : 'opacity-20 cursor-not-allowed'
+                                  }`}
+                                >
+                                  <MessageSquare className="w-4 h-4" /> Wsp
+                                </button>
                           </TableCell>
                           <TableCell className="px-5 py-6 text-right">
                             {a.canManage && (
@@ -1120,7 +1149,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                       l.canManage ? 'text-cream/40 hover:text-gold hover:border-gold/30' : 'opacity-20 cursor-not-allowed'
                                     }`}
                                   >
-                                    <ClipboardList className="w-4 h-4 group-hover/btn:scale-110 transition-transform" /> Log
+                                    <MessageSquare className="w-4 h-4 group-hover/btn:scale-110 transition-transform" /> Wsp
                                   </button>
                                 <button 
                                   onClick={() => { 
