@@ -139,11 +139,12 @@ export default function Clients() {
   // Auto-scroll chat
   React.useEffect(() => {
     if (isChatModalOpen && scrollRef.current) {
-      setTimeout(() => {
-        scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
+      const timeoutId = setTimeout(() => {
+        scrollRef.current?.scrollIntoView({ behavior: 'auto' });
+      }, 50);
+      return () => clearTimeout(timeoutId);
     }
-  }, [isChatModalOpen, selectedLeadForChat]);
+  }, [isChatModalOpen, chatLogs.length]);
 
   const { data: chatData } = useQuery<{ history: ChatMessage[]; is_bot_enabled: boolean }>({
     queryKey: ['chat', selectedLeadForChat?.id],
