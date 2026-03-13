@@ -73,6 +73,7 @@ interface Client {
   phone: string;
   email: string | null;
   note: string | null;
+  is_bot_enabled?: boolean;
   total_appointments: number;
   last_appointment: string;
   appointment_history: Array<{
@@ -158,6 +159,22 @@ export default function Clients() {
       toast.success("Cliente actualizado correctamente");
     },
     onError: (err: Error) => toast.error(err.message)
+  });
+  
+  const toggleBotMutation = useMutation({
+    mutationFn: async ({ leadId, isBotEnabled }: { leadId: string, isBotEnabled: boolean }) => {
+      const res = await fetch(`/api/leads/chat?leadId=${leadId}&action=toggle-bot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isBotEnabled })
+      });
+      if (!res.ok) throw new Error('Error al cambiar estado del bot');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clients-list'] });
+      toast.info("Estado del bot actualizado");
+    }
   });
 
   const handleEditInit = (client: Client) => {
@@ -286,6 +303,7 @@ export default function Clients() {
             <TableRow className="border-cream/5 hover:bg-transparent">
               <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4 pl-8">Cliente</TableHead>
               <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4">Contacto</TableHead>
+              <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4 text-center">Bot Aura</TableHead>
               <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4">Frecuencia</TableHead>
               <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4">Última Cita</TableHead>
               <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4 text-right pr-8">Acciones</TableHead>
@@ -343,6 +361,18 @@ export default function Clients() {
                           {client.email}
                         </div>
                       )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-5 text-center">
+                    <div className="flex flex-col items-center justify-center gap-1.5">
+                      <Switch 
+                        checked={client.is_bot_enabled} 
+                        onCheckedChange={(val) => toggleBotMutation.mutate({ leadId: client.id, isBotEnabled: val })}
+                        className="data-[state=checked]:bg-gold scale-75"
+                      />
+                      <span className={`text-[8px] font-black tracking-widest ${client.is_bot_enabled ? 'text-emerald-400' : 'text-cream/20'}`}>
+                        {client.is_bot_enabled ? 'AURA ON' : 'AURA OFF'}
+                      </span>
                     </div>
                   </TableCell>
                   <TableCell className="py-5">

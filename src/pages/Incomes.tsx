@@ -20,6 +20,7 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -70,7 +71,9 @@ interface EvolutionData {
 
 interface Payment {
   id: string;
+  lead_id: string;
   client_name: string;
+  is_bot_enabled?: boolean;
   parent_service: string;
   selected_services: Array<{ title: string, price: number }>;
   date: string;
@@ -78,7 +81,6 @@ interface Payment {
   status: string;
   payment_method: string;
   phone?: string;
-  lead_id: string;
 }
 
 const formatCurrency = (val: number) => {
@@ -94,6 +96,22 @@ export default function Incomes() {
   const queryClient = useQueryClient();
   const { openChat } = useChat();
   const receiptRef = useRef<HTMLDivElement>(null);
+
+  const toggleBotMutation = useMutation({
+    mutationFn: async ({ leadId, isBotEnabled }: { leadId: string, isBotEnabled: boolean }) => {
+      const res = await fetch(`/api/leads/chat?leadId=${leadId}&action=toggle-bot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isBotEnabled })
+      });
+      if (!res.ok) throw new Error('Error al cambiar estado del bot');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['income'] });
+      toast.info("Estado del bot actualizado");
+    }
+  });
 
   // Modal States
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
@@ -540,9 +558,10 @@ export default function Incomes() {
             <Table>
               <TableHeader className="bg-white/[0.03]">
                 <TableRow className="hover:bg-transparent border-white/5 h-16">
-                  <TableHead className="text-[11px] text-cream/30 px-8 py-5 uppercase tracking-[0.25em] font-black">Cliente</TableHead>
-                  <TableHead className="text-[11px] text-cream/30 px-8 py-5 uppercase tracking-[0.25em] font-black">Servicio</TableHead>
-                  <TableHead className="text-[11px] text-cream/30 px-8 py-5 uppercase tracking-[0.25em] font-black">Fecha</TableHead>
+                  <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4">Cliente</TableHead>
+                  <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4">Servicio</TableHead>
+                  <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4 text-center">Bot Aura</TableHead>
+                  <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4">Fecha</TableHead>
                   <TableHead className="text-[11px] text-cream/30 px-8 py-5 uppercase tracking-[0.25em] font-black">Monto</TableHead>
                   <TableHead className="text-[11px] text-cream/30 px-8 py-5 uppercase tracking-[0.25em] font-black">Estado</TableHead>
                   <TableHead className="text-[11px] text-cream/30 px-8 py-5 uppercase tracking-[0.25em] font-black text-right">Acción</TableHead>
@@ -579,8 +598,8 @@ export default function Incomes() {
                             <div className="space-y-2.5">
                               {payment.selected_services?.map((s, idx) => (
                                 <div key={idx} className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5 group/service hover:bg-white/10 transition-colors">
-                                  <span className="text-xs text-cream/70 font-medium">{s.title}</span>
-                                  <span className="text-xs text-gold font-mono font-black">{formatCurrency(Number(s.price))}</span>
+                                  <span className="text-sm font-medium text-cream/80">{s.title}</span>
+                                  <span className="text-sm font-black text-gold font-mono">{formatCurrency(Number(s.price))}</span>
                                 </div>
                               ))}
                               {(!payment.selected_services || payment.selected_services.length === 0) && (
@@ -590,6 +609,19 @@ export default function Incomes() {
                           </div>
                         </PopoverContent>
                       </Popover>
+                    </TableCell>
+                    <TableCell className="py-5 text-center">
+                      <div className="flex flex-col items-center justify-center gap-1.5">
+                        <Switch 
+                          checked={payment.is_bot_enabled} 
+                          onCheckedChange={(val) => toggleBotMutation.mutate({ leadId: payment.lead_id, isBotEnabled: val })}
+                          className="data-[state=checked]:bg-gold scale-75"
+                          disabled={!payment.lead_id}
+                        />
+                        <span className={`text-[8px] font-black tracking-widest ${payment.is_bot_enabled ? 'text-emerald-400' : 'text-cream/20'}`}>
+                          {payment.is_bot_enabled ? 'ON' : 'OFF'}
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell className="px-8 py-8">
                       <div className="flex flex-col gap-1">

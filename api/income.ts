@@ -58,6 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 a.id,
                 a.lead_id,
                 l.client_name,
+                l.is_bot_enabled,
                 c.name as parent_service,
                 a.selected_services,
                 a.date_time as date,

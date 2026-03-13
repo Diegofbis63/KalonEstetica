@@ -59,6 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 SELECT 
                     l.id,
                     l.client_name,
+                    l.is_bot_enabled,
                     l.contact_info->>'phone' as phone,
                     l.contact_info->>'email' as email,
                     l.contact_info->>'note' as note,

@@ -360,7 +360,7 @@ export default async function handler(req: Request) {
         if (!connectionString) throw new Error("Missing DATABASE_URL configuration");
         const sql = neon(connectionString);
 
-        // ─── CHECK BOT STATUS FIRST ───
+        let botEnabledFromDb = true;
         if (userId) {
             // Robust phone normalization: remove all non-digits from both sides for comparison
             const leadStatus = await sql`
@@ -371,8 +371,8 @@ export default async function handler(req: Request) {
                    OR ${userId.slice(-10)} = regexp_replace(contact_info->>'phone', '\\D', '', 'g')
                 LIMIT 1
             ` as LeadStatusResult[];
-            if (leadStatus.length > 0 && leadStatus[0].is_bot_enabled === false) {
-                return new Response(JSON.stringify({ botPaused: true, responseText: "", status: "paused" }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+            if (leadStatus.length > 0) {
+                botEnabledFromDb = leadStatus[0].is_bot_enabled;
             }
         }
 
@@ -528,6 +528,38 @@ export default async function handler(req: Request) {
                     isBookingConfirmed = true;
                 }
             }
+        }
+
+        if (!botEnabledFromDb) {
+            const finalClientName = state.clientName || "Cliente WhatsApp";
+            const phoneToUse = (state.clientPhone === 'CONFIRMED_CURRENT' ? userId : state.clientPhone) || userId;
+
+            if (phoneToUse) {
+                const existingLeads = await sql`SELECT id FROM leads WHERE regexp_replace(contact_info->>'phone', '\\D', '', 'g') = ${phoneToUse.replace(/\D/g, '')} LIMIT 1` as LeadIdResult[];
+                let leadId: string;
+                
+                if (existingLeads.length > 0) {
+                    leadId = existingLeads[0].id;
+                    await sql`UPDATE leads SET client_name = ${finalClientName}, updated_at = CURRENT_TIMESTAMP WHERE id = ${leadId}`;
+                } else {
+                    const newLead = await sql`INSERT INTO leads (organization_id, client_name, contact_info, status, intent_score) VALUES (${DEFAULT_ORG_ID}, ${finalClientName}, ${JSON.stringify({ phone: phoneToUse })}, 'qualified', 50) RETURNING id` as LeadIdResult[];
+                    leadId = newLead[0].id;
+                }
+
+                if (incomingMessage || incomingMediaUrl || incomingMediaData) {
+                    await sql`INSERT INTO chat_logs (lead_id, role, content, media_url, media_data, sent_to_whatsapp) 
+                                VALUES (${leadId}, 'user', ${incomingMessage}, ${incomingMediaUrl}, ${incomingMediaData}, true)`;
+                }
+            }
+
+            return new Response(JSON.stringify({ 
+                botPaused: true, 
+                responseText: "", 
+                status: "manual_mode",
+                messageLogged: true 
+            }), { 
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            });
         }
 
         const responseText = generateResponse(state, services, foundSlots, isBookingConfirmed, isFirstInteraction, !!userId, messages);
