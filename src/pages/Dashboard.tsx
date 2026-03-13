@@ -453,7 +453,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
 
   const stats = [
     { icon: Users, label: "Clientes Activos", value: leads.length, color: "text-gold", path: "/dashboard/clients" },
-    { icon: CalendarCheck, label: "Turnos", value: appointments.length, color: "text-amber-400" },
+    { icon: CalendarCheck, label: "Turnos", value: appointments.length, color: "text-amber-400", path: "/dashboard/appointments" },
     { icon: TrendingUp, label: "Ingresos", value: `${leads.length > 0 ? Math.round((appointments.length / leads.length) * 100) : 0}%`, color: "text-emerald-400", path: "/dashboard/income" },
   ];
 
@@ -569,13 +569,20 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                         </a>
                                       )}
                                       {appt.total_duration ? (
-                                        <Badge variant="outline" className="px-2 py-1 bg-amber-500/5 border-amber-500/20 text-amber-500/80 font-bold text-[9px] tracking-widest uppercase flex items-center gap-1.5 whitespace-nowrap">
-                                          <Clock className="w-2.5 h-2.5" />
-                                          {appt.total_duration >= 60 
-                                            ? `${Math.floor(appt.total_duration/60)}H ${appt.total_duration%60 > 0 ? `${appt.total_duration%60}m ` : ''}`
-                                            : `${appt.total_duration} MIN `
-                                          } TOTAL
-                                        </Badge>
+                                        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gold/10 border border-gold/30 shadow-[0_0_15px_rgba(194,154,91,0.15)] group/duration">
+                                          <div className="flex items-center justify-center w-6 h-6 rounded-full bg-gold/20">
+                                            <Clock className="w-3.5 h-3.5 text-gold animate-pulse" />
+                                          </div>
+                                          <div className="flex flex-col">
+                                            <span className="text-[11px] font-black text-gold uppercase tracking-tighter leading-none">
+                                              {appt.total_duration >= 60 
+                                                ? `${Math.floor(appt.total_duration/60)}H ${appt.total_duration%60 > 0 ? `${appt.total_duration%60}M` : ''}`
+                                                : `${appt.total_duration} MIN`
+                                              }
+                                            </span>
+                                            <span className="text-[7px] text-gold/40 uppercase font-bold tracking-widest leading-none mt-0.5">ESTIMADO</span>
+                                          </div>
+                                        </div>
                                       ) : null}
                                     </>
                                   )}
