@@ -136,15 +136,6 @@ export default function Clients() {
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  // Auto-scroll chat
-  React.useEffect(() => {
-    if (isChatModalOpen && scrollRef.current) {
-      const timeoutId = setTimeout(() => {
-        scrollRef.current?.scrollIntoView({ behavior: 'auto' });
-      }, 50);
-      return () => clearTimeout(timeoutId);
-    }
-  }, [isChatModalOpen, chatLogs.length]);
 
   const { data: chatData } = useQuery<{ history: ChatMessage[]; is_bot_enabled: boolean }>({
     queryKey: ['chat', selectedLeadForChat?.id],
@@ -166,6 +157,16 @@ export default function Clients() {
 
   const chatLogs = chatData?.history || [];
   const currentBotEnabled = chatData?.is_bot_enabled ?? selectedLeadForChat?.is_bot_enabled ?? false;
+
+  // Auto-scroll chat
+  React.useEffect(() => {
+    if (isChatModalOpen && scrollRef.current) {
+      const timeoutId = setTimeout(() => {
+        scrollRef.current?.scrollIntoView({ behavior: 'auto' });
+      }, 50);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [isChatModalOpen, chatLogs.length]);
 
   const sendReplyMutation = useMutation({
     mutationFn: async ({ leadId, message, mediaData }: { leadId: string; message: string; mediaData?: string }) => {
