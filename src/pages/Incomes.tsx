@@ -2,9 +2,10 @@ import { useState, useMemo } from "react";
 import { 
   TrendingUp, Calendar, DollarSign,
   ChevronDown, RefreshCw, Filter, MoreHorizontal,
-  CreditCard, Wallet, Receipt
+  CreditCard, Wallet, Receipt, Eye, Edit3, Trash2, 
+  FileText, Copy, Share2, Check, ExternalLink, X
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, 
   Tooltip as RechartsTooltip, ResponsiveContainer 
@@ -23,8 +24,28 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { toast } from "sonner";
 
 interface IncomeStats {
   revenue: number;
@@ -46,6 +67,7 @@ interface Payment {
   amount: number;
   status: string;
   payment_method: string;
+  phone?: string;
 }
 
 const formatCurrency = (val: number) => {
@@ -58,6 +80,17 @@ const formatCurrency = (val: number) => {
 
 export default function Incomes() {
   const [period, setPeriod] = useState<'hoy' | 'semana' | 'mes' | 'año' | 'personalizado'>('mes');
+  const queryClient = useQueryClient();
+
+  // Modal States
+  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isVoidConfirmOpen, setIsVoidConfirmOpen] = useState(false);
+
+  // Edit Form States
+  const [editAmount, setEditAmount] = useState<string>("");
+  const [editMethod, setEditMethod] = useState<string>("");
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['income', period],
@@ -65,6 +98,46 @@ export default function Incomes() {
       const res = await fetch(`/api/income?period=${period}`);
       if (!res.ok) throw new Error('Failed to load income data');
       return res.json() as Promise<{ stats: IncomeStats, evolution: EvolutionData[], payments: Payment[] }>;
+    }
+  });
+
+  const updatePaymentMutation = useMutation({
+    mutationFn: async ({ id, amount, method }: { id: string; amount: number; method: string }) => {
+      const res = await fetch(`/api/appointments?id=${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ total_price: amount, payment_method: method })
+      });
+      if (!res.ok) throw new Error('Error al actualizar el pago');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['income'] });
+      toast.success("Pago actualizado correctamente");
+      setIsEditModalOpen(false);
+    },
+    onError: () => {
+      toast.error("Ocurrió un error al intentar actualizar el pago");
+    }
+  });
+
+  const voidPaymentMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/appointments?id=${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'ANULADA' })
+      });
+      if (!res.ok) throw new Error('Error al anular el pago');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['income'] });
+      toast.success("Transacción anulada. El monto ha sido restado de la facturación.");
+      setIsVoidConfirmOpen(false);
+    },
+    onError: () => {
+      toast.error("Ocurrió un error al intentar anular la transacción");
     }
   });
 
@@ -78,6 +151,38 @@ export default function Incomes() {
       formattedDate: format(new Date(d.date), 'dd MMM', { locale: es })
     }));
   }, [data?.evolution]);
+
+  const handleOpenEdit = (payment: Payment) => {
+    setSelectedPayment(payment);
+    setEditAmount(payment.amount.toString());
+    setEditMethod(payment.payment_method);
+    setIsEditModalOpen(true);
+  };
+
+  const handleCopyReceipt = (payment: Payment) => {
+    const text = `*COMPROBANTE DE PAGO - KÂLON*\n\n` +
+      `*Cliente:* ${payment.client_name}\n` +
+      `*Fecha:* ${format(new Date(payment.date), "dd/MM/yyyy HH:mm")}\n` +
+      `*Servicios:* ${payment.parent_service}\n` +
+      `*Monto:* ${formatCurrency(payment.amount)}\n` +
+      `*Método:* ${payment.payment_method}\n\n` +
+      `¡Gracias por elegir Kâlon Estética! ✨`;
+    
+    navigator.clipboard.writeText(text);
+    toast.success("Resumen copiado al portapapeles");
+  };
+
+  const handleShareWhatsApp = (payment: Payment) => {
+    const text = encodeURIComponent(`*COMPROBANTE DE PAGO - KÂLON*\n\n` +
+      `*Cliente:* ${payment.client_name}\n` +
+      `*Fecha:* ${format(new Date(payment.date), "dd/MM/yyyy HH:mm")}\n` +
+      `*Servicios:* ${payment.parent_service}\n` +
+      `*Monto:* ${formatCurrency(payment.amount)}\n` +
+      `*Método:* ${payment.payment_method}\n\n` +
+      `¡Gracias por elegir Kâlon Estética! ✨`);
+    
+    window.open(`https://wa.me/?text=${text}`, '_blank');
+  };
 
   return (
     <div className="h-full flex flex-col items-center animate-in fade-in duration-700 overflow-y-auto custom-scrollbar bg-noir/20">
@@ -271,9 +376,9 @@ export default function Incomes() {
                     <TableCell className="px-8 py-8">
                       <Popover>
                         <PopoverTrigger asChild>
-                          <button className="text-sm font-semibold text-cream/50 hover:text-gold transition-all flex items-center gap-2 group/btn bg-white/5 px-4 py-2 rounded-xl border border-transparent hover:border-gold/20 shadow-sm">
-                            {payment.parent_service || 'Servicio General'}
-                            <ChevronDown className="w-4 h-4 text-gold/30 group-hover/btn:text-gold transition-colors" />
+                          <button className="text-sm font-semibold text-cream/50 hover:text-gold transition-all flex items-center gap-2 group/btn bg-white/5 px-4 py-2 rounded-xl border border-transparent hover:border-gold/20 shadow-sm text-left">
+                            <span className="truncate max-w-[150px]">{payment.parent_service || 'Servicio General'}</span>
+                            <ChevronDown className="w-4 h-4 shrink-0 text-gold/30 group-hover/btn:text-gold transition-colors" />
                           </button>
                         </PopoverTrigger>
                         <PopoverContent className="w-80 bg-noir-light border-gold/20 p-6 rounded-[1.5rem] shadow-3xl backdrop-blur-xl">
@@ -328,9 +433,59 @@ export default function Incomes() {
                       </Badge>
                     </TableCell>
                     <TableCell className="px-8 py-8 text-right">
-                      <button className="p-3 rounded-2xl hover:bg-white/5 text-cream/20 hover:text-cream/60 transition-all border border-transparent hover:border-white/10 shadow-sm">
-                        <MoreHorizontal className="w-5 h-5" />
-                      </button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button className="p-3 rounded-2xl hover:bg-white/5 text-cream/20 hover:text-cream/60 transition-all border border-transparent hover:border-white/10 shadow-sm">
+                            <MoreHorizontal className="w-5 h-5" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56 bg-noir-light border-white/5 text-cream/80 backdrop-blur-xl rounded-2xl shadow-3xl p-2 pb-3">
+                          <p className="px-3 py-2 text-[10px] uppercase font-black tracking-[0.2em] text-gold/50">Opciones de Pago</p>
+                          <DropdownMenuItem 
+                            onClick={() => { setSelectedPayment(payment); setIsDetailModalOpen(true); }}
+                            className="focus:bg-white/10 focus:text-gold cursor-pointer rounded-xl h-11 flex items-center gap-3 px-3"
+                          >
+                            <Eye className="w-4 h-4" /> 
+                            <span className="text-sm font-semibold">Ver Detalle</span>
+                          </DropdownMenuItem>
+                          
+                          <DropdownMenuItem 
+                            onClick={() => handleOpenEdit(payment)}
+                            className="focus:bg-white/10 focus:text-gold cursor-pointer rounded-xl h-11 flex items-center gap-3 px-3"
+                          >
+                            <Edit3 className="w-4 h-4" /> 
+                            <span className="text-sm font-semibold">Editar Pago</span>
+                          </DropdownMenuItem>
+                          
+                          <DropdownMenuItem 
+                            onClick={() => { setSelectedPayment(payment); setIsVoidConfirmOpen(true); }}
+                            className="focus:bg-rose-500/10 focus:text-rose-400 cursor-pointer rounded-xl h-11 flex items-center gap-3 px-3"
+                          >
+                            <Trash2 className="w-4 h-4" /> 
+                            <span className="text-sm font-semibold">Anular Pago</span>
+                          </DropdownMenuItem>
+
+                          <DropdownMenuSeparator className="bg-white/5 my-2" />
+                          
+                          <p className="px-3 py-2 text-[10px] uppercase font-black tracking-[0.2em] text-gold/50">Comprobante</p>
+                          
+                          <DropdownMenuItem 
+                            onClick={() => handleCopyReceipt(payment)}
+                            className="focus:bg-white/10 focus:text-gold cursor-pointer rounded-xl h-11 flex items-center gap-3 px-3"
+                          >
+                            <Copy className="w-4 h-4" /> 
+                            <span className="text-sm font-semibold">Copiar Resumen</span>
+                          </DropdownMenuItem>
+                          
+                          <DropdownMenuItem 
+                            onClick={() => handleShareWhatsApp(payment)}
+                            className="focus:bg-emerald-500/10 focus:text-emerald-400 cursor-pointer rounded-xl h-11 flex items-center gap-3 px-3"
+                          >
+                            <Share2 className="w-4 h-4" /> 
+                            <span className="text-sm font-semibold">Enviar Wsp</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -339,6 +494,166 @@ export default function Incomes() {
           </div>
         </div>
       </div>
+
+      {/* Detail Modal */}
+      <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
+        <DialogContent className="max-w-md bg-noir-light border-gold/20 text-cream backdrop-blur-3xl rounded-[2.5rem] p-0 overflow-hidden shadow-3xl">
+          <DialogHeader className="p-8 pb-4 bg-white/5">
+            <DialogTitle className="text-2xl font-serif font-bold text-cream flex items-center gap-3">
+              <FileText className="w-6 h-6 text-gold" />
+              Detalle de Transacción
+            </DialogTitle>
+          </DialogHeader>
+          <div className="p-8 space-y-8">
+            <div className="flex justify-between items-start">
+              <div className="space-y-1">
+                <p className="text-[10px] uppercase font-black tracking-[0.2em] text-gold/50">Cliente</p>
+                <p className="text-xl font-bold">{selectedPayment?.client_name}</p>
+              </div>
+              <div className="text-right space-y-1">
+                <p className="text-[10px] uppercase font-black tracking-[0.2em] text-gold/50">Fecha</p>
+                <p className="text-sm font-semibold text-cream/70">
+                  {selectedPayment && format(new Date(selectedPayment.date), "dd/MM/yyyy HH:mm")}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-[10px] uppercase font-black tracking-[0.2em] text-gold/50 flex items-center gap-2">
+                <Filter className="w-3 h-3" /> Desglose de Servicios
+              </p>
+              <div className="space-y-2 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
+                {selectedPayment?.selected_services?.map((service, idx) => (
+                  <div key={idx} className="flex justify-between items-center p-4 rounded-2xl bg-white/5 border border-white/5">
+                    <span className="text-sm font-medium text-cream/80">{service.title}</span>
+                    <span className="text-sm font-black text-gold font-mono">{formatCurrency(service.price)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-6 border-t border-white/5 space-y-4">
+              <div className="flex justify-between items-center bg-gold/10 p-5 rounded-2xl border border-gold/20">
+                <span className="text-sm uppercase font-black tracking-[0.2em] text-gold">Total Abonado</span>
+                <span className="text-2xl font-serif font-black text-gold">{selectedPayment && formatCurrency(selectedPayment.amount)}</span>
+              </div>
+              <div className="flex items-center gap-2 text-[10px] uppercase font-black tracking-widest text-cream/30 justify-center">
+                <CreditCard className="w-3 h-3" /> Pago vía {selectedPayment?.payment_method}
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="p-6 bg-white/5 flex gap-3">
+            <Button variant="outline" className="flex-1 bg-transparent border-white/10 hover:bg-white/5 rounded-xl h-12" onClick={() => setIsDetailModalOpen(false)}>
+              Cerrar
+            </Button>
+            <Button className="flex-1 bg-gold text-noir hover:bg-gold/80 rounded-xl h-12" onClick={() => selectedPayment && handleShareWhatsApp(selectedPayment)}>
+              Compartir Wsp
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Modal */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="max-w-md bg-noir-light border-gold/20 text-cream backdrop-blur-3xl rounded-[2.5rem] p-0 overflow-hidden shadow-3xl">
+          <DialogHeader className="p-8 pb-4 bg-white/5">
+            <DialogTitle className="text-2xl font-serif font-bold text-cream flex items-center gap-3">
+              <Edit3 className="w-6 h-6 text-gold" />
+              Editar Transacción
+            </DialogTitle>
+          </DialogHeader>
+          <div className="p-8 space-y-6">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-[10px] uppercase font-black tracking-[0.2em] text-gold/50 ml-1">Monto Total</Label>
+                <div className="relative">
+                  <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gold" />
+                  <Input 
+                    type="number" 
+                    value={editAmount} 
+                    onChange={(e) => setEditAmount(e.target.value)}
+                    className="bg-white/5 border-white/10 h-14 pl-12 rounded-2xl focus:ring-gold focus:border-gold text-lg font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-[10px] uppercase font-black tracking-[0.2em] text-gold/50 ml-1">Método de Pago</Label>
+                <Select value={editMethod} onValueChange={setEditMethod}>
+                  <SelectTrigger className="bg-white/5 border-white/10 h-14 rounded-2xl focus:ring-gold">
+                    <SelectValue placeholder="Seleccionar método" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-noir-light border-white/5 text-cream">
+                    <SelectItem value="Efectivo" className="focus:bg-gold/10 focus:text-gold h-12">Efectivo</SelectItem>
+                    <SelectItem value="Transferencia" className="focus:bg-gold/10 focus:text-gold h-12">Transferencia</SelectItem>
+                    <SelectItem value="Tarjeta" className="focus:bg-gold/10 focus:text-gold h-12">Tarjeta</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <p className="text-[10px] text-cream/40 italic text-center px-4 leading-relaxed">
+              * El cambio afectará el total facturado y el flujo de caja del periodo seleccionado.
+            </p>
+          </div>
+          <DialogFooter className="p-8 flex gap-3">
+            <Button variant="outline" className="flex-1 bg-transparent border-white/10 hover:bg-white/5 rounded-xl h-14" onClick={() => setIsEditModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button 
+              className="flex-1 bg-gold text-noir hover:bg-gold/80 rounded-xl h-14 font-bold shadow-[0_8px_25px_rgba(194,154,91,0.4)]"
+              disabled={updatePaymentMutation.isPending}
+              onClick={() => selectedPayment && updatePaymentMutation.mutate({ 
+                id: selectedPayment.id, 
+                amount: parseFloat(editAmount), 
+                method: editMethod 
+              })}
+            >
+              {updatePaymentMutation.isPending ? "Guardando..." : "Guardar Cambios"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Void Confirm Modal */}
+      <Dialog open={isVoidConfirmOpen} onOpenChange={setIsVoidConfirmOpen}>
+        <DialogContent className="max-w-md bg-noir-light border-rose-500/20 text-cream backdrop-blur-3xl rounded-[2.5rem] p-0 overflow-hidden shadow-3xl">
+          <div className="p-10 text-center space-y-6">
+            <div className="w-20 h-20 bg-rose-500/10 rounded-full flex items-center justify-center mx-auto border border-rose-500/20">
+              <Trash2 className="w-10 h-10 text-rose-500" />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-2xl font-serif font-bold">¿Anular transacción?</h3>
+              <p className="text-cream/50 text-sm leading-relaxed px-6">
+                Esta acción marcará el pago como <span className="text-rose-400 font-bold uppercase tracking-wider">Anulado</span>. El monto de <span className="text-white font-black">{selectedPayment && formatCurrency(selectedPayment.amount)}</span> se restará de los totales de facturación.
+              </p>
+            </div>
+            
+            <div className="bg-white/5 p-4 rounded-2xl border border-white/5 text-left">
+              <p className="text-[9px] uppercase font-black tracking-widest text-cream/30 mb-1">Cliente</p>
+              <p className="text-sm font-bold">{selectedPayment?.client_name}</p>
+            </div>
+          </div>
+          <DialogFooter className="p-8 pt-0 flex gap-3">
+            <Button variant="outline" className="flex-1 bg-transparent border-white/10 hover:bg-white/5 rounded-xl h-14" onClick={() => setIsVoidConfirmOpen(false)}>
+              No, Volver
+            </Button>
+            <Button 
+              className="flex-1 bg-rose-500 text-white hover:bg-rose-600 rounded-xl h-14 font-bold"
+              disabled={voidPaymentMutation.isPending}
+              onClick={() => selectedPayment && voidPaymentMutation.mutate(selectedPayment.id)}
+            >
+              {voidPaymentMutation.isPending ? "Anulando..." : "Sí, Anular Pago"}
+            </Button>
+          </DialogFooter>
+          <button 
+            onClick={() => setIsVoidConfirmOpen(false)}
+            className="absolute top-6 right-6 p-2 rounded-full hover:bg-white/5 text-cream/20 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -26,7 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 return res.status(403).json({ error: 'No tienes permiso para gestionar este servicio' });
             }
 
-            const { status, date_time, service_type, client_name, phone, selected_services, total_price, total_duration } = req.body;
+            const { status, date_time, service_type, client_name, phone, selected_services, total_price, total_duration, payment_method } = req.body;
 
             const updates: string[] = [];
             const values: (string | number | boolean | null)[] = [];
@@ -55,6 +55,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             if (total_duration !== undefined) {
                 updates.push(`total_duration = $${index++}`);
                 values.push(total_duration);
+            }
+            if (payment_method !== undefined) {
+                updates.push(`payment_method = $${index++}`);
+                values.push(payment_method);
             }
 
             let appointmentResult = null;
