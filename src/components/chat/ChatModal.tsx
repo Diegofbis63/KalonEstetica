@@ -16,9 +16,10 @@ interface ChatModalProps {
   onOpenChange: (open: boolean) => void;
   lead: Lead | null;
   initialMessage?: string;
+  initialMedia?: string;
 }
 
-export default function ChatModal({ open, onOpenChange, lead, initialMessage = "" }: ChatModalProps) {
+export default function ChatModal({ open, onOpenChange, lead, initialMessage = "", initialMedia = "" }: ChatModalProps) {
   const [replyMessage, setReplyMessage] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
@@ -26,14 +27,23 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
   const scrollRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
-  // Set initial message when modal opens with a specific message
+  // Handle initial message and media when modal opens
   useEffect(() => {
-    if (open && initialMessage) {
-      setReplyMessage(initialMessage);
-    } else if (open) {
-      setReplyMessage("");
+    if (open && lead) {
+      if (initialMedia) {
+        // Automatically send the image
+        sendReplyMutation.mutate({ 
+          leadId: lead.id, 
+          message: initialMessage, 
+          mediaData: initialMedia 
+        });
+      } else if (initialMessage) {
+        setReplyMessage(initialMessage);
+      } else {
+        setReplyMessage("");
+      }
     }
-  }, [open, initialMessage]);
+  }, [open, initialMessage, initialMedia, lead?.id]);
 
   const { data: chatHistoryData } = useQuery({
     queryKey: ['chat', lead?.id],

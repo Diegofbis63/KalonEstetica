@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { 
   TrendingUp, Calendar, DollarSign,
   ChevronDown, RefreshCw, Filter, MoreHorizontal,
@@ -8,6 +8,8 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useChat } from "@/context/ChatContext";
 import { Lead } from "@/types/chat";
+import { toPng } from 'html-to-image';
+import { ReceiptTemplate } from "@/components/income/ReceiptTemplate";
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, 
   Tooltip as RechartsTooltip, ResponsiveContainer 
@@ -85,6 +87,7 @@ export default function Incomes() {
   const [period, setPeriod] = useState<'hoy' | 'semana' | 'mes' | 'año' | 'personalizado'>('mes');
   const queryClient = useQueryClient();
   const { openChat } = useChat();
+  const receiptRef = useRef<HTMLDivElement>(null);
 
   // Modal States
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
@@ -176,22 +179,36 @@ export default function Incomes() {
     toast.success("Resumen copiado al portapapeles");
   };
 
-  const handleShareWhatsApp = (payment: Payment) => {
-    const text = `*COMPROBANTE DE PAGO - KÂLON*\n\n` +
-      `*Cliente:* ${payment.client_name}\n` +
-      `*Fecha:* ${format(new Date(payment.date), "dd/MM/yyyy HH:mm")}\n` +
-      `*Servicios:* ${payment.parent_service}\n` +
-      `*Monto:* ${formatCurrency(payment.amount)}\n` +
-      `*Método:* ${payment.payment_method}\n\n` +
-      `¡Gracias por elegir Kâlon Estética! ✨`;
-    
-    // Open internal chat
-    const lead: Lead = {
-      id: payment.lead_id,
-      client_name: payment.client_name
-    };
-    
-    openChat(lead, text);
+  const handleShareWhatsApp = async (payment: Payment, services?: any[]) => {
+    try {
+      // Set as selected to update the ReceiptTemplate hidden component
+      setSelectedPayment(payment);
+      
+      // Wait for React to render the template and for detailData to sync if possible
+      // If we don't have services, we'll use a 400ms delay to try and fetch them/render
+      await new Promise(resolve => setTimeout(resolve, services ? 100 : 400));
+      
+      if (!receiptRef.current) return;
+
+      const dataUrl = await toPng(receiptRef.current, { 
+        cacheBust: true,
+        backgroundColor: '#050505',
+        pixelRatio: 2, // High quality
+      });
+      
+      const text = `Hola ${payment.client_name}, te enviamos el comprobante de tu pago en KÂLON por el servicio de ${payment.parent_service}. ✨`;
+      
+      const lead: Lead = {
+        id: payment.lead_id,
+        client_name: payment.client_name
+      };
+      
+      openChat(lead, text, dataUrl);
+      toast.success("Comprobante visual generado correctamente");
+    } catch (err) {
+      console.error('Error generating receipt image:', err);
+      toast.error("Error al generar el comprobante visual");
+    }
   };
 
   return (
@@ -556,9 +573,13 @@ export default function Incomes() {
             <Button variant="outline" className="flex-1 bg-transparent border-white/10 hover:bg-white/5 rounded-xl h-12" onClick={() => setIsDetailModalOpen(false)}>
               Cerrar
             </Button>
-            <Button className="flex-1 bg-gold text-noir hover:bg-gold/80 rounded-xl h-12" onClick={() => selectedPayment && handleShareWhatsApp(selectedPayment)}>
-              Compartir Wsp
-            </Button>
+              <Button 
+                className="flex-1 bg-gold text-noir hover:bg-gold/80 rounded-xl h-12"
+                onClick={() => selectedPayment && handleShareWhatsApp(selectedPayment)}
+              >
+                <Share2 className="w-4 h-4 mr-2" />
+                Compartir Wsp
+              </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -664,6 +685,20 @@ export default function Incomes() {
           </button>
         </DialogContent>
       </Dialog>
+      {/* Hidden Receipt Template for Capture */}
+      {selectedPayment && (
+        <ReceiptTemplate 
+          ref={receiptRef}
+          payment={{
+            client_name: selectedPayment.client_name,
+            parent_service: selectedPayment.parent_service,
+            selected_services: selectedPayment.selected_services || [{ title: selectedPayment.parent_service, price: selectedPayment.amount }],
+            date: selectedPayment.date,
+            amount: selectedPayment.amount,
+            payment_method: selectedPayment.payment_method
+          }}
+        />
+      )}
     </div>
   );
 }

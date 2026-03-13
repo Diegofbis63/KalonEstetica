@@ -4,7 +4,7 @@ import { useChat } from "@/context/ChatContext";
 import ChatModal from "@/components/chat/ChatModal";
 
 export default function DashboardLayout() {
-  const { isChatModalOpen, setIsChatModalOpen, selectedLeadForChat, initialMessage } = useChat();
+  const { isChatModalOpen, setIsChatModalOpen, selectedLeadForChat, initialMessage, initialMedia } = useChat();
 
   return (
     <div className="flex min-h-screen bg-noir text-cream overflow-hidden">
@@ -14,6 +14,7 @@ export default function DashboardLayout() {
         onOpenChange={setIsChatModalOpen} 
         lead={selectedLeadForChat}
         initialMessage={initialMessage}
+        initialMedia={initialMedia}
       />
       
       {/* Fixed Sidebar */}
