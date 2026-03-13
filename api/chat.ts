@@ -78,9 +78,9 @@ async function extractState(
         const normalizedContent = normalizeText(msg.content);
 
         if (msg.role === 'assistant' || msg.role === 'bot') {
-            const botText = msg.content.toLowerCase();
-            if (botText.includes("elegir una categoria") || botText.includes("nuestras categorias")) currentBotAsked = 'category';
-            else if (botText.includes("servicios de") || botText.includes("estos son los tratamientos")) currentBotAsked = 'sub_service';
+            const botText = normalizeText(msg.content);
+            if (botText.includes("elige una categoria") || botText.includes("nuestras categorias")) currentBotAsked = 'category';
+            else if (botText.includes("servicios de") || botText.includes("tratamientos de") || botText.includes("estos son los tratamientos")) currentBotAsked = 'sub_service';
             else if (botText.includes("agregar algo mas") || botText.includes("avanzamos con el turno")) currentBotAsked = 'cart_confirmation';
             else if (botText.includes("tu nombre") || botText.includes("con quien tengo")) currentBotAsked = 'name';
             else if (botText.includes("whatsapp") || botText.includes("numero") || botText.includes("este numero")) currentBotAsked = 'phone';
@@ -94,7 +94,8 @@ async function extractState(
             else if (botText.includes("necesitamos una seña")) currentBotAsked = 'payment';
             
             services.forEach(s => {
-                if (botText.includes(s.title.toLowerCase()) && (botText.includes("agregue") || botText.includes("seleccionaste"))) {
+                const normalizedTitle = normalizeText(s.title);
+                if (botText.includes(normalizedTitle) && (botText.includes("agregue") || botText.includes("seleccionaste"))) {
                     if (!state.selectedServiceIds.includes(s.id)) state.selectedServiceIds.push(s.id);
                 }
             });
@@ -103,34 +104,40 @@ async function extractState(
 
         if (msg.role === 'user') {
             const isLastMessage = i === messages.length - 1;
-            const nlpResult = isLastMessage ? await nlp.process('es', msg.content) : null;
+            // Always process NLP for user messages to maintain state through history
+            const nlpResult = await nlp.process('es', msg.content);
             const intent = nlpResult?.intent;
             if (isLastMessage) state.lastIntent = intent;
 
+            // Global intent handling
             if (intent === 'saludo' || intent === 'pedir_turno_general' || intent === 'listar_servicios') {
-                if (state.stage === 'greeting') state.stage = 'parent_selection';
+                if (state.stage === 'greeting' || (isLastMessage && state.selectedServiceIds.length === 0)) {
+                    state.stage = 'parent_selection';
+                }
+            }
+
+            // Proactive category matching (even if bot didn't explicitly ask yet)
+            const proactiveCat = categories.find(c => normalizedContent.includes(normalizeText(c.name)));
+            if (proactiveCat && (state.stage === 'greeting' || state.stage === 'parent_selection' || currentBotAsked === 'category')) {
+                state.currentCategoryId = proactiveCat.id;
+                state.stage = 'sub_service_selection';
+                currentBotAsked = null; // Reset to avoid double matching
             }
 
             if (currentBotAsked === 'name' && !state.clientName) {
-                if (!/\d/.test(msg.content)) {
+                if (!/\d/.test(msg.content) || msg.content.length > 5) {
                     state.clientName = msg.content.split(/\s+/).slice(0, 4).join(' ');
                 }
             }
             if (currentBotAsked === 'phone' && !state.clientPhone) {
-                if (intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("este mismo")) {
+                if (intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("este mismo") || normalizedContent.includes("si")) {
                     state.clientPhone = 'CONFIRMED_CURRENT';
                 } else {
                     const phoneMatch = msg.content.match(/\d{8,15}/);
                     if (phoneMatch) state.clientPhone = phoneMatch[0];
                 }
             }
-            if (currentBotAsked === 'category') {
-                const foundCat = categories.find(c => normalizedContent.includes(normalizeText(c.name)));
-                if (foundCat) {
-                    state.currentCategoryId = foundCat.id;
-                    state.stage = 'sub_service_selection';
-                }
-            }
+            
             if (currentBotAsked === 'sub_service') {
                 const foundSvc = services.find(s => s.category_id === state.currentCategoryId && normalizedContent.includes(normalizeText(s.title)));
                 if (foundSvc) {
@@ -139,15 +146,17 @@ async function extractState(
                 }
             }
             if (currentBotAsked === 'cart_confirmation') {
-                if (intent === 'afirmacion_o_agregar_carrito') {
+                if (intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("si") || normalizedContent.includes("mas")) {
                     state.stage = 'parent_selection';
-                } else if (intent === 'negacion_o_cerrar_carrito' || intent === 'pedir_turno_general') {
+                } else if (intent === 'negacion_o_cerrar_carrito' || intent === 'pedir_turno_general' || normalizedContent.includes("no") || normalizedContent.includes("turno")) {
                     state.stage = 'name_collection';
                 }
             }
             if (currentBotAsked === 'availability') {
                 if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("otro") || normalizedContent.includes("no puedo")) {
                     if (state.pendingDate) state.rejectedDates.push(state.pendingDate);
+                } else if (intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("si") || normalizedContent.includes("bien") || normalizedContent.includes("dale")) {
+                    state.stage = 'payment_request';
                 }
             }
         }
@@ -308,13 +317,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const totalDur = services.filter(s => state.selectedServiceIds.includes(s.id)).reduce((a, b) => a + (Number(b.duration)||60), 0);
             const blocksNeeded = Math.ceil(totalDur / 60);
             
-            let searchDate = new Date();
-            searchDate.setDate(searchDate.getDate() + 1);
+            const baseDate = new Date();
+            baseDate.setDate(baseDate.getDate() + 1);
 
             for (let d = 0; d < 30 && foundSlots.length < 1; d++) {
-                if (searchDate.getDay() === 0) { searchDate.setDate(searchDate.getDate() + 1); continue; }
+                const searchDate = new Date(baseDate);
+                searchDate.setDate(baseDate.getDate() + d);
+                
+                if (searchDate.getDay() === 0) continue; 
                 const dateStr = searchDate.toISOString().split('T')[0];
-                if (state.rejectedDates.includes(dateStr)) { searchDate.setDate(searchDate.getDate() + 1); continue; }
+                if (state.rejectedDates.includes(dateStr)) continue;
 
                 const taken = await sql`SELECT date_time FROM appointments WHERE date_time::date = ${dateStr} AND status != 'canceled'`;
                 const takenHours = new Set(taken.map(r => new Date(r.date_time).getUTCHours()));
@@ -329,7 +341,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         break;
                     }
                 }
-                searchDate.setDate(searchDate.getDate() + 1);
             }
         }
 
