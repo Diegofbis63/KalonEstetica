@@ -1,0 +1,165 @@
+{
+  "name": "KalonBot_Pro",
+  "locale": "es",
+  "data": [
+    {
+      "intent": "saludo",
+      "utterances": [
+        "hola",
+        "holis",
+        "buenas",
+        "buen dia",
+        "buenas tardes",
+        "buenas noches",
+        "que tal",
+        "hola como estas",
+        "hola, tienen turnos?",
+        "holi",
+        "alo",
+        "buenasss",
+        "holaa"
+      ]
+    },
+    {
+      "intent": "pedir_turno_general",
+      "utterances": [
+        "quiero sacar un turno",
+        "necesito un turno",
+        "quería agendar una cita",
+        "tendrás un lugarcito",
+        "quiero reservar",
+        "para pedir turno",
+        "me das un turno",
+        "tienen disponibilidad",
+        "quiero ir",
+        "tienen lugar para hoy",
+        "para la semana que viene",
+        "queria ver si tenian lugar",
+        "como hago para sacar turno"
+      ]
+    },
+    {
+      "intent": "listar_servicios",
+      "utterances": [
+        "que servicios tienen",
+        "pasame la lista",
+        "que tratamientos hacen",
+        "cuales son los servicios",
+        "que opciones hay",
+        "que hacen",
+        "mostrame que hacen",
+        "me pasas el menu de servicios",
+        "info de servicios",
+        "que cosas se pueden hacer ahi",
+        "cuales son los tratamientos"
+      ]
+    },
+    {
+      "intent": "afirmacion_o_agregar_carrito",
+      "utterances": [
+        "si",
+        "dale",
+        "de una",
+        "perfecto",
+        "buenisimo",
+        "obvio",
+        "genial",
+        "avancemos",
+        "si, quiero eso",
+        "joya",
+        "mandale",
+        "sisi",
+        "se",
+        "si, agreguemos",
+        "quiero sumar otro",
+        "me gustaria agregar"
+      ]
+    },
+    {
+      "intent": "negacion_o_cerrar_carrito",
+      "utterances": [
+        "no",
+        "no gracias",
+        "solo eso",
+        "nada mas",
+        "cerremos ahi",
+        "eso es todo",
+        "listo",
+        "con eso estamos",
+        "ya esta",
+        "no quiero nada mas",
+        "solo me hago eso",
+        "cerremos",
+        "con eso es suficiente",
+        "pasame el total"
+      ]
+    },
+    {
+      "intent": "preguntar_precio",
+      "utterances": [
+        "cuanto sale",
+        "que precio tiene",
+        "cuanto cuesta",
+        "cual es el valor",
+        "cuanto me sale",
+        "precios porfa",
+        "me pasas los precios",
+        "tienen lista de precios",
+        "cuanto cobran",
+        "es muy caro?"
+      ]
+    },
+    {
+      "intent": "preguntar_ubicacion",
+      "utterances": [
+        "donde estan",
+        "por donde quedan",
+        "cual es la direccion",
+        "en que zona estan",
+        "estan en el centro?",
+        "me pasas la dire",
+        "donde atienden",
+        "como llego al local",
+        "estan en cordoba capital?"
+      ]
+    },
+    {
+      "intent": "preguntar_horarios",
+      "utterances": [
+        "en que horario atienden",
+        "a que hora abren",
+        "hasta que hora estan",
+        "abren los sabados?",
+        "horarios por favor",
+        "trabajan de tarde?",
+        "que dias atienden"
+      ]
+    },
+    {
+      "intent": "enviar_comprobante_texto",
+      "utterances": [
+        "ya pague",
+        "ahi te pase el comprobante",
+        "te mande la captura",
+        "ya hice la transferencia",
+        "listo el pago",
+        "te transferi",
+        "ahi te paso el ticket",
+        "listo la seña",
+        "ya mande la plata"
+      ]
+    },
+    {
+      "intent": "hablar_con_humano",
+      "utterances": [
+        "quiero hablar con una persona",
+        "pasame con alguien",
+        "no quiero hablar con un bot",
+        "hay alguien ahi",
+        "atencion al cliente",
+        "me podes pasar con un humano",
+        "quiero consultar algo especifico"
+      ]
+    }
+  ]
+}
