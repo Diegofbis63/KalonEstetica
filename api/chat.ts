@@ -1,5 +1,3 @@
-export const config = { runtime: 'nodejs' };
-
 import { neon } from '@neondatabase/serverless';
 import fs from 'fs';
 import path from 'path';
@@ -8,10 +6,8 @@ import path from 'path';
 import pkgNlp from 'node-nlp';
 const { NlpManager } = pkgNlp;
 
-const corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "authorization, content-type",
-};
+// Vercel Types
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 // ─── Singleton NLP Manager ───────────────────────────────────────────────────
 let manager: any = null;
@@ -19,13 +15,11 @@ async function getNlpManager() {
     if (manager) return manager;
     manager = new NlpManager({ languages: ['es'], autoSave: false, forceNER: false, nlp: { useNativeSentiment: false } });
     
-    // Optimized: Use pre-trained model to avoid timeouts on serverless cold starts
     const modelPath = path.join(process.cwd(), 'Entrenamiento NLP', 'model-es.json');
     if (fs.existsSync(modelPath)) {
         const data = fs.readFileSync(modelPath, 'utf8');
         manager.import(data);
     } else {
-        // Fallback for local development if model is missing
         const corpusPath = path.join(process.cwd(), 'Entrenamiento NLP', 'corpus-es.json');
         if (fs.existsSync(corpusPath)) {
             const corpus = JSON.parse(fs.readFileSync(corpusPath, 'utf8'));
@@ -36,31 +30,8 @@ async function getNlpManager() {
     return manager;
 }
 
-// ─── Typing simulation helper ────────────────────────────────────────────────
-function sseStream(text: string): Response {
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-        async start(controller) {
-            const words = text.split(' ');
-            for (let i = 0; i < words.length; i++) {
-                const chunk = (i === 0 ? '' : ' ') + words[i];
-                const data = JSON.stringify({ choices: [{ delta: { content: chunk } }] });
-                controller.enqueue(encoder.encode(`data: ${data}\n\n`));
-                // Variable delay for human feel
-                await new Promise(r => setTimeout(r, 20 + Math.random() * 40));
-            }
-            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-            controller.close();
-        }
-    });
-    return new Response(stream, {
-        headers: { ...corsHeaders, 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' }
-    });
-}
-
 const normalizeText = (text: string) => text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s]/g, "");
 
-// ─── ConvState Interface ─────────────────────────────────────────────────────
 interface ConvState {
     clientName: string | null;
     clientPhone: string | null;
@@ -76,7 +47,6 @@ interface ConvState {
     isBotEnabled?: boolean;
 }
 
-// ─── State Extraction Logic ──────────────────────────────────────────────────
 async function extractState(
     messages: Array<{ role: string; content: string }>, 
     categories: any[], 
@@ -104,6 +74,7 @@ async function extractState(
 
     for (let i = 0; i < messages.length; i++) {
         const msg = messages[i];
+        if (!msg.content) continue;
         const normalizedContent = normalizeText(msg.content);
 
         if (msg.role === 'assistant' || msg.role === 'bot') {
@@ -122,13 +93,11 @@ async function extractState(
             }
             else if (botText.includes("necesitamos una seña")) currentBotAsked = 'payment';
             
-            // Re-detect selected services from assistant confirmations to keep state sync
             services.forEach(s => {
                 if (botText.includes(s.title.toLowerCase()) && (botText.includes("agregue") || botText.includes("seleccionaste"))) {
                     if (!state.selectedServiceIds.includes(s.id)) state.selectedServiceIds.push(s.id);
                 }
             });
-
             continue;
         }
 
@@ -138,12 +107,10 @@ async function extractState(
             const intent = nlpResult?.intent;
             if (isLastMessage) state.lastIntent = intent;
 
-            // 1. Process intents for specific transitions
             if (intent === 'saludo' || intent === 'pedir_turno_general' || intent === 'listar_servicios') {
                 if (state.stage === 'greeting') state.stage = 'parent_selection';
             }
 
-            // 2. Data collection (Name/Phone)
             if (currentBotAsked === 'name' && !state.clientName) {
                 if (!/\d/.test(msg.content)) {
                     state.clientName = msg.content.split(/\s+/).slice(0, 4).join(' ');
@@ -157,8 +124,6 @@ async function extractState(
                     if (phoneMatch) state.clientPhone = phoneMatch[0];
                 }
             }
-
-            // 3. Category/Service Selection
             if (currentBotAsked === 'category') {
                 const foundCat = categories.find(c => normalizedContent.includes(normalizeText(c.name)));
                 if (foundCat) {
@@ -173,8 +138,6 @@ async function extractState(
                     state.stage = 'cart_confirmation';
                 }
             }
-
-            // 4. Cart Logic
             if (currentBotAsked === 'cart_confirmation') {
                 if (intent === 'afirmacion_o_agregar_carrito') {
                     state.stage = 'parent_selection';
@@ -182,8 +145,6 @@ async function extractState(
                     state.stage = 'name_collection';
                 }
             }
-
-            // 5. Scheduling Rejections
             if (currentBotAsked === 'availability') {
                 if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("otro") || normalizedContent.includes("no puedo")) {
                     if (state.pendingDate) state.rejectedDates.push(state.pendingDate);
@@ -192,7 +153,6 @@ async function extractState(
         }
     }
 
-    // Final Stage Refinement
     if (state.selectedServiceIds.length > 0) {
         if (!state.clientName) state.stage = 'name_collection';
         else if (!state.clientPhone) state.stage = 'phone_collection';
@@ -203,7 +163,6 @@ async function extractState(
     return state;
 }
 
-// ─── Response Generation Logic ───────────────────────────────────────────────
 function generateResponse(
     state: ConvState,
     categories: any[],
@@ -214,7 +173,6 @@ function generateResponse(
 ): string {
     const welcome = isFromWhatsApp ? "¡Hola! Bienvenido a *KÂLON Estética*. ✨ " : "";
     
-    // Check for receipt in waiting_for_receipt stage
     if (state.stage === 'waiting_for_receipt' && hasMediaInLastMsg) {
         return "¡Excelente! Recibimos tu comprobante. ✅ Tu turno quedó confirmado en nuestro sistema. ¡Te esperamos en KÂLON para brindarte una experiencia única! ✨";
     }
@@ -254,7 +212,7 @@ function generateResponse(
         }
         case 'payment_request': {
             const selectedSvc = services.filter(s => state.selectedServiceIds.includes(s.id));
-            const totalPrice = selectedSvc.reduce((a, b) => a + b.price, 0);
+            const totalPrice = selectedSvc.reduce((a, b) => a + Number(b.price), 0);
             const totalDur = selectedSvc.reduce((a, b) => a + (Number(b.duration) || 60), 0);
             const deposit = totalPrice * 0.5;
             const hours = Math.floor(totalDur / 60);
@@ -274,21 +232,25 @@ function formatForWhatsApp(text: string): string {
     return text.replace(/\*\*(.*?)\*\*/g, '*$1*').trim();
 }
 
-// ─── Main Handler ────────────────────────────────────────────────────────────
-export default async function handler(req: Request) {
-    if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+    // CORS
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    
+    if (req.method === 'OPTIONS') return res.status(200).end();
 
     const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
     const sql = neon(connectionString!);
     const DEFAULT_ORG_ID = '00000000-0000-0000-0000-000000000000';
 
     try {
-        const body = await req.json();
+        const body = req.body || {};
         const incomingMessage = body.message || "";
-        const userId = body.userId ? body.userId.split('@')[0].replace(/\D/g, '') : null;
+        const userIdRaw = body.userId || "";
+        const userId = userIdRaw ? userIdRaw.split('@')[0].replace(/\D/g, '') : null;
         let incomingMediaUrl = body.mediaUrl || null;
         
-        // Attachment detection
         if (!incomingMediaUrl && incomingMessage.includes('📸 [Imagen enviada]')) {
             const urlMatch = incomingMessage.match(/\((https?:\/\/[^)]+)\)/);
             if (urlMatch) incomingMediaUrl = urlMatch[1];
@@ -297,9 +259,9 @@ export default async function handler(req: Request) {
         const categories = await sql`SELECT id, name FROM categories WHERE active = true ORDER BY sort_order ASC`;
         const services = await sql`SELECT id, category_id, title, price, duration FROM services WHERE active = true ORDER BY sort_order ASC`;
         
-        // Fetch Lead if exists
         let leadId = null;
         let isBotEnabled = true;
+
         if (userId) {
             const phone = userId.replace(/\D/g, '');
             const leadSearch = await sql`SELECT id, is_bot_enabled FROM leads WHERE regexp_replace(contact_info->>'phone', '\\D', '', 'g') LIKE ${'%' + phone} LIMIT 1` as any[];
@@ -309,7 +271,6 @@ export default async function handler(req: Request) {
             }
         }
 
-        // Fetch history if from WhatsApp
         let messages = body.messages || [];
         if (userId && !messages.length && incomingMessage) {
             if (leadId) {
@@ -325,33 +286,30 @@ export default async function handler(req: Request) {
 
         const state = await extractState(messages, categories, services, isBotEnabled);
         
-        // Log user message to DB
         if (leadId) {
             await sql`INSERT INTO chat_logs (lead_id, role, content, media_url, sent_to_whatsapp) 
                       VALUES (${leadId}, 'user', ${incomingMessage}, ${incomingMediaUrl}, ${!!userId})`;
-        } else if (userId || (body.clientPhone)) {
+        } else if (userId || body.clientPhone) {
              const phone = (userId || body.clientPhone || '').replace(/\D/g, '');
-             const res = await sql`INSERT INTO leads (organization_id, client_name, contact_info, status, intent_score) 
+             const leadInsert = await sql`INSERT INTO leads (organization_id, client_name, contact_info, status, intent_score) 
                                    VALUES (${DEFAULT_ORG_ID}, 'Cliente', ${JSON.stringify({ phone: phone, source: userId ? 'whatsapp' : 'web' })}, 'qualified', 70) 
                                    RETURNING id` as any[];
-             leadId = res[0].id;
+             leadId = leadInsert[0].id;
              await sql`INSERT INTO chat_logs (lead_id, role, content, media_url, sent_to_whatsapp) 
                        VALUES (${leadId}, 'user', ${incomingMessage}, ${incomingMediaUrl}, ${!!userId})`;
         }
 
-        // If BoT is disabled, stop here (but we logged the user message)
-        if (!state.isBotEnabled) {
-            return new Response(JSON.stringify({ status: 'bot_disabled' }), { headers: corsHeaders });
+        if (!isBotEnabled) {
+            return res.status(200).json({ status: 'bot_disabled' });
         }
 
-        // Availability Logic with Multi-service Duration
         const foundSlots: any[] = [];
         if (state.stage === 'availability_proposal' && state.selectedServiceIds.length > 0) {
             const totalDur = services.filter(s => state.selectedServiceIds.includes(s.id)).reduce((a, b) => a + (Number(b.duration)||60), 0);
             const blocksNeeded = Math.ceil(totalDur / 60);
             
             let searchDate = new Date();
-            searchDate.setDate(searchDate.getDate() + 1); // Start tomorrow
+            searchDate.setDate(searchDate.getDate() + 1);
 
             for (let d = 0; d < 30 && foundSlots.length < 1; d++) {
                 if (searchDate.getDay() === 0) { searchDate.setDate(searchDate.getDate() + 1); continue; }
@@ -375,35 +333,48 @@ export default async function handler(req: Request) {
             }
         }
 
-        // Automatic receipt handling
-        let isFinalConfirmation = false;
         if ((state.stage === 'waiting_for_receipt' || state.stage === 'payment_request') && (incomingMediaUrl || body.mediaData)) {
             if (leadId) {
                 const svcTitles = services.filter(s => state.selectedServiceIds.includes(s.id)).map(s => s.title).join(' + ');
                 const dateTime = `${state.pendingDate}T${state.pendingTime}:00Z`;
-                
                 await sql`INSERT INTO appointments (lead_id, organization_id, date_time, service_type, status) 
                           VALUES (${leadId}, ${DEFAULT_ORG_ID}, ${dateTime}, ${svcTitles}, 'confirmed')`;
-                isFinalConfirmation = true;
                 state.stage = 'done';
             }
         }
 
         const responseText = generateResponse(state, categories, services, foundSlots, !!userId, !!(incomingMediaUrl || body.mediaData));
         
-        // Log bot response to DB
         if (leadId) {
             await sql`INSERT INTO chat_logs (lead_id, role, content, sent_to_whatsapp) 
                       VALUES (${leadId}, 'bot', ${responseText}, ${!!userId})`;
         }
 
         if (userId) {
-            return new Response(JSON.stringify({ responseText: formatForWhatsApp(responseText), stage: state.stage }), { headers: corsHeaders });
+            return res.status(200).json({ 
+                responseText: formatForWhatsApp(responseText), 
+                stage: state.stage 
+            });
         } else {
-            return sseStream(responseText);
+            // Web SSE
+            res.setHeader('Content-Type', 'text/event-stream');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('Connection', 'keep-alive');
+            
+            const words = responseText.split(' ');
+            for (let i = 0; i < words.length; i++) {
+                const chunk = (i === 0 ? '' : ' ') + words[i];
+                const data = JSON.stringify({ choices: [{ delta: { content: chunk } }] });
+                res.write(`data: ${data}\n\n`);
+                await new Promise(r => setTimeout(r, 30 + Math.random() * 30));
+            }
+            res.write('data: [DONE]\n\n');
+            res.end();
         }
     } catch (e: any) {
-        console.error(e);
-        return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: corsHeaders });
+        console.error("Chat API Error:", e);
+        if (!res.writableEnded) {
+            res.status(500).json({ error: e.message });
+        }
     }
 }
