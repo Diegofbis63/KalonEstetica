@@ -32,6 +32,31 @@ async function getNlpManager() {
 
 const normalizeText = (text: string) => text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s]/g, "");
 
+// Simple fuzzy matching helper
+function getSimilarity(s1: string, s2: string): number {
+    const longer = s1.length > s2.length ? s1 : s2;
+    const shorter = s1.length > s2.length ? s2 : s1;
+    if (longer.length === 0) return 1.0;
+    
+    // Levenshtein
+    const costs: number[] = [];
+    for (let i = 0; i <= s1.length; i++) {
+        let lastValue = i;
+        for (let j = 0; j <= s2.length; j++) {
+            if (i === 0) costs[j] = j;
+            else if (j > 0) {
+                let newValue = costs[j - 1];
+                if (s1.charAt(i - 1) !== s2.charAt(j - 1))
+                    newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+                costs[j - 1] = lastValue;
+                lastValue = newValue;
+            }
+        }
+        if (i > 0) costs[s2.length] = lastValue;
+    }
+    return (longer.length - costs[s2.length]) / longer.length;
+}
+
 interface ConvState {
     clientName: string | null;
     clientPhone: string | null;
@@ -151,12 +176,18 @@ async function extractState(
             }
             
             if (currentBotAsked === 'sub_service') {
-                const inputParts = normalizedContent.split(/[\s,y+]+/).filter(p => p.length > 3);
+                const inputParts = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 3);
                 const foundSvcs = services.filter(s => {
                     if (s.category_id !== state.currentCategoryId) return false;
                     const nt = normalizeText(s.title);
                     if (normalizedContent.includes(nt)) return true;
-                    return inputParts.some(part => nt.includes(part));
+                    // Check similarity for each word in input
+                    return inputParts.some(part => {
+                        if (nt.includes(part)) return true;
+                        // Fuzzy check for each word in the title
+                        const titleParts = nt.split(/\s+/);
+                        return titleParts.some(tp => tp.length > 3 && getSimilarity(part, tp) > 0.8);
+                    });
                 });
 
                 if (foundSvcs.length > 0) {
@@ -196,11 +227,12 @@ async function extractState(
         }
     }
 
-    if (state.selectedServiceIds.length > 0) {
-        if (!state.clientName) state.stage = 'name_collection';
-        else if (!state.clientPhone) state.stage = 'phone_collection';
-        else if (!state.pendingDate) state.stage = 'availability_proposal';
-        else if (state.stage === 'availability_proposal' && state.lastIntent === 'afirmacion_o_agregar_carrito') state.stage = 'payment_request';
+    if (state.selectedServiceIds.length > 0 && state.pendingCategoryIds.length === 0) {
+        if (state.stage !== 'availability_proposal' && state.stage !== 'payment_request' && state.stage !== 'done' && state.stage !== 'waiting_for_receipt') {
+            if (!state.clientName) state.stage = 'name_collection';
+            else if (!state.clientPhone) state.stage = 'phone_collection';
+            else if (!state.pendingDate) state.stage = 'availability_proposal';
+        }
     }
 
     return state;
