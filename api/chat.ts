@@ -92,9 +92,53 @@ interface ConvState {
     pendingTime: string | null;
     rejectedDates: string[];
     requestedTime: string | null;
+    requestedDate: string | null;
     requestedAllOptions: boolean;
     lastIntent?: string;
     isBotEnabled?: boolean;
+}
+
+function formatDateHuman(dateStr: string): string {
+    const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+    const [y, m, d] = dateStr.split("-").map(Number);
+    return `${d} ${months[m - 1]} ${y}`;
+}
+
+function formatDurationHuman(minutes: number): string {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hours === 0) return `${mins}m`;
+    if (mins === 0) return `${hours}hs`;
+    return `${hours}:${mins.toString().padStart(2, '0')}hs`;
+}
+
+function parseRelativeDate(input: string, referenceDate: Date): string | null {
+    const days: Record<string, number> = {
+        "lunes": 1, "martes": 2, "miercoles": 3, "jueves": 4, "viernes": 5, "sabado": 6, "domingo": 0
+    };
+    const tokens = normalizeText(input).split(/\s+/);
+    
+    // Check for day names
+    for (const [name, val] of Object.entries(days)) {
+        if (tokens.includes(name)) {
+            const result = new Date(referenceDate);
+            const currentDay = result.getDay();
+            let diff = val - currentDay;
+            if (diff <= 0) diff += 7; // Next occurrence
+            result.setDate(result.getDate() + diff);
+            return result.toISOString().split('T')[0];
+        }
+    }
+    
+    // Check for "hoy", "manana"
+    if (tokens.includes("hoy")) return referenceDate.toISOString().split('T')[0];
+    if (tokens.includes("manana")) {
+        const d = new Date(referenceDate);
+        d.setDate(d.getDate() + 1);
+        return d.toISOString().split('T')[0];
+    }
+    
+    return null;
 }
 
 async function extractState(
@@ -112,11 +156,14 @@ async function extractState(
         stage: 'greeting',
         pendingDate: null,
         pendingTime: null,
-        rejectedDates: [],
+        requestedDate: null,
         requestedTime: null,
+        rejectedDates: [],
         requestedAllOptions: false,
         isBotEnabled: defaultIsBotEnabled
     };
+
+    const today = new Date("2026-03-14T12:00:00Z"); // Fix reference per user metadata
 
     if (messages.length === 0) return state;
 
@@ -136,8 +183,9 @@ async function extractState(
             else if (botText.includes("agregar algo mas") || botText.includes("avanzamos con el turno")) currentBotAsked = 'cart_confirmation';
             else if (botText.includes("tu nombre") || botText.includes("con quien tengo")) currentBotAsked = 'name';
             else if (botText.includes("whatsapp") || botText.includes("numero") || botText.includes("este numero")) currentBotAsked = 'phone';
-            else if (botText.includes("proximo horario") || botText.includes("confirmar el turno")) {
+            else if (botText.includes("proximo horario") || botText.includes("confirmar el turno") || botText.includes("disponibilidad")) {
                 currentBotAsked = 'availability';
+                // Detect date/time from bot's last proposal
                 const dateMatch = msg.content.match(/(\d{4})-(\d{2})-(\d{2})/);
                 const timeMatch = msg.content.match(/(\d{1,2}):(\d{2})/);
                 if (dateMatch) state.pendingDate = dateMatch[0];
@@ -156,7 +204,6 @@ async function extractState(
 
         if (msg.role === 'user') {
             const isLastMessage = i === messages.length - 1;
-            // Always process NLP for user messages to maintain state through history
             const nlpResult = await nlp.process('es', msg.content);
             const intent = nlpResult?.intent;
             if (isLastMessage) state.lastIntent = intent;
@@ -168,8 +215,20 @@ async function extractState(
                 }
             }
 
+            // --- Relative Date & Time Detection ---
+            const relDate = parseRelativeDate(msg.content, today);
+            if (relDate) state.requestedDate = relDate;
+            
+            const timeMatch = msg.content.match(/(\d{1,2})(:|\s?hs?|y\s)(\d{2})?/i);
+            if (timeMatch) {
+                let h = parseInt(timeMatch[1]);
+                const m = timeMatch[3] ? parseInt(timeMatch[3]) : 0;
+                // Basic PM conversion: if user says "4" and it's scheduling context, assume 16 unless they say "mañana"
+                if (h < 9) h += 12;
+                state.requestedTime = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+            }
+
             // --- Multi-Category Detection ---
-            // Keep track of order found in text
             const catsInFoundOrder = categories
                 .filter(c => normalizedContent.includes(normalizeText(c.name)))
                 .map(c => ({ id: c.id, pos: normalizedContent.indexOf(normalizeText(c.name)) }))
@@ -208,10 +267,8 @@ async function extractState(
                     if (s.category_id !== state.currentCategoryId) return false;
                     const nt = normalizeText(s.title);
                     if (normalizedContent.includes(nt)) return true;
-                    // Check similarity for each word in input
                     return inputParts.some(part => {
                         if (nt.includes(part)) return true;
-                        // Fuzzy check for each word in the title
                         const titleParts = nt.split(/\s+/);
                         return titleParts.some(tp => tp.length > 3 && getSimilarity(part, tp) > 0.8);
                     });
@@ -239,7 +296,6 @@ async function extractState(
             }
             if (currentBotAsked === 'cart_review') {
                 const isRemoval = normalizedContent.includes("quitar") || normalizedContent.includes("sacar") || normalizedContent.includes("eliminar") || normalizedContent.includes("borrar") || normalizedContent.includes("menos") || normalizedContent.includes("saca");
-                const isAddition = normalizedContent.includes("agregar") || normalizedContent.includes("sumar") || normalizedContent.includes("tambien") || normalizedContent.includes("mas");
                 
                 if (isRemoval) {
                     const inputParts = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 3);
@@ -259,8 +315,7 @@ async function extractState(
                         state.stage = state.selectedServiceIds.length > 0 ? 'cart_review' : 'parent_selection';
                     }
                 } else {
-                    // Check if they mentioned a NEW service or category to add
-                    const foundSvcs = services.filter(s => {
+                    const foundSvcsToAdd = services.filter(s => {
                         const nt = normalizeText(s.title);
                         if (normalizedContent.includes(nt)) return true;
                         const inputParts = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 3);
@@ -274,8 +329,8 @@ async function extractState(
                         .filter(c => normalizedContent.includes(normalizeText(c.name)))
                         .map(c => c.id);
 
-                    if (foundSvcs.length > 0 || foundCatIds.length > 0) {
-                        foundSvcs.forEach(fs => {
+                    if (foundSvcsToAdd.length > 0 || foundCatIds.length > 0) {
+                        foundSvcsToAdd.forEach(fs => {
                             if (!state.selectedServiceIds.includes(fs.id)) state.selectedServiceIds.push(fs.id);
                         });
                         foundCatIds.forEach(cid => {
@@ -284,7 +339,7 @@ async function extractState(
                             }
                         });
                         
-                        if (state.pendingCategoryIds.length > 0 && !foundSvcs.length) {
+                        if (state.pendingCategoryIds.length > 0 && foundSvcsToAdd.length === 0) {
                             state.currentCategoryId = state.pendingCategoryIds.shift()!;
                             state.stage = 'sub_service_selection';
                         } else {
@@ -305,8 +360,9 @@ async function extractState(
                 }
             }
             if (currentBotAsked === 'availability') {
-                if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("otro") || normalizedContent.includes("no puedo")) {
-                    if (state.pendingDate) state.rejectedDates.push(state.pendingDate);
+                if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("otro") || normalizedContent.includes("no puedo") || normalizedContent.includes("que mas hay")) {
+                    if (state.pendingDate) state.rejectedDates.push(`${state.pendingDate} ${state.pendingTime}`);
+                    state.requestedAllOptions = normalizedContent.includes("otro") || normalizedContent.includes("que mas");
                 } else if (intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("si") || normalizedContent.includes("bien") || normalizedContent.includes("dale")) {
                     state.stage = 'payment_request';
                 }
@@ -365,9 +421,7 @@ function generateResponse(
             const list = selectedServices.map(s => `• *${s.title}* ($${s.price}) - ${s.duration} min`).join('\n');
             const totalPrice = selectedServices.reduce((a, b) => a + Number(b.price), 0);
             const totalDur = selectedServices.reduce((a, b) => a + (Number(b.duration) || 60), 0);
-            const hours = Math.floor(totalDur / 60);
-            const mins = totalDur % 60;
-            const durText = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+            const durText = formatDurationHuman(totalDur);
 
             return `¡Excelente! 🎉 Revisemos tu pedido para que esté todo perfecto:\n\n${list}\n\n💰 *Total:* $${totalPrice}\n⏳ *Duración estimada:* ${durText}\n\n¿Es correcto o te gustaría agregar o modificar algo?`;
         }
@@ -379,9 +433,7 @@ function generateResponse(
             const selectedServices = services.filter(s => state.selectedServiceIds.includes(s.id));
             const totalPrice = selectedServices.reduce((a, b) => a + Number(b.price), 0);
             const totalDur = selectedServices.reduce((a, b) => a + (Number(b.duration) || 60), 0);
-            const hours = Math.floor(totalDur / 60);
-            const mins = totalDur % 60;
-            const durText = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+            const durText = formatDurationHuman(totalDur);
             
             return `¡Perfecto! Todo confirmado. ✨ Entonces, el total es de *$${totalPrice}* por una sesión de *${durText}*.\n\nPara ir agendándote, ¿cómo es tu nombre completo? 😊`;
         }
@@ -394,9 +446,16 @@ function generateResponse(
         }
         case 'availability_proposal': {
             if (availableSlots.length > 0) {
-                const slot = availableSlots[0];
                 const totalDur = services.filter(s => state.selectedServiceIds.includes(s.id)).reduce((a, b) => a + (Number(b.duration)||60), 0);
-                return `¡Buenas noticias! ✨ Tengo disponibilidad para tus tratamientos (Duración total: *${totalDur} min*) el día *${slot.date}* a las *${slot.time}hs*. 🗓️\n\n¿Te queda bien este horario o preferís que busquemos otro?`;
+                const durText = formatDurationHuman(totalDur);
+                
+                if (availableSlots.length === 1) {
+                    const slot = availableSlots[0];
+                    return `¡Buenas noticias! ✨ Tengo disponibilidad para tus tratamientos (Duración total: *${durText}*) el día *${formatDateHuman(slot.date)}* a las *${slot.time}hs*. 🗓️\n\n¿Te queda bien este horario o preferís que busquemos otro?`;
+                } else {
+                    const options = availableSlots.map(s => `• *${formatDateHuman(s.date)}* a las *${s.time}hs*`).join('\n');
+                    return `¡Claro! 😊 Para que elijas tranquila, acá tenés las opciones más cercanas disponibles (Duración: *${durText}*):\n\n${options}\n\n¿Cuál de estos te gusta más?`;
+                }
             }
             return "Uy, parece que tengo la agenda súper llena para esa duración total esta semana. 🗓️ ¿Querés que busquemos para la semana que viene así te aseguro un lugar? 😊";
         }
@@ -405,11 +464,9 @@ function generateResponse(
             const totalPrice = selectedSvc.reduce((a, b) => a + Number(b.price), 0);
             const totalDur = selectedSvc.reduce((a, b) => a + (Number(b.duration) || 60), 0);
             const deposit = totalPrice * 0.5;
-            const hours = Math.floor(totalDur / 60);
-            const mins = totalDur % 60;
-            const durText = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+            const durText = formatDurationHuman(totalDur);
 
-            return `¡Todo listo! ✨ Tu sesión va a durar aproximadamente *${durText}* y el valor total es de *$${totalPrice}*.\n\nPara confirmar definitivamente tu lugarcito el *${state.pendingDate}* a las *${state.pendingTime}hs*, necesitamos una seña del 50% (*$${deposit.toFixed(0)}*).\n\nTransferí al alias: *KALON.ESTETICA.OK* y mandame la fotito del comprobante por acá. ¡Ya falta nada! 📸`;
+            return `¡Todo listo! ✨ Tu sesión va a durar aproximadamente *${durText}* y el valor total es de *$${totalPrice}*.\n\nPara confirmar definitivamente tu lugarcito el *${formatDateHuman(state.pendingDate || '')}* a las *${state.pendingTime}hs*, necesitamos una seña del 50% (*$${deposit.toFixed(0)}*).\n\nTransferí al alias: *KALON.ESTETICA.OK* y mandame la fotito del comprobante por acá. ¡Ya falta nada! 📸`;
         }
         case 'waiting_for_receipt':
             return "Quedo atenta a tu comprobante de transferencia para terminar de confirmar tu turno. ¡Cualquier duda decime! 😊";
@@ -496,30 +553,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const foundSlots: any[] = [];
         if (state.stage === 'availability_proposal' && state.selectedServiceIds.length > 0) {
             const totalDur = services.filter(s => state.selectedServiceIds.includes(s.id)).reduce((a, b) => a + (Number(b.duration)||60), 0);
-            const blocksNeeded = Math.ceil(totalDur / 60);
             
-            const baseDate = new Date();
-            baseDate.setDate(baseDate.getDate() + 1);
+            const baseDate = state.requestedDate ? new Date(state.requestedDate + "T12:00:00Z") : new Date();
+            if (!state.requestedDate) {
+                baseDate.setDate(new Date().getDate() + 1);
+            }
 
-            for (let d = 0; d < 30 && foundSlots.length < 1; d++) {
+            const limit = state.requestedAllOptions ? 3 : 1;
+
+            for (let d = 0; d < 30 && foundSlots.length < limit; d++) {
                 const searchDate = new Date(baseDate);
                 searchDate.setDate(baseDate.getDate() + d);
                 
                 if (searchDate.getDay() === 0) continue; 
                 const dateStr = searchDate.toISOString().split('T')[0];
-                if (state.rejectedDates.includes(dateStr)) continue;
 
                 const taken = await sql`SELECT date_time FROM appointments WHERE date_time::date = ${dateStr} AND status != 'canceled'`;
-                // Precise slot searching
                 const takenIntervals = taken.map(r => {
                     const start = new Date(r.date_time);
-                    // Find actual appointment duration if available, else assume 60m
                     return { start: start.getUTCHours() * 60 + start.getUTCMinutes(), end: (start.getUTCHours() * 60 + start.getUTCMinutes()) + 60 };
                 });
 
-                for (let totalMin = 9 * 60; totalMin <= 20 * 60 - totalDur; totalMin += 30) {
+                let startSearch = 9 * 60;
+                if (state.requestedTime && d === 0) {
+                    const [rh, rm] = state.requestedTime.split(':').map(Number);
+                    startSearch = Math.max(9 * 60, rh * 60 + rm);
+                }
+
+                for (let totalMin = startSearch; totalMin <= 20 * 60 - totalDur; totalMin += 30) {
                     const potentialStart = totalMin;
                     const potentialEnd = totalMin + totalDur;
+                    const h = Math.floor(potentialStart / 60);
+                    const m = potentialStart % 60;
+                    const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+
+                    if (state.rejectedDates.includes(`${dateStr} ${timeStr}`)) continue;
                     
                     let overlaps = false;
                     for (const interval of takenIntervals) {
@@ -530,12 +598,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     }
                     
                     if (!overlaps) {
-                        const h = Math.floor(potentialStart / 60);
-                        const m = potentialStart % 60;
-                        foundSlots.push({ date: dateStr, time: `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}` });
-                        break;
+                        foundSlots.push({ date: dateStr, time: timeStr });
+                        if (foundSlots.length >= limit) break;
                     }
                 }
+            }
+            if (foundSlots.length > 0) {
+                state.pendingDate = foundSlots[0].date;
+                state.pendingTime = foundSlots[0].time;
             }
         }
 
