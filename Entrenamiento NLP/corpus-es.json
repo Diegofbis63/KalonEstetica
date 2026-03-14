@@ -72,7 +72,13 @@
         "se",
         "si, agreguemos",
         "quiero sumar otro",
-        "me gustaria agregar"
+        "me gustaria agregar",
+        "correcto",
+        "adelante",
+        "confirmar",
+        "asi esta bien",
+        "proceder",
+        "es correcto"
       ]
     },
     {
@@ -91,7 +97,12 @@
         "solo me hago eso",
         "cerremos",
         "con eso es suficiente",
-        "pasame el total"
+        "pasame el total",
+        "modificar",
+        "quiero cambiar algo",
+        "sacar uno",
+        "borrar",
+        "cambiar el servicio"
       ]
     },
     {

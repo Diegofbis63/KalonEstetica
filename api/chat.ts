@@ -57,12 +57,36 @@ function getSimilarity(s1: string, s2: string): number {
     return (longer.length - costs[s2.length]) / longer.length;
 }
 
+function extractName(text: string): string {
+    const prefixes = [
+        "si mi nombre es", "mi nombre es", "mi nombre", "soy", "me llamo", 
+        "hola soy", "hola mi nombre es", "si", "hola", "buen dia", "buenas",
+        "podes anotarme como", "anotame como", "ponele que soy", "me registro como"
+    ];
+    let cleaned = text.trim();
+    let lower = cleaned.toLowerCase();
+    
+    // Check for "Si mi nombre es..." style
+    for (const p of prefixes) {
+        if (lower.startsWith(p)) {
+            cleaned = cleaned.substring(p.length).trim();
+            lower = cleaned.toLowerCase();
+        }
+    }
+    
+    // Remove punctuation at the end and start
+    cleaned = cleaned.replace(/^[.,!?;:\s]+|[.,!?;:\s]+$/g, "");
+    
+    // Camel case name parts
+    return cleaned.split(/\s+/).map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+}
+
 interface ConvState {
     clientName: string | null;
     clientPhone: string | null;
     selectedServiceIds: string[];
     currentCategoryId: string | null;
-    stage: 'greeting' | 'parent_selection' | 'sub_service_selection' | 'cart_confirmation' | 'name_collection' | 'phone_collection' | 'availability_proposal' | 'payment_request' | 'waiting_for_receipt' | 'done';
+    stage: 'greeting' | 'parent_selection' | 'sub_service_selection' | 'cart_review' | 'cart_confirmation' | 'name_collection' | 'phone_collection' | 'availability_proposal' | 'payment_request' | 'waiting_for_receipt' | 'done';
     pendingCategoryIds: string[];
     pendingDate: string | null;
     pendingTime: string | null;
@@ -108,6 +132,7 @@ async function extractState(
             const botText = normalizeText(msg.content);
             if (botText.includes("elige una categoria") || botText.includes("nuestras categorias")) currentBotAsked = 'category';
             else if (botText.includes("servicios de") || botText.includes("tratamientos de") || botText.includes("estos son los tratamientos")) currentBotAsked = 'sub_service';
+            else if (botText.includes("revisemos tu pedido") || botText.includes("tu carrito") || botText.includes("listado de todos")) currentBotAsked = 'cart_review';
             else if (botText.includes("agregar algo mas") || botText.includes("avanzamos con el turno")) currentBotAsked = 'cart_confirmation';
             else if (botText.includes("tu nombre") || botText.includes("con quien tengo")) currentBotAsked = 'name';
             else if (botText.includes("whatsapp") || botText.includes("numero") || botText.includes("este numero")) currentBotAsked = 'phone';
@@ -144,13 +169,15 @@ async function extractState(
             }
 
             // --- Multi-Category Detection ---
-            const foundCatIds = categories
+            // Keep track of order found in text
+            const catsInFoundOrder = categories
                 .filter(c => normalizedContent.includes(normalizeText(c.name)))
-                .map(c => c.id);
+                .map(c => ({ id: c.id, pos: normalizedContent.indexOf(normalizeText(c.name)) }))
+                .sort((a, b) => a.pos - b.pos)
+                .map(x => x.id);
             
-            foundCatIds.forEach(cid => {
+            catsInFoundOrder.forEach(cid => {
                 if (!state.pendingCategoryIds.includes(cid) && state.currentCategoryId !== cid) {
-                    // Only add if we don't already have services from this category
                     const hasSvcFromCat = state.selectedServiceIds.some(sid => services.find(s => s.id === sid)?.category_id === cid);
                     if (!hasSvcFromCat) state.pendingCategoryIds.push(cid);
                 }
@@ -162,8 +189,8 @@ async function extractState(
             }
 
             if (currentBotAsked === 'name' && !state.clientName) {
-                if (!/\d/.test(msg.content) || msg.content.length > 2) {
-                    state.clientName = msg.content.split(/\s+/).slice(0, 4).join(' ');
+                if (msg.content.length > 2) {
+                    state.clientName = extractName(msg.content);
                 }
             }
             if (currentBotAsked === 'phone' && !state.clientPhone) {
@@ -199,15 +226,22 @@ async function extractState(
                         state.currentCategoryId = state.pendingCategoryIds.shift()!;
                         state.stage = 'sub_service_selection';
                     } else {
-                        state.stage = 'cart_confirmation';
+                        state.stage = 'cart_review';
                     }
-                } else if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("ningun") || normalizedContent.includes("nada") || normalizedContent.includes("no gracias")) {
+                } else if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("ningun") || normalizedContent.includes("nada") || normalizedContent.includes("no gracias") || normalizedContent.includes("listo")) {
                     if (state.pendingCategoryIds.length > 0) {
                         state.currentCategoryId = state.pendingCategoryIds.shift()!;
                         state.stage = 'sub_service_selection';
                     } else {
-                        state.stage = state.selectedServiceIds.length > 0 ? 'cart_confirmation' : 'parent_selection';
+                        state.stage = state.selectedServiceIds.length > 0 ? 'cart_review' : 'parent_selection';
                     }
+                }
+            }
+            if (currentBotAsked === 'cart_review') {
+                if (intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("si") || normalizedContent.includes("correcto") || normalizedContent.includes("bien") || normalizedContent.includes("adelante")) {
+                    state.stage = 'name_collection';
+                } else {
+                    state.stage = 'parent_selection';
                 }
             }
             if (currentBotAsked === 'cart_confirmation') {
@@ -228,7 +262,7 @@ async function extractState(
     }
 
     if (state.selectedServiceIds.length > 0 && state.pendingCategoryIds.length === 0) {
-        if (state.stage !== 'availability_proposal' && state.stage !== 'payment_request' && state.stage !== 'done' && state.stage !== 'waiting_for_receipt') {
+        if (state.stage !== 'sub_service_selection' && state.stage !== 'cart_review' && state.stage !== 'availability_proposal' && state.stage !== 'payment_request' && state.stage !== 'done' && state.stage !== 'waiting_for_receipt') {
             if (!state.clientName) state.stage = 'name_collection';
             else if (!state.clientPhone) state.stage = 'phone_collection';
             else if (!state.pendingDate) state.stage = 'availability_proposal';
@@ -273,12 +307,30 @@ function generateResponse(
             
             return `${prefix}${list}\n\nSolo escribí el nombre del tratamiento y lo agrego a tu plan.`;
         }
+        case 'cart_review': {
+            const selectedServices = services.filter(s => state.selectedServiceIds.includes(s.id));
+            const list = selectedServices.map(s => `• *${s.title}* ($${s.price}) - ${s.duration} min`).join('\n');
+            const totalPrice = selectedServices.reduce((a, b) => a + Number(b.price), 0);
+            const totalDur = selectedServices.reduce((a, b) => a + (Number(b.duration) || 60), 0);
+            const hours = Math.floor(totalDur / 60);
+            const mins = totalDur % 60;
+            const durText = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+
+            return `¡Excelente! 🎉 Revisemos tu pedido para que esté todo perfecto:\n\n${list}\n\n💰 *Total:* $${totalPrice}\n⏳ *Duración estimada:* ${durText}\n\n¿Es correcto o te gustaría agregar o modificar algo?`;
+        }
         case 'cart_confirmation': {
              const selectedNames = services.filter(s => state.selectedServiceIds.includes(s.id)).map(s => s.title).join(', ');
              return `¡Qué lindo lo que elegiste! 😍 Actualmente tenés en tu carrito: *${selectedNames}*.\n\n¿Te gustaría sumar algo más o ya buscamos un lugarcito en nuestra agenda para vos?`;
         }
         case 'name_collection': {
-            return "¡Me encanta! 💖 Para ir reservando tu lugar, ¿cómo es tu nombre completo así te registro?";
+            const selectedServices = services.filter(s => state.selectedServiceIds.includes(s.id));
+            const totalPrice = selectedServices.reduce((a, b) => a + Number(b.price), 0);
+            const totalDur = selectedServices.reduce((a, b) => a + (Number(b.duration) || 60), 0);
+            const hours = Math.floor(totalDur / 60);
+            const mins = totalDur % 60;
+            const durText = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+            
+            return `¡Perfecto! Todo confirmado. ✨ Entonces, el total es de *$${totalPrice}* por una sesión de *${durText}*.\n\nPara ir agendándote, ¿cómo es tu nombre completo? 😊`;
         }
         case 'phone_collection': {
             const greeting = `¡Un gusto conocerte, *${state.clientName}*! 😊 `;
@@ -405,15 +457,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 if (state.rejectedDates.includes(dateStr)) continue;
 
                 const taken = await sql`SELECT date_time FROM appointments WHERE date_time::date = ${dateStr} AND status != 'canceled'`;
-                const takenHours = new Set(taken.map(r => new Date(r.date_time).getUTCHours()));
+                // Precise slot searching
+                const takenIntervals = taken.map(r => {
+                    const start = new Date(r.date_time);
+                    // Find actual appointment duration if available, else assume 60m
+                    return { start: start.getUTCHours() * 60 + start.getUTCMinutes(), end: (start.getUTCHours() * 60 + start.getUTCMinutes()) + 60 };
+                });
 
-                for (let h = 9; h <= 20 - blocksNeeded; h++) {
-                    let free = true;
-                    for (let b = 0; b < blocksNeeded; b++) {
-                        if (takenHours.has(h + b)) { free = false; break; }
+                for (let totalMin = 9 * 60; totalMin <= 20 * 60 - totalDur; totalMin += 30) {
+                    const potentialStart = totalMin;
+                    const potentialEnd = totalMin + totalDur;
+                    
+                    let overlaps = false;
+                    for (const interval of takenIntervals) {
+                        if (potentialStart < interval.end && potentialEnd > interval.start) {
+                            overlaps = true;
+                            break;
+                        }
                     }
-                    if (free) {
-                        foundSlots.push({ date: dateStr, time: `${h.toString().padStart(2, '0')}:00` });
+                    
+                    if (!overlaps) {
+                        const h = Math.floor(potentialStart / 60);
+                        const m = potentialStart % 60;
+                        foundSlots.push({ date: dateStr, time: `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}` });
                         break;
                     }
                 }
