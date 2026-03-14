@@ -238,10 +238,63 @@ async function extractState(
                 }
             }
             if (currentBotAsked === 'cart_review') {
-                if (intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("si") || normalizedContent.includes("correcto") || normalizedContent.includes("bien") || normalizedContent.includes("adelante")) {
-                    state.stage = 'name_collection';
+                const isRemoval = normalizedContent.includes("quitar") || normalizedContent.includes("sacar") || normalizedContent.includes("eliminar") || normalizedContent.includes("borrar") || normalizedContent.includes("menos") || normalizedContent.includes("saca");
+                const isAddition = normalizedContent.includes("agregar") || normalizedContent.includes("sumar") || normalizedContent.includes("tambien") || normalizedContent.includes("mas");
+                
+                if (isRemoval) {
+                    const inputParts = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 3);
+                    const toRemove = state.selectedServiceIds.filter(sid => {
+                        const s = services.find(x => x.id === sid);
+                        if (!s) return false;
+                        const nt = normalizeText(s.title);
+                        return inputParts.some(part => {
+                            if (nt.includes(part)) return true;
+                            const titleParts = nt.split(/\s+/);
+                            return titleParts.some(tp => tp.length > 3 && getSimilarity(part, tp) > 0.8);
+                        });
+                    });
+                    
+                    if (toRemove.length > 0) {
+                        state.selectedServiceIds = state.selectedServiceIds.filter(sid => !toRemove.includes(sid));
+                        state.stage = state.selectedServiceIds.length > 0 ? 'cart_review' : 'parent_selection';
+                    }
                 } else {
-                    state.stage = 'parent_selection';
+                    // Check if they mentioned a NEW service or category to add
+                    const foundSvcs = services.filter(s => {
+                        const nt = normalizeText(s.title);
+                        if (normalizedContent.includes(nt)) return true;
+                        const inputParts = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 3);
+                        return inputParts.some(part => {
+                            const titleParts = nt.split(/\s+/);
+                            return titleParts.some(tp => tp.length > 3 && getSimilarity(part, tp) > 0.9);
+                        });
+                    });
+
+                    const foundCatIds = categories
+                        .filter(c => normalizedContent.includes(normalizeText(c.name)))
+                        .map(c => c.id);
+
+                    if (foundSvcs.length > 0 || foundCatIds.length > 0) {
+                        foundSvcs.forEach(fs => {
+                            if (!state.selectedServiceIds.includes(fs.id)) state.selectedServiceIds.push(fs.id);
+                        });
+                        foundCatIds.forEach(cid => {
+                            if (!state.pendingCategoryIds.includes(cid) && state.currentCategoryId !== cid) {
+                                state.pendingCategoryIds.push(cid);
+                            }
+                        });
+                        
+                        if (state.pendingCategoryIds.length > 0 && !foundSvcs.length) {
+                            state.currentCategoryId = state.pendingCategoryIds.shift()!;
+                            state.stage = 'sub_service_selection';
+                        } else {
+                            state.stage = 'cart_review';
+                        }
+                    } else if (intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("si") || normalizedContent.includes("correcto") || normalizedContent.includes("bien") || normalizedContent.includes("adelante") || normalizedContent.includes("confirmar") || normalizedContent.includes("estamos")) {
+                         state.stage = 'name_collection';
+                    } else if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("modificar") || normalizedContent.includes("cambiar") || normalizedContent.includes("no")) {
+                         state.stage = 'parent_selection';
+                    }
                 }
             }
             if (currentBotAsked === 'cart_confirmation') {
