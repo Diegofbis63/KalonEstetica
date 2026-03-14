@@ -23,11 +23,11 @@ El flujo ahora permite navegar por jerarquías y acumular servicios:
 | :--- | :--- | :--- |
 | `greeting` | Bienvenida inicial. | Detecta intención de agendar -> `parent_selection` |
 | `parent_selection` | Lista de **Categorías** (Padres). | El usuario elige categoría -> `sub_service_selection` |
-| `sub_service_selection` | Muestra **Sub-servicios** de la categoría. | El usuario elige servicio -> `cart_confirmation` |
-| `cart_confirmation` | Muestra el "Carrito" acumulado. | "¿Algo más?" (Sí -> `parent_selection`, No -> `name_collection`) |
-| `name_collection` | Solicita nombre completo. | Nombre recibido -> `phone_collection` |
+| `sub_service_selection` | Muestra **Sub-servicios** de la categoría actual. | El usuario elige servicio -> Navega a siguiente categoría pendiente o a `cart_review` |
+| `cart_review` | **Resumen Detallado** (Precios y Duración). | Muestra listado completo. Confirmación -> `name_collection`. Modificar -> `parent_selection`. |
+| `name_collection` | Solicita nombre (con limpieza de frases). | Nombre extraído inteligentemente -> `phone_collection` |
 | `phone_collection` | Solicita/Confirma WhatsApp. | Teléfono recibido -> `availability_proposal` |
-| `availability_proposal` | Busca huecos por **Duración Total**. | Horario aceptado -> `payment_request` |
+| `availability_proposal` | Busca huecos en ventanas de 30m. | Basado en **Duración Total** acumulada. Horario aceptado -> `payment_request` |
 | `payment_request` | Pide seña del 50% y Alias. | Espera comprobante -> `waiting_for_receipt` |
 | `waiting_for_receipt` | Bloqueo de espera de imagen. | Recibe imagen -> `done` |
 | `done` | Confirmación final. | Cita confirmada en DB. |
@@ -38,9 +38,20 @@ El flujo ahora permite navegar por jerarquías y acumular servicios:
 
 A diferencia de la versión anterior, el bot ahora suma la duración de todos los servicios en el carrito:
 
-- **Cálculo de Bloques**: Si el usuario eligió "Tratamiento A (60m)" y "Tratamiento B (30m)", el bot busca un bloque libre de **90 minutos** contiguos.
-- **Rango Horario**: Ventana de atención de **09:00hs a 20:00hs**.
-- **Validación**: Verifica colisiones en la tabla `appointments` de Neon DB en tiempo real.
+- **Cálculo de Bloques Contiguos**: Si la sesión dura 1h 30m, el bot busca espacios de 90 minutos libres sin solaparse con otros turnos existentes.
+- **Precisión de 30 minutos**: La búsqueda de huecos se realiza en intervalos de 30 minutos, permitiendo agendar a las 10:00, 10:30, 11:00, etc.
+- **Ventana de Atención**: Las opciones se ofrecen dentro del rango de **09:00hs a 20:00hs**.
+- **Validación en Tiempo Real**: Cruce de datos constante con la tabla `appointments` de Neon DB.
+
+---
+
+## 🧼 Limpieza y Extracción de Datos Inteligente
+
+Para lograr un 99% de precisión en la recolección de datos, el bot utiliza:
+
+1. **Fuzzy Matching (Levenshtein)**: Tolera errores ortográficos del cliente (ej: "piling" -> "Peeling", "uñas" -> "Uñas").
+2. **Extracción de Nombres**: Filtra frases de relleno como "Mi nombre es...", "Hola soy...", "Si, anotame como..." para extraer únicamente el nombre propio con su capitalización correcta.
+3. **Validación de Categorías Secuenciales**: Si el cliente pide múltiples categorías al inicio (ej: "Cejas y Faciales"), el bot crea una cola de espera y navega por cada una ordenadamente antes de cerrar el pedido.
 
 ---
 
