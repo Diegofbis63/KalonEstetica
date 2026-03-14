@@ -38,6 +38,7 @@ interface ConvState {
     selectedServiceIds: string[];
     currentCategoryId: string | null;
     stage: 'greeting' | 'parent_selection' | 'sub_service_selection' | 'cart_confirmation' | 'name_collection' | 'phone_collection' | 'availability_proposal' | 'payment_request' | 'waiting_for_receipt' | 'done';
+    pendingCategoryIds: string[];
     pendingDate: string | null;
     pendingTime: string | null;
     rejectedDates: string[];
@@ -58,6 +59,7 @@ async function extractState(
         clientPhone: null,
         selectedServiceIds: [],
         currentCategoryId: null,
+        pendingCategoryIds: [],
         stage: 'greeting',
         pendingDate: null,
         pendingTime: null,
@@ -116,16 +118,26 @@ async function extractState(
                 }
             }
 
-            // Proactive category matching (even if bot didn't explicitly ask yet)
-            const proactiveCat = categories.find(c => normalizedContent.includes(normalizeText(c.name)));
-            if (proactiveCat && (state.stage === 'greeting' || state.stage === 'parent_selection' || currentBotAsked === 'category')) {
-                state.currentCategoryId = proactiveCat.id;
+            // --- Multi-Category Detection ---
+            const foundCatIds = categories
+                .filter(c => normalizedContent.includes(normalizeText(c.name)))
+                .map(c => c.id);
+            
+            foundCatIds.forEach(cid => {
+                if (!state.pendingCategoryIds.includes(cid) && state.currentCategoryId !== cid) {
+                    // Only add if we don't already have services from this category
+                    const hasSvcFromCat = state.selectedServiceIds.some(sid => services.find(s => s.id === sid)?.category_id === cid);
+                    if (!hasSvcFromCat) state.pendingCategoryIds.push(cid);
+                }
+            });
+
+            if (!state.currentCategoryId && state.pendingCategoryIds.length > 0) {
+                state.currentCategoryId = state.pendingCategoryIds.shift() || null;
                 state.stage = 'sub_service_selection';
-                currentBotAsked = null; // Reset to avoid double matching
             }
 
             if (currentBotAsked === 'name' && !state.clientName) {
-                if (!/\d/.test(msg.content) || msg.content.length > 5) {
+                if (!/\d/.test(msg.content) || msg.content.length > 2) {
                     state.clientName = msg.content.split(/\s+/).slice(0, 4).join(' ');
                 }
             }
@@ -139,10 +151,32 @@ async function extractState(
             }
             
             if (currentBotAsked === 'sub_service') {
-                const foundSvc = services.find(s => s.category_id === state.currentCategoryId && normalizedContent.includes(normalizeText(s.title)));
-                if (foundSvc) {
-                    if (!state.selectedServiceIds.includes(foundSvc.id)) state.selectedServiceIds.push(foundSvc.id);
-                    state.stage = 'cart_confirmation';
+                const inputParts = normalizedContent.split(/[\s,y+]+/).filter(p => p.length > 3);
+                const foundSvcs = services.filter(s => {
+                    if (s.category_id !== state.currentCategoryId) return false;
+                    const nt = normalizeText(s.title);
+                    if (normalizedContent.includes(nt)) return true;
+                    return inputParts.some(part => nt.includes(part));
+                });
+
+                if (foundSvcs.length > 0) {
+                    foundSvcs.forEach(fs => {
+                        if (!state.selectedServiceIds.includes(fs.id)) state.selectedServiceIds.push(fs.id);
+                    });
+                    
+                    if (state.pendingCategoryIds.length > 0) {
+                        state.currentCategoryId = state.pendingCategoryIds.shift()!;
+                        state.stage = 'sub_service_selection';
+                    } else {
+                        state.stage = 'cart_confirmation';
+                    }
+                } else if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("ningun") || normalizedContent.includes("nada") || normalizedContent.includes("no gracias")) {
+                    if (state.pendingCategoryIds.length > 0) {
+                        state.currentCategoryId = state.pendingCategoryIds.shift()!;
+                        state.stage = 'sub_service_selection';
+                    } else {
+                        state.stage = state.selectedServiceIds.length > 0 ? 'cart_confirmation' : 'parent_selection';
+                    }
                 }
             }
             if (currentBotAsked === 'cart_confirmation') {
@@ -180,44 +214,54 @@ function generateResponse(
     isFromWhatsApp: boolean,
     hasMediaInLastMsg: boolean
 ): string {
-    const welcome = isFromWhatsApp ? "¡Hola! Bienvenido a *KÂLON Estética*. ✨ " : "";
+    const welcome = isFromWhatsApp ? "¡Hola! Qué lindo saludarte. Bienvenida a *KÂLON Estética* ✨. " : "";
     
     if (state.stage === 'waiting_for_receipt' && hasMediaInLastMsg) {
-        return "¡Excelente! Recibimos tu comprobante. ✅ Tu turno quedó confirmado en nuestro sistema. ¡Te esperamos en KÂLON para brindarte una experiencia única! ✨";
+        return "¡Excelente noticia! 💖 Recibimos tu comprobante correctamente. Tu turno ya quedó agendado y confirmado en nuestro sistema. ¡Qué placer va a ser recibirte en KÂLON para mimarte un rato! Nos vemos pronto. ✨";
     }
 
     switch (state.stage) {
         case 'greeting':
         case 'parent_selection': {
             const catList = categories.map(c => `• *${c.name}*`).join('\n');
-            return `${welcome}Soy tu asistente virtual. Para comenzar, por favor elige una categoría de interés:\n\n${catList}\n\nEscribe el nombre de la categoría para ver los tratamientos disponibles.`;
+            const intro = state.selectedServiceIds.length > 0 
+                ? "¡Claro que sí! Contame, ¿qué otra cosita te gustaría sumarte hoy? 😊\n\n" 
+                : `${welcome}Soy tu asistente virtual y estoy acá para ayudarte a reservar un momento para vos. Contame, ¿qué servicios te interesan hoy?\n\n`;
+            return `${intro}${catList}\n\nEscribí el nombre de la categoría para ver los tratamientos.`;
         }
         case 'sub_service_selection': {
             const cat = categories.find(c => c.id === state.currentCategoryId);
             const subServices = services.filter(s => s.category_id === state.currentCategoryId);
             const list = subServices.map(s => `• *${s.title}* ($${s.price}) - ${s.duration} min`).join('\n');
-            return `Estos son los tratamientos de ${cat?.name}. ¿Cuál te gustaría realizarte?\n\n${list}\n\nEscribe el nombre del tratamiento para agregarlo a tu reserva.`;
+            
+            const selectedCount = state.selectedServiceIds.length;
+            const prefix = selectedCount > 0 
+                ? `¡Qué buena elección! Ya te sumé lo anterior. 💖 Ahora contame, de *${cat?.name}*, ¿cuál te gustaría realizarte?\n\n`
+                : `¡Perfecto! Estos son los tratamientos que tenemos en *${cat?.name}*. ¿Cuál te gustaría realizarte?\n\n`;
+            
+            return `${prefix}${list}\n\nSolo escribí el nombre del tratamiento y lo agrego a tu plan.`;
         }
         case 'cart_confirmation': {
              const selectedNames = services.filter(s => state.selectedServiceIds.includes(s.id)).map(s => s.title).join(', ');
-             return `¡Agregado! ✅ Actualmente tienes seleccionado: *${selectedNames}*.\n\n¿Te gustaría agregar algo más o ya avanzamos con la búsqueda de tu turno?`;
+             return `¡Qué lindo lo que elegiste! 😍 Actualmente tenés en tu carrito: *${selectedNames}*.\n\n¿Te gustaría sumar algo más o ya buscamos un lugarcito en nuestra agenda para vos?`;
         }
         case 'name_collection': {
-            return "¡Genial! Para agendar tu visita, ¿podrias decirme tu nombre completo?";
+            return "¡Me encanta! 💖 Para ir reservando tu lugar, ¿cómo es tu nombre completo así te registro?";
         }
         case 'phone_collection': {
+            const greeting = `¡Un gusto conocerte, *${state.clientName}*! 😊 `;
             if (isFromWhatsApp) {
-                return `Un gusto, *${state.clientName}*. 😊 ¿Te registro con este número de WhatsApp o prefieres brindarme otro?`;
+                return `${greeting}¿Te registro con este mismo número de WhatsApp o preferís usar otro para los recordatorios?`;
             }
-            return `Un gusto, *${state.clientName}*. 😊 Por favor, indícame tu número de WhatsApp para enviarte el comprobante de reserva.`;
+            return `${greeting}Por favor, decime tu número de WhatsApp así te mando el comprobante de reserva y no te olvidás de nada. 📱`;
         }
         case 'availability_proposal': {
             if (availableSlots.length > 0) {
                 const slot = availableSlots[0];
                 const totalDur = services.filter(s => state.selectedServiceIds.includes(s.id)).reduce((a, b) => a + (Number(b.duration)||60), 0);
-                return `Tengo disponibilidad para tus servicios (Duración: *${totalDur} min*) el día *${slot.date}* a las *${slot.time}hs*. 🗓️\n\n¿Te queda bien este horario para confirmar?`;
+                return `¡Buenas noticias! ✨ Tengo disponibilidad para tus tratamientos (Duración total: *${totalDur} min*) el día *${slot.date}* a las *${slot.time}hs*. 🗓️\n\n¿Te queda bien este horario o preferís que busquemos otro?`;
             }
-            return "Lo siento, no encuentro horarios disponibles esta semana para esa duración total. 🗓️ ¿Te gustaría que busquemos para la próxima semana?";
+            return "Uy, parece que tengo la agenda súper llena para esa duración total esta semana. 🗓️ ¿Querés que busquemos para la semana que viene así te aseguro un lugar? 😊";
         }
         case 'payment_request': {
             const selectedSvc = services.filter(s => state.selectedServiceIds.includes(s.id));
@@ -228,12 +272,12 @@ function generateResponse(
             const mins = totalDur % 60;
             const durText = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
 
-            return `¡Perfecto! Tus servicios durarán aproximadamente *${durText}*. El costo total es de *$${totalPrice}*.\n\nPara reservar definitivamente tu lugar el *${state.pendingDate}* a las *${state.pendingTime}hs*, necesitamos una seña del 50% (*$${deposit.toFixed(0)}*).\n\nTransferí al alias: *KALON.ESTETICA.OK* y envíame la foto del comprobante por aquí. 📸`;
+            return `¡Todo listo! ✨ Tu sesión va a durar aproximadamente *${durText}* y el valor total es de *$${totalPrice}*.\n\nPara confirmar definitivamente tu lugarcito el *${state.pendingDate}* a las *${state.pendingTime}hs*, necesitamos una seña del 50% (*$${deposit.toFixed(0)}*).\n\nTransferí al alias: *KALON.ESTETICA.OK* y mandame la fotito del comprobante por acá. ¡Ya falta nada! 📸`;
         }
         case 'waiting_for_receipt':
-            return "Quedo a la espera del comprobante de transferencia para confirmar tu turno. ¡Muchas gracias! 😊";
+            return "Quedo atenta a tu comprobante de transferencia para terminar de confirmar tu turno. ¡Cualquier duda decime! 😊";
         default:
-            return "Disculpa, ¿en qué más puedo ayudarte? ✨";
+            return "¡Hola! ¿En qué más puedo ayudarte hoy para que te sientas radiante? ✨";
     }
 }
 
