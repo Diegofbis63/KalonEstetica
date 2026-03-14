@@ -183,12 +183,22 @@ async function extractState(
             else if (botText.includes("agregar algo mas") || botText.includes("avanzamos con el turno")) currentBotAsked = 'cart_confirmation';
             else if (botText.includes("tu nombre") || botText.includes("con quien tengo")) currentBotAsked = 'name';
             else if (botText.includes("whatsapp") || botText.includes("numero") || botText.includes("este numero")) currentBotAsked = 'phone';
-            else if (botText.includes("proximo horario") || botText.includes("confirmar el turno") || botText.includes("disponibilidad")) {
+            else if (botText.includes("proximo horario") || botText.includes("confirmar el turno") || botText.includes("disponibilidad") || botText.includes("te queda bien") || botText.includes("busquemos otro")) {
                 currentBotAsked = 'availability';
                 // Detect date/time from bot's last proposal
-                const dateMatch = msg.content.match(/(\d{4})-(\d{2})-(\d{2})/);
+                const isoMatch = msg.content.match(/(\d{4})-(\d{2})-(\d{2})/);
+                if (isoMatch) state.pendingDate = isoMatch[0];
+                else {
+                    const months: Record<string, string> = {
+                        "enero": "01", "febrero": "02", "marzo": "03", "abril": "04", "mayo": "05", "junio": "06",
+                        "julio": "07", "agosto": "08", "septiembre": "09", "octubre": "10", "noviembre": "11", "diciembre": "12"
+                    };
+                    const humanMatch = msg.content.match(/(\d{1,2})\s+(Enero|Febrero|Marzo|Abril|Mayo|Junio|Julio|Agosto|Septiembre|Octubre|Noviembre|Diciembre)\s+(\d{4})/i);
+                    if (humanMatch) {
+                        state.pendingDate = `${humanMatch[3]}-${months[humanMatch[2].toLowerCase()]}-${humanMatch[1].padStart(2, '0')}`;
+                    }
+                }
                 const timeMatch = msg.content.match(/(\d{1,2}):(\d{2})/);
-                if (dateMatch) state.pendingDate = dateMatch[0];
                 if (timeMatch) state.pendingTime = timeMatch[0].padStart(5, '0');
             }
             else if (botText.includes("necesitamos una seña")) currentBotAsked = 'payment';
@@ -363,7 +373,7 @@ async function extractState(
                 if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("otro") || normalizedContent.includes("no puedo") || normalizedContent.includes("que mas hay")) {
                     if (state.pendingDate) state.rejectedDates.push(`${state.pendingDate} ${state.pendingTime}`);
                     state.requestedAllOptions = normalizedContent.includes("otro") || normalizedContent.includes("que mas");
-                } else if (intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("si") || normalizedContent.includes("bien") || normalizedContent.includes("dale")) {
+                } else if (intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("si") || normalizedContent.includes("bien") || normalizedContent.includes("dale") || normalizedContent.includes("perfecto") || normalizedContent.includes("correcto") || normalizedContent.includes("anotame") || normalizedContent.includes("agendame") || normalizedContent.includes("me sirve") || normalizedContent.includes("ese horario") || normalizedContent.includes("esa hora") || normalizedContent.includes("confirmar") || normalizedContent.includes("esta bien")) {
                     state.stage = 'payment_request';
                 }
             }
