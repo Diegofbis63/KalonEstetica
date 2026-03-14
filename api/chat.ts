@@ -227,15 +227,20 @@ async function extractState(
 
             // --- Relative Date & Time Detection ---
             const relDate = parseRelativeDate(msg.content, today);
-            if (relDate) state.requestedDate = relDate;
-            
             const timeMatch = msg.content.match(/(\d{1,2})(:|\s?hs?|y\s)(\d{2})?/i);
-            if (timeMatch) {
-                let h = parseInt(timeMatch[1]);
-                const m = timeMatch[3] ? parseInt(timeMatch[3]) : 0;
-                // Basic PM conversion: if user says "4" and it's scheduling context, assume 16 unless they say "mañana"
-                if (h < 9) h += 12;
-                state.requestedTime = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+            
+            if (relDate || timeMatch) {
+                if (relDate) state.requestedDate = relDate;
+                if (timeMatch) {
+                    let h = parseInt(timeMatch[1]);
+                    const m = timeMatch[3] ? parseInt(timeMatch[3]) : 0;
+                    if (h < 9) h += 12; // Assume PM for scheduling context
+                    state.requestedTime = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+                }
+                // If user specifies date/time, they are proposing something new
+                state.pendingDate = null;
+                state.pendingTime = null;
+                state.stage = 'availability_proposal';
             }
 
             // --- Multi-Category Detection ---
@@ -380,11 +385,19 @@ async function extractState(
         }
     }
 
+    // Final stage progression check (Safety fallthrough)
     if (state.selectedServiceIds.length > 0 && state.pendingCategoryIds.length === 0) {
-        if (state.stage !== 'sub_service_selection' && state.stage !== 'cart_review' && state.stage !== 'availability_proposal' && state.stage !== 'payment_request' && state.stage !== 'done' && state.stage !== 'waiting_for_receipt') {
-            if (!state.clientName) state.stage = 'name_collection';
-            else if (!state.clientPhone) state.stage = 'phone_collection';
-            else if (!state.pendingDate) state.stage = 'availability_proposal';
+        // Only override stage if we are in a pre-booking stage
+        const isPreBooking = !['availability_proposal', 'payment_request', 'done', 'waiting_for_receipt'].includes(state.stage);
+        
+        if (isPreBooking || state.stage === 'name_collection' || state.stage === 'phone_collection') {
+            if (!state.clientName) {
+                state.stage = 'name_collection';
+            } else if (!state.clientPhone) {
+                state.stage = 'phone_collection';
+            } else if (!state.pendingDate || state.stage === 'availability_proposal') {
+                state.stage = 'availability_proposal';
+            }
         }
     }
 
@@ -417,7 +430,7 @@ function generateResponse(
         case 'sub_service_selection': {
             const cat = categories.find(c => c.id === state.currentCategoryId);
             const subServices = services.filter(s => s.category_id === state.currentCategoryId);
-            const list = subServices.map(s => `• *${s.title}* ($${s.price}) - ${s.duration} min`).join('\n');
+            const list = subServices.map(s => `• *${s.title}* ($${s.price}) - ${s.duration.toString().replace(/min/g, '').trim()} min`).join('\n');
             
             const selectedCount = state.selectedServiceIds.length;
             const prefix = selectedCount > 0 
@@ -428,7 +441,7 @@ function generateResponse(
         }
         case 'cart_review': {
             const selectedServices = services.filter(s => state.selectedServiceIds.includes(s.id));
-            const list = selectedServices.map(s => `• *${s.title}* ($${s.price}) - ${s.duration} min`).join('\n');
+            const list = selectedServices.map(s => `• *${s.title}* ($${s.price}) - ${s.duration.toString().replace(/min/g, '').trim()} min`).join('\n');
             const totalPrice = selectedServices.reduce((a, b) => a + Number(b.price), 0);
             const totalDur = selectedServices.reduce((a, b) => a + (Number(b.duration) || 60), 0);
             const durText = formatDurationHuman(totalDur);
