@@ -83,7 +83,19 @@ export async function extractState(
                 else if (botText.includes("agregar algo mas") || botText.includes("avanzamos con el turno")) currentBotAsked = 'cart_confirmation';
                 else if (botText.includes("tu nombre") || botText.includes("nombre completo") || botText.includes("con quien tengo")) currentBotAsked = 'name';
                 else if (botText.includes("whatsapp") || botText.includes("este mismo numero") || botText.includes("numero de cel")) currentBotAsked = 'phone';
-                else if (botText.includes("proximo horario") || botText.includes("disponibilidad") || botText.includes("te queda bien") || botText.includes("busquemos otro") || botText.includes("horario me queda") || botText.includes("te sirve este horario") || botText.includes("podemos agendar") || botText.includes("para el dia")) {
+                else if (
+                    botText.includes("proximo horario") || 
+                    botText.includes("disponibilidad") || 
+                    botText.includes("te queda bien") || 
+                    botText.includes("busquemos otro") || 
+                    botText.includes("horario me queda") || 
+                    botText.includes("te sirve este horario") || 
+                    botText.includes("podemos agendar") || 
+                    botText.includes("para el dia") ||
+                    botText.includes("buenas noticias") ||
+                    botText.includes("elegir tranquila") ||
+                    botText.includes("opciones mas cercanas")
+                ) {
                     currentBotAsked = 'availability';
                     const isoMatch = msg.content.match(/(\d{4})-(\d{2})-(\d{2})/);
                     if (isoMatch) state.pendingDate = isoMatch[0];
@@ -443,12 +455,16 @@ export async function extractState(
                 if (!state.clientName) {
                     state.stage = 'name_collection';
                     console.log(`[stateMachine.ts] Progression: name_collection`);
-                } else if (!state.clientPhone) {
+                } else if (!state.clientPhone || state.clientPhone === 'Cliente') {
+                    // Safety: if we have name but no confirmable phone, ask for it
                     state.stage = 'phone_collection';
                     console.log(`[stateMachine.ts] Progression: phone_collection`);
                 } else if (!state.pendingDate || !state.pendingTime) {
                     state.stage = 'availability_proposal';
                     console.log(`[stateMachine.ts] Progression: availability_proposal`);
+                } else {
+                    state.stage = 'payment_request';
+                    console.log(`[stateMachine.ts] Progression: payment_request (Failsafe)`);
                 }
             }
         }
