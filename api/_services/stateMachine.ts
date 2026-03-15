@@ -108,8 +108,8 @@ export async function extractState(
                 services.forEach(s => {
                     const normalizedTitle = normalizeText(s.title);
                     // Captures services from confirmation messages, itemized lists, or totals
-                    const isRecap = botText.includes("revisemos") || botText.includes("pedido") || botText.includes("total") || botText.includes("sesion va a durar") || botText.includes("resumen") || botText.includes("estos son los");
-                    const isConfirmation = botText.includes("agregue") || botText.includes("seleccionaste") || botText.includes("sume");
+                    const isRecap = botText.includes("revisemos") || botText.includes("pedido") || botText.includes("total") || botText.includes("sesion va a durar") || botText.includes("resumen");
+                    const isConfirmation = botText.includes("agregue") || botText.includes("seleccionaste") || botText.includes("sume") || botText.includes("ya te sume");
                     
                     if (botText.includes(normalizedTitle) && (isConfirmation || isRecap)) {
                         if (!state.selectedServiceIds.includes(s.id)) state.selectedServiceIds.push(s.id);
@@ -227,21 +227,22 @@ export async function extractState(
                             }
                             
                             const nt = normalizeText(s.title);
-                            // 1. EXACT PHRASE MATCH: The gold standard
+                            // 1. EXACT PHRASE MATCH
                             if (normalizedContent.includes(nt)) return true;
                             
-                            // 2. Exact word match (e.g. "laminado" matching "Laminado de cejas")
+                            // 2. Exact word match for core identifying words
                             const inputWords = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 3);
                             const titleWords = nt.split(/\s+/).filter(w => w.length > 3);
                             
                             const matchesCoreWord = titleWords.some(tw => inputWords.includes(tw));
                             if (matchesCoreWord) {
-                                // If it's a category name, ignore (already handled or too generic)
+                                // If it's a category name, ignore it as a service match (e.g. user said "cejas" to see the list)
                                 const isCategoryName = categories.some(cat => normalizeText(cat.name) === normalizedContent);
                                 if (isCategoryName) return false;
 
-                                // Final sanity check on similarity
-                                if (getSimilarity(normalizedContent, nt) > 0.8 || normalizedContent === nt) return true;
+                                // Permissive matching for core words: if they type "laminado" and it's in the title, it's a match
+                                // unless it's way too short or generic. 
+                                if (normalizedContent.length > 5 || normalizedContent === nt || getSimilarity(normalizedContent, nt) > 0.6) return true;
                             }
 
                             return false;
@@ -289,13 +290,25 @@ export async function extractState(
                                 state.stage = 'cart_review';
                                 state.currentCategoryId = null;
                             }
-                        } else if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("ningun") || normalizedContent.includes("nada") || normalizedContent.includes("no gracias") || normalizedContent.includes("listo")) {
-                            if (state.pendingCategoryIds.length > 0) {
-                                state.currentCategoryId = state.pendingCategoryIds.shift()!;
-                                state.stage = 'sub_service_selection';
-                            } else {
-                                state.stage = state.selectedServiceIds.length > 0 ? 'cart_review' : 'parent_selection';
-                                state.currentCategoryId = null;
+                        } else {
+                            // Affirmation or NEXT stage checking
+                            const isAffirmation = intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("si") || normalizedContent.includes("dale") || normalizedContent.includes("perfecto") || normalizedContent.includes("adelante") || normalizedContent.includes("asi esta bien") || normalizedContent.includes("listo");
+                            if (isAffirmation && state.selectedServiceIds.length > 0) {
+                                if (state.pendingCategoryIds.length > 0) {
+                                    state.currentCategoryId = state.pendingCategoryIds.shift()!;
+                                    state.stage = 'sub_service_selection';
+                                } else {
+                                    state.stage = 'cart_review';
+                                    state.currentCategoryId = null;
+                                }
+                            } else if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("ningun") || normalizedContent.includes("nada") || normalizedContent.includes("no gracias") || normalizedContent.includes("bastante")) {
+                                if (state.pendingCategoryIds.length > 0) {
+                                    state.currentCategoryId = state.pendingCategoryIds.shift()!;
+                                    state.stage = 'sub_service_selection';
+                                } else {
+                                    state.stage = state.selectedServiceIds.length > 0 ? 'cart_review' : 'parent_selection';
+                                    state.currentCategoryId = null;
+                                }
                             }
                         }
                     }
