@@ -39,12 +39,13 @@ export async function extractState(
     messages: ChatMessage[], 
     categories: any[], 
     services: any[],
-    defaultIsBotEnabled: boolean = true
+    defaultIsBotEnabled: boolean = true,
+    initialName: string | null = null
 ): Promise<ConvState> {
-    console.log(`[stateMachine.ts] Extracting state from ${messages.length} messages`);
+    console.log(`[stateMachine.ts] Extracting state from ${messages.length} messages. InitialName: ${initialName}`);
     
     const state: ConvState = {
-        clientName: null,
+        clientName: initialName && initialName !== 'Cliente' ? initialName : null,
         clientPhone: null,
         selectedServiceIds: [],
         currentCategoryId: null,
@@ -142,6 +143,7 @@ export async function extractState(
                     state.pendingDate = null;
                     state.pendingTime = null;
                     state.stage = 'availability_proposal';
+                    console.log(`[stateMachine.ts] Transition to availability_proposal due to date detection`);
                 }
 
                 // --- Multi-Category Detection ---
@@ -163,9 +165,12 @@ export async function extractState(
                     state.stage = 'sub_service_selection';
                 }
 
-                if ((currentBotAsked === 'name' || normalizedContent.includes("mi nombre es") || normalizedContent.includes("soy ")) && !state.clientName) {
-                    if (msg.content.length > 2) {
-                        state.clientName = extractName(msg.content);
+                if (!state.clientName) {
+                    if (currentBotAsked === 'name' || normalizedContent.includes("mi nombre es") || normalizedContent.includes("soy ") || normalizedContent.split(/\s+/).length === 2) {
+                        if (msg.content.length > 2 && msg.content.length < 40) {
+                            state.clientName = extractName(msg.content);
+                            console.log(`[stateMachine.ts] Detected name: ${state.clientName}`);
+                        }
                     }
                 }
                 if (currentBotAsked === 'phone' && !state.clientPhone) {
@@ -283,6 +288,7 @@ export async function extractState(
                         state.requestedAllOptions = normalizedContent.includes("otro") || normalizedContent.includes("que mas");
                     } else if (intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("si") || normalizedContent.includes("bien") || normalizedContent.includes("dale") || normalizedContent.includes("perfecto") || normalizedContent.includes("correcto") || normalizedContent.includes("anotame") || normalizedContent.includes("agendame") || normalizedContent.includes("me sirve") || normalizedContent.includes("ese horario") || normalizedContent.includes("esa hora") || normalizedContent.includes("confirmar") || normalizedContent.includes("esta bien")) {
                         state.stage = 'payment_request';
+                        console.log(`[stateMachine.ts] Transition to payment_request (Availability confirmed)`);
                     }
                 }
                 if (currentBotAsked === 'payment' || state.stage === 'payment_request' || state.stage === 'waiting_for_receipt') {
@@ -311,10 +317,13 @@ export async function extractState(
             if (!isInteracting && (isPreBooking || state.stage === 'name_collection' || state.stage === 'phone_collection')) {
                 if (!state.clientName) {
                     state.stage = 'name_collection';
+                    console.log(`[stateMachine.ts] Final Correction: Setting stage to name_collection because clientName is missing`);
                 } else if (!state.clientPhone) {
                     state.stage = 'phone_collection';
-                } else if (!state.pendingDate || state.stage === 'availability_proposal') {
+                    console.log(`[stateMachine.ts] Final Correction: Setting stage to phone_collection because clientPhone is missing`);
+                } else if (!state.pendingDate || state.stage === 'availability_proposal' || !state.pendingTime) {
                     state.stage = 'availability_proposal';
+                    console.log(`[stateMachine.ts] Final Correction: Setting stage to availability_proposal`);
                 }
             }
         }

@@ -70,12 +70,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // 4. IDENTIFY LEAD
         let leadId = null;
         let isBotEnabled = true;
+        let leadName = null;
 
         if (userId) {
             const lead = await getLeadByPhone(userId);
             if (lead) {
                 leadId = lead.id;
                 isBotEnabled = lead.is_bot_enabled !== false;
+                leadName = lead.client_name;
             }
         }
 
@@ -89,11 +91,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // 6. EXTRACT STATE
-        const state = await extractState(messages, categories, services, isBotEnabled);
+        const state = await extractState(messages, categories, services, isBotEnabled, leadName);
 
         // 7. PERSISTENCE & UPDATES
         if (leadId) {
-            if (state.clientName && state.clientName !== 'Cliente' && state.clientName !== 'Diego Federico') { 
+            if (state.clientName && state.clientName !== 'Cliente') { 
                 await updateLeadName(leadId, state.clientName);
             }
             await insertChatLog(leadId, 'user', incomingMessage, incomingMediaUrl, !!userId);
