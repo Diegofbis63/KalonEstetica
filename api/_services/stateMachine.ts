@@ -192,6 +192,12 @@ export async function extractState(
                             if (!containsServiceWord || hasIntro) {
                                 state.clientName = extractName(msg.content);
                                 console.log(`[stateMachine.ts] Detected name: ${state.clientName}`);
+                                // --- Loop Prevention: Advance stage if we just got the name ---
+                                if (state.clientName && state.clientName.length > 2) {
+                                    if (!state.clientPhone) state.stage = 'phone_collection';
+                                    else if (!state.pendingDate) state.stage = 'availability_proposal';
+                                    else state.stage = 'payment_request';
+                                }
                             }
                         }
                     }
@@ -235,14 +241,20 @@ export async function extractState(
 
                         // Refined Differentiation for prefixes like "Extensiones"
                         if (potentialSvcs.length > 1) {
+                            // 4) Identifier filter (ruso vs clasicas, etc.)
                             const exactMatches = potentialSvcs.filter(s => normalizedContent.includes(normalizeText(s.title)));
                             if (exactMatches.length > 0) {
                                 potentialSvcs = exactMatches;
                             } else {
-                                const identifiers = ["ruso", "clasicas", "1x1", "keratina", "polygel", "kapping", "semi", "lifting"];
+                                const identifiers = ["ruso", "clasicas", "1x1", "keratina", "polygel", "kapping", "semi", "lifting", "volumen"];
                                 const foundId = identifiers.find(id => normalizedContent.includes(id));
                                 if (foundId) {
                                     potentialSvcs = potentialSvcs.filter(s => normalizeText(s.title).includes(foundId));
+                                } else if (potentialSvcs.length > 1) {
+                                    // If no specific identifier but multiple results, it's safer to favor exact word matches
+                                    const veryCloseMatch = potentialSvcs.find(s => getSimilarity(normalizedContent, normalizeText(s.title)) > 0.85);
+                                    if (veryCloseMatch) potentialSvcs = [veryCloseMatch];
+                                    else potentialSvcs = []; 
                                 }
                             }
                         }
