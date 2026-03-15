@@ -72,6 +72,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         let leadId = null;
         let isBotEnabled = true;
         let leadName = null;
+        let leadPhone = null;
 
         if (userId) {
             const lead = await getLeadByPhone(userId);
@@ -79,6 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 leadId = lead.id;
                 isBotEnabled = lead.is_bot_enabled !== false;
                 leadName = lead.client_name;
+                leadPhone = typeof lead.contact_info === 'string' ? JSON.parse(lead.contact_info).phone : lead.contact_info?.phone;
             }
         }
 
@@ -92,7 +94,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // 6. EXTRACT STATE
-        const state = await extractState(messages, categories, services, isBotEnabled, leadName);
+        const state = await extractState(messages, categories, services, isBotEnabled, leadName, leadPhone);
 
         // 7. PERSISTENCE & UPDATES
         if (leadId) {

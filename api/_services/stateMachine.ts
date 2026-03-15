@@ -40,13 +40,14 @@ export async function extractState(
     categories: any[], 
     services: any[],
     defaultIsBotEnabled: boolean = true,
-    initialName: string | null = null
+    initialName: string | null = null,
+    initialPhone: string | null = null
 ): Promise<ConvState> {
-    console.log(`[stateMachine.ts] Extracting state from ${messages.length} messages. InitialName: ${initialName}`);
+    console.log(`[stateMachine.ts] Extracting state. InitialName: ${initialName}, InitialPhone: ${initialPhone}`);
     
     const state: ConvState = {
         clientName: initialName && initialName !== 'Cliente' ? initialName : null,
-        clientPhone: null,
+        clientPhone: initialPhone || null,
         selectedServiceIds: [],
         currentCategoryId: null,
         pendingCategoryIds: [],
@@ -419,7 +420,9 @@ export function generateResponse(
     hasMediaInLastMsg: boolean
 ): string {
     console.log(`[stateMachine.ts] Generating response for stage: ${state.stage}`);
-    const welcome = isFromWhatsApp ? "¡Hola! Qué lindo saludarte. Bienvenida a *KÂLON Estética* ✨. " : "";
+    const welcome = isFromWhatsApp 
+        ? (state.clientName ? `¡Hola ${state.clientName.split(' ')[0]}! Qué lindo saludarte de nuevo. Bienvenida a *KÂLON Estética* ✨. ` : "¡Hola! Qué lindo saludarte. Bienvenida a *KÂLON Estética* ✨. ")
+        : "";
     
     if ((state.stage === 'waiting_for_receipt' || state.stage === 'done') && hasMediaInLastMsg) {
         return "¡Excelente noticia! 💖 Recibimos tu comprobante correctamente. Tu turno ya quedó agendado y confirmado en nuestro sistema. ¡Qué placer va a ser recibirte en KÂLON para mimarte un rato! Nos vemos pronto. ✨";

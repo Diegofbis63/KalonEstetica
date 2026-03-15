@@ -20,7 +20,7 @@ export async function getActiveServices() {
 
 export async function getLeadByPhone(phone: string) {
     console.log(`[db.ts] Searching lead by phone: ${phone}`);
-    const results = await sql`SELECT id, is_bot_enabled, client_name FROM leads WHERE regexp_replace(contact_info->>'phone', '\\D', '', 'g') LIKE ${'%' + phone} LIMIT 1`;
+    const results = await sql`SELECT id, is_bot_enabled, client_name, contact_info FROM leads WHERE regexp_replace(contact_info->>'phone', '\\D', '', 'g') LIKE ${'%' + phone} LIMIT 1`;
     return results.length > 0 ? results[0] : null;
 }
 
