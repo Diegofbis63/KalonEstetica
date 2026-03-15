@@ -7,8 +7,8 @@ import {
     formatDurationHuman, 
     parseDuration, 
     parseRelativeDate 
-} from './utils';
-import { getNlpManager } from './nlp';
+} from './utils.js';
+import { getNlpManager } from './nlp.js';
 
 export interface ChatMessage {
     role: string;

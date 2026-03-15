@@ -11,15 +11,15 @@ import {
     getAppointmentsForDate, 
     createAppointment, 
     markLeadAsConverted 
-} from './_services/db';
+} from './_services/db.js';
 import { 
     parseDuration, 
     formatForWhatsApp 
-} from './_services/utils';
+} from './_services/utils.js';
 import { 
     extractState, 
     generateResponse 
-} from './_services/stateMachine';
+} from './_services/stateMachine.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log(`[chat.ts] --- Incoming Request: ${req.method} ---`);
