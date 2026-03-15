@@ -10,7 +10,7 @@ const { NlpManager } = pkgNlp;
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 // ─── Singleton NLP Manager ───────────────────────────────────────────────────
-let manager: any = null;
+let manager: pkgNlp.NlpManager | null = null;
 async function getNlpManager() {
     if (manager) return manager;
     manager = new NlpManager({ languages: ['es'], autoSave: false, forceNER: false, nlp: { useNativeSentiment: false } });
@@ -546,18 +546,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const userId = userIdRaw ? userIdRaw.split('@')[0].replace(/\D/g, '') : null;
         let incomingMediaUrl = body.mediaUrl || null;
         
-        // Clean up message content if it contains the media URL in parentheses
+        // 1. CLEAN MEDIA: Extract and remove WhatsApp Bridge placeholders
         if (incomingMessage.includes('📸 [Imagen enviada]')) {
+            // Extract URL from parentheses if present
             const urlMatch = incomingMessage.match(/\((https?:\/\/[^)]+)\)/);
             if (urlMatch) {
                 if (!incomingMediaUrl) incomingMediaUrl = urlMatch[1];
-                incomingMessage = incomingMessage.replace(urlMatch[0], '').trim();
+                incomingMessage = incomingMessage.replace(urlMatch[0], ''); // Remove (url)
             }
-        } else if (!incomingMediaUrl && (incomingMessage.match(/^https?:\/\//) || incomingMessage.match(/^\(https?:\/\//))) {
+            // Remove the placeholder text and clean surrounding whitespace
+            incomingMessage = incomingMessage.replace(/📸\s*\[Imagen enviada\]/gi, '').trim();
+        } 
+        
+        // 2. DIRECT URL: If message is just a URL, treat it as media
+        if (!incomingMediaUrl && (incomingMessage.match(/^https?:\/\/[^\s]+$/) || incomingMessage.match(/^\(https?:\/\/[^\s]+\)$/))) {
             const cleanerMatch = incomingMessage.match(/(https?:\/\/[^\s)]+)/);
             if (cleanerMatch) {
                 incomingMediaUrl = cleanerMatch[1];
-                incomingMessage = "📸 [Imagen enviada]";
+                incomingMessage = ""; 
             }
         }
 
@@ -569,7 +575,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (userId) {
             const phone = userId.replace(/\D/g, '');
-            const leadSearch = await sql`SELECT id, is_bot_enabled FROM leads WHERE regexp_replace(contact_info->>'phone', '\\D', '', 'g') LIKE ${'%' + phone} LIMIT 1` as any[];
+            const leadSearch = await sql`SELECT id, is_bot_enabled FROM leads WHERE regexp_replace(contact_info->>'phone', '\\D', '', 'g') LIKE ${'%' + phone} LIMIT 1`;
             if (leadSearch.length > 0) {
                 leadId = leadSearch[0].id;
                 isBotEnabled = leadSearch[0].is_bot_enabled !== false;
@@ -583,7 +589,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     SELECT role, content FROM chat_logs 
                     WHERE lead_id = ${leadId}
                     ORDER BY created_at ASC
-                ` as any[];
+                `;
                 messages = history.length > 0 ? history : [];
             }
             messages.push({ role: 'user', content: incomingMessage });
