@@ -227,34 +227,51 @@ export async function extractState(
                             }
                             
                             const nt = normalizeText(s.title);
+                            // 1. EXACT PHRASE MATCH: The gold standard
                             if (normalizedContent.includes(nt)) return true;
                             
-                            return inputParts.some(part => {
-                                const isCategoryName = categories.some(cat => normalizeText(cat.name) === part);
+                            // 2. Exact word match (e.g. "laminado" matching "Laminado de cejas")
+                            const inputWords = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 3);
+                            const titleWords = nt.split(/\s+/).filter(w => w.length > 3);
+                            
+                            const matchesCoreWord = titleWords.some(tw => inputWords.includes(tw));
+                            if (matchesCoreWord) {
+                                // If it's a category name, ignore (already handled or too generic)
+                                const isCategoryName = categories.some(cat => normalizeText(cat.name) === normalizedContent);
                                 if (isCategoryName) return false;
 
-                                if (nt.split(/\s+/).some(word => word.length > 3 && word === part)) return true;
-                                const titleParts = nt.split(/\s+/);
-                                return titleParts.some(tp => tp.length > 3 && getSimilarity(part, tp) > 0.85);
-                            });
+                                // Final sanity check on similarity
+                                if (getSimilarity(normalizedContent, nt) > 0.8 || normalizedContent === nt) return true;
+                            }
+
+                            return false;
                         });
 
-                        // Refined Differentiation for prefixes like "Extensiones"
+                        // Refined Differentiation: If multiple services found, we need to be EXTRA strict
                         if (potentialSvcs.length > 1) {
-                            // 4) Identifier filter (ruso vs clasicas, etc.)
+                            // 1. Try to find an exact full-title match in the text
                             const exactMatches = potentialSvcs.filter(s => normalizedContent.includes(normalizeText(s.title)));
-                            if (exactMatches.length > 0) {
+                            if (exactMatches.length === 1) {
                                 potentialSvcs = exactMatches;
                             } else {
-                                const identifiers = ["ruso", "clasicas", "1x1", "keratina", "polygel", "kapping", "semi", "lifting", "volumen"];
-                                const foundId = identifiers.find(id => normalizedContent.includes(id));
-                                if (foundId) {
-                                    potentialSvcs = potentialSvcs.filter(s => normalizeText(s.title).includes(foundId));
-                                } else if (potentialSvcs.length > 1) {
-                                    // If no specific identifier but multiple results, it's safer to favor exact word matches
-                                    const veryCloseMatch = potentialSvcs.find(s => getSimilarity(normalizedContent, normalizeText(s.title)) > 0.85);
-                                    if (veryCloseMatch) potentialSvcs = [veryCloseMatch];
-                                    else potentialSvcs = []; 
+                                // 2. Try identifying keywords (ruso, clasicas, etc.)
+                                const identifiers = ["ruso", "clasicas", "1x1", "keratina", "polygel", "kapping", "semi", "lifting", "volumen", "henna", "6d", "brow lamination", "laminado"];
+                                const foundIds = identifiers.filter(id => normalizedContent.includes(id));
+                                
+                                if (foundIds.length > 0) {
+                                    // If we have IDs, only keep svcs that match the most specific ID found
+                                    potentialSvcs = potentialSvcs.filter(s => {
+                                        const snt = normalizeText(s.title);
+                                        return foundIds.some(fid => snt.includes(fid));
+                                    });
+                                }
+                                
+                                // 3. Final tie-breaker: similarity
+                                if (potentialSvcs.length > 1) {
+                                    const withSimilarity = potentialSvcs.map(s => ({ svc: s, sim: getSimilarity(normalizedContent, normalizeText(s.title)) }));
+                                    withSimilarity.sort((a, b) => b.sim - a.sim);
+                                    if (withSimilarity[0].sim > 0.9) potentialSvcs = [withSimilarity[0].svc];
+                                    else potentialSvcs = []; // Too ambiguous
                                 }
                             }
                         }
