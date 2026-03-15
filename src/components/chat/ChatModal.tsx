@@ -267,6 +267,18 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
                           const isAdmin = m.role === 'admin';
                           const isBot = m.role === 'bot';
 
+                          // Legacy Image Extraction for old chat logs
+                          let displayContent = m.content || "";
+                          let displayMedia = m.media_url || m.media_data;
+
+                          if (!displayMedia && displayContent.includes('📸 [Imagen enviada]')) {
+                              const urlMatch = displayContent.match(/\((https?:\/\/[^)]+)\)/);
+                              if (urlMatch) {
+                                  displayMedia = urlMatch[1];
+                                  displayContent = displayContent.replace(urlMatch[0], '').replace(/📸\s*\[Imagen enviada\]/gi, '').trim();
+                              }
+                          }
+
                           return (
                             <div key={i} className={`flex ${isUser ? 'justify-start' : 'justify-end'}`}>
                                 <div className={`max-w-[85%] space-y-1 ${isUser ? 'items-start' : 'items-end'} flex flex-col`}>
@@ -284,18 +296,18 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
                                           {m.isPending && <Clock className="w-2.5 h-2.5 animate-spin opacity-30" />}
                                         </div>
                                         
-                                        {(m.media_url || m.media_data) && (
+                                        {displayMedia && (
                                           <div className="mb-3 rounded-xl overflow-hidden border border-white/10 bg-black/40 shadow-inner group/img relative">
                                             <img 
-                                              src={m.media_url || m.media_data} 
+                                              src={displayMedia} 
                                               alt="Multimedia" 
                                                className="max-w-full h-auto cursor-zoom-in hover:scale-105 transition-transform duration-500" 
-                                              onClick={() => setLightboxImage(m.media_url || m.media_data || null)}
+                                              onClick={() => setLightboxImage(displayMedia || null)}
                                             />
                                           </div>
                                         )}
                                         
-                                        <p className="font-medium whitespace-pre-wrap">{m.content}</p>
+                                        {displayContent && <p className="font-medium whitespace-pre-wrap">{displayContent}</p>}
                                     </div>
                                     <span className="text-[9px] text-cream/20 font-bold px-1 italic">
                                       {m.created_at ? new Date(m.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : 'Enviando...'}

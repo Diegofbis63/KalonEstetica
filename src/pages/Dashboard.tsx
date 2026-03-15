@@ -842,18 +842,28 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                   </PopoverContent>
                                 </Popover>
                               ) : (
-                                a.service_type
+                                (a.service_type === 'Servicio' && a.selected_services && a.selected_services.length > 0)
+                                   ? Array.from(new Set(a.selected_services.map(s => s.category_name || (s as any).category || "Servicio"))).join(' + ')
+                                   : a.service_type
                               )}
                             </div>
                           </TableCell>
                           <TableCell className="px-5 py-6 text-center font-sans">
                             <div className="text-sm font-bold text-cream/70 flex items-center justify-center gap-2 whitespace-nowrap">
                               <Clock className="w-3.5 h-3.5 text-gold/60" />
-                              {a.total_duration ? (
-                                a.total_duration >= 60 
-                                  ? `${Math.floor(a.total_duration/60)}H${a.total_duration%60 > 0 ? ` ${a.total_duration%60}M` : ''}`
-                                  : `${a.total_duration}M`
-                              ) : "-"}
+                              {(() => {
+                                const dur = (a.selected_services && a.selected_services.length > 0)
+                                  ? a.selected_services.reduce((total, s) => {
+                                      const match = s.duration?.match(/(\d+)/);
+                                      return total + (match ? parseInt(match[1]) : 60);
+                                    }, 0)
+                                  : a.total_duration;
+                                  
+                                if (!dur) return "-";
+                                return dur >= 60 
+                                  ? `${Math.floor(dur/60)}H${dur%60 > 0 ? ` ${dur%60}M` : ''}`
+                                  : `${dur}M`;
+                              })()}
                             </div>
                           </TableCell>
                           <TableCell className="px-5 py-6 text-center font-sans">
