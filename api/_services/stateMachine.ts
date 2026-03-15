@@ -166,10 +166,15 @@ export async function extractState(
                 }
 
                 if (!state.clientName) {
-                    if (currentBotAsked === 'name' || normalizedContent.includes("mi nombre es") || normalizedContent.includes("soy ") || normalizedContent.split(/\s+/).length === 2) {
+                    const isNamePrompt = currentBotAsked === 'name' || state.stage === 'name_collection';
+                    if (isNamePrompt || normalizedContent.includes("mi nombre es") || normalizedContent.includes("soy ") || normalizedContent.split(/\s+/).length === 2) {
                         if (msg.content.length > 2 && msg.content.length < 40) {
-                            state.clientName = extractName(msg.content);
-                            console.log(`[stateMachine.ts] Detected name: ${state.clientName}`);
+                            // Avoid capturing typical intents as names
+                            const notNames = ["si", "no", "hola", "chau", "nada", "turno", "bien", "dale", "otro"];
+                            if (!notNames.includes(normalizedContent.trim())) {
+                                state.clientName = extractName(msg.content);
+                                console.log(`[stateMachine.ts] Detected name: ${state.clientName}`);
+                            }
                         }
                     }
                 }
@@ -182,16 +187,18 @@ export async function extractState(
                     }
                 }
                 
-                if (currentBotAsked === 'sub_service') {
+                if (currentBotAsked === 'sub_service' || state.stage === 'sub_service_selection') {
                     const inputParts = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 3);
                     const foundSvcs = services.filter(s => {
-                        if (s.category_id !== state.currentCategoryId) return false;
+                        if (state.currentCategoryId && s.category_id !== state.currentCategoryId) return false;
                         const nt = normalizeText(s.title);
                         if (normalizedContent.includes(nt)) return true;
+                        
+                        // Strict matching for keywords
                         return inputParts.some(part => {
-                            if (nt.includes(part)) return true;
+                            if (nt.split(/\s+/).some(word => word.length > 3 && word === part)) return true;
                             const titleParts = nt.split(/\s+/);
-                            return titleParts.some(tp => tp.length > 3 && getSimilarity(part, tp) > 0.8);
+                            return titleParts.some(tp => tp.length > 3 && getSimilarity(part, tp) > 0.85);
                         });
                     });
 
@@ -312,18 +319,19 @@ export async function extractState(
         // Final stage progression check
         if (state.selectedServiceIds.length > 0 && state.pendingCategoryIds.length === 0 && !state.currentCategoryId) {
             const isInteracting = ['sub_service_selection', 'cart_review', 'cart_confirmation'].includes(state.stage);
+            const isFinished = ['done'].includes(state.stage);
             const isPreBooking = !['availability_proposal', 'payment_request', 'done', 'waiting_for_receipt'].includes(state.stage);
             
-            if (!isInteracting && (isPreBooking || state.stage === 'name_collection' || state.stage === 'phone_collection')) {
+            if (!isInteracting && !isFinished && (isPreBooking || state.stage === 'name_collection' || state.stage === 'phone_collection')) {
                 if (!state.clientName) {
                     state.stage = 'name_collection';
-                    console.log(`[stateMachine.ts] Final Correction: Setting stage to name_collection because clientName is missing`);
+                    console.log(`[stateMachine.ts] Progression: name_collection`);
                 } else if (!state.clientPhone) {
                     state.stage = 'phone_collection';
-                    console.log(`[stateMachine.ts] Final Correction: Setting stage to phone_collection because clientPhone is missing`);
-                } else if (!state.pendingDate || state.stage === 'availability_proposal' || !state.pendingTime) {
+                    console.log(`[stateMachine.ts] Progression: phone_collection`);
+                } else if (!state.pendingDate || !state.pendingTime || state.stage === 'availability_proposal') {
                     state.stage = 'availability_proposal';
-                    console.log(`[stateMachine.ts] Final Correction: Setting stage to availability_proposal`);
+                    console.log(`[stateMachine.ts] Progression: availability_proposal`);
                 }
             }
         }
@@ -364,7 +372,10 @@ export function generateResponse(
             case 'sub_service_selection': {
                 const cat = categories.find(c => c.id === state.currentCategoryId);
                 const subServices = services.filter(s => s.category_id === state.currentCategoryId);
-                const list = subServices.map(s => `• *${s.title}* ($${s.price}) - ${s.duration.toString().replace(/min/g, '').trim()} min`).join('\n');
+                const list = subServices.map(s => {
+                    const cleanDur = s.duration.toString().replace(/min/gi, '').replace(/minutos/gi, '').trim();
+                    return `• *${s.title}* ($${s.price}) - ${cleanDur} min`;
+                }).join('\n');
                 
                 const selectedCount = state.selectedServiceIds.length;
                 const prefix = selectedCount > 0 
