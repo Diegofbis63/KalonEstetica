@@ -138,6 +138,20 @@ export async function extractState(
                 const intent = nlpResult?.intent;
                 if (isLastMessage) state.lastIntent = intent;
 
+                // --- HIGH PRIORITY MEDIA INTERCEPTOR ---
+                // If the user sends an image while we have an active booking session, 
+                // we treat it as a receipt immediately to avoid NLP misinterpretation.
+                if (hasMedia) {
+                    const isPotentiallyWaiting = ['availability_proposal', 'payment_request', 'waiting_for_receipt'].includes(state.stage);
+                    const hasBookingContext = state.selectedServiceIds.length > 0 || (state.pendingDate && state.pendingTime);
+                    
+                    if (isPotentiallyWaiting || hasBookingContext) {
+                        state.stage = 'waiting_for_receipt';
+                        console.log(`[stateMachine.ts] Turn ${i}: High-Priority Media Detection. Stage -> waiting_for_receipt`);
+                        continue; // Skip further processing for this turn
+                    }
+                }
+
                 // Global intent handling - STICKY FLOW PROTECTION
                 if (intent === 'saludo' || intent === 'pedir_turno_general' || intent === 'listar_servicios') {
                     const hasSelectedServices = state.selectedServiceIds.length > 0;
@@ -600,29 +614,32 @@ export function generateResponse(
             }
             case 'availability_proposal': {
                 if (availableSlots.length > 0) {
-                    const totalDur = services.filter(s => state.selectedServiceIds.includes(s.id)).reduce((a, b) => a + parseDuration(b.duration), 0);
+                    const selectedSvc = services.filter(s => state.selectedServiceIds.includes(s.id));
+                    const totalDur = selectedSvc.reduce((a, b) => a + parseDuration(b.duration), 0);
                     const durText = formatDurationHuman(totalDur);
+                    const serviceList = selectedSvc.map(s => s.title).join(' + ');
                     
                     if (availableSlots.length === 1) {
                         const slot = availableSlots[0];
-                        const greeting = state.clientName ? `${state.clientName.split(' ')[0]}, ¡buenas noticias! ✨ ` : "¡Buenas noticias! ✨ ";
-                        return `${greeting}Tengo disponibilidad para tus tratamientos (Duración total: *${durText}*) el día *${formatDateHuman(slot.date)}* a las *${slot.time}hs*. 🗓️\n\n¿Te queda bien este horario o preferís que busquemos otro?`;
+                        const greeting = state.clientName ? `${state.clientName.split(' ')[0]}, ¡qué alegría! ✨ ` : "¡Excelentes noticias! ✨ ";
+                        return `${greeting}Tengo disponibilidad para tu sesión de *${serviceList}* (Duración: *${durText}*) el día *${formatDateHuman(slot.date)}* a las *${slot.time}hs*. 🗓️\n\n¿Te queda bien este horario o preferís que busquemos otro?`;
                     } else {
                         const options = availableSlots.map(s => `• *${formatDateHuman(s.date)}* a las *${s.time}hs*`).join('\n');
-                        return `¡Claro! 😊 Para que elijas tranquila, acá tenés las opciones más cercanas disponibles (Duración: *${durText}*):\n\n${options}\n\n¿Cuál de estos te gusta más?`;
+                        return `¡Claro que sí! 😊 Para que elijas con tranquilidad, aquí tenés las opciones más cercanas para tu sesión de *${serviceList}*:\n\n${options}\n\n¿Cuál de estos horarios te resulta más cómodo?`;
                     }
                 }
-                return "Uy, parece que tengo la agenda súper llena para esa duración total esta semana. 🗓️ ¿Querés que busquemos para la semana que viene así te aseguro un lugar? 😊";
+                return "Uy, parece que tengo la agenda completa para esa duración esta semana. 🗓️ ¿Te gustaría que busquemos un lugar para la semana que viene así te aseguro un espacio para vos? 😊";
             }
             case 'payment_request': {
                 const selectedSvc = services.filter(s => state.selectedServiceIds.includes(s.id));
                 const totalPrice = selectedSvc.reduce((a, b) => a + Number(b.price), 0);
                 const totalDur = selectedSvc.reduce((a, b) => a + parseDuration(b.duration), 0);
+                const serviceList = selectedSvc.map(s => s.title).join(' + ');
                 const deposit = totalPrice * 0.5;
                 const durText = formatDurationHuman(totalDur);
-                const personalGreeting = state.clientName ? `¡Todo listo, *${state.clientName.split(' ')[0]}*! ✨ ` : "¡Todo listo! ✨ ";
+                const personalGreeting = state.clientName ? `¡Todo listo, *${state.clientName.split(' ')[0]}*! ✨ ` : "¡Excelente elección! ✨ ";
 
-                return `${personalGreeting}Tu sesión va a durar aproximadamente *${durText}* y el valor total es de *$${totalPrice}*.\n\nPara confirmar definitivamente tu lugarcito el *${formatDateHuman(state.pendingDate || '')}* a las *${state.pendingTime}hs*, necesitamos una seña del 50% (*$${deposit.toFixed(0)}*).\n\nTransferí al alias: *KALON.ESTETICA.OK* y mandame la fotito del comprobante por acá. ¡Ya falta nada! 📸`;
+                return `${personalGreeting}Tu sesión de *${serviceList}* durará aproximadamente *${durText}* y el valor total es de *$${totalPrice}*.\n\nPara confirmar definitivamente tu lugar el día *${formatDateHuman(state.pendingDate || '')}* a las *${state.pendingTime}hs*, necesitamos una seña del 50% (*$${deposit.toFixed(0)}*).\n\nTransferí al alias: *KALON.ESTETICA.OK* y enviame el comprobante por aquí. ¡Ya casi estamos! 📸`;
             }
             case 'waiting_for_receipt':
                 return "Quedo atenta a tu comprobante de transferencia para terminar de confirmar tu turno. ¡Cualquier duda decime! 😊";
