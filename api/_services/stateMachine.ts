@@ -80,9 +80,9 @@ export async function extractState(
                 else if (botText.includes("servicios de") || botText.includes("tratamientos de") || botText.includes("estos son los tratamientos")) currentBotAsked = 'sub_service';
                 else if (botText.includes("revisemos tu pedido") || botText.includes("tu carrito") || botText.includes("listado de todos")) currentBotAsked = 'cart_review';
                 else if (botText.includes("agregar algo mas") || botText.includes("avanzamos con el turno")) currentBotAsked = 'cart_confirmation';
-                else if (botText.includes("tu nombre") || botText.includes("con quien tengo")) currentBotAsked = 'name';
-                else if (botText.includes("whatsapp") || botText.includes("numero") || botText.includes("este numero")) currentBotAsked = 'phone';
-                else if (botText.includes("proximo horario") || botText.includes("confirmar el turno") || botText.includes("disponibilidad") || botText.includes("te queda bien") || botText.includes("busquemos otro")) {
+                else if (botText.includes("tu nombre") || botText.includes("nombre completo") || botText.includes("con quien tengo")) currentBotAsked = 'name';
+                else if (botText.includes("whatsapp") || botText.includes("este mismo numero") || botText.includes("numero de cel")) currentBotAsked = 'phone';
+                else if (botText.includes("proximo horario") || botText.includes("confirmar el turno") || botText.includes("disponibilidad") || botText.includes("te queda bien") || botText.includes("busquemos otro") || botText.includes("horario me queda")) {
                     currentBotAsked = 'availability';
                     const isoMatch = msg.content.match(/(\d{4})-(\d{2})-(\d{2})/);
                     if (isoMatch) state.pendingDate = isoMatch[0];
@@ -293,9 +293,9 @@ export async function extractState(
                     if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("otro") || normalizedContent.includes("no puedo") || normalizedContent.includes("que mas hay")) {
                         if (state.pendingDate) state.rejectedDates.push(`${state.pendingDate} ${state.pendingTime}`);
                         state.requestedAllOptions = normalizedContent.includes("otro") || normalizedContent.includes("que mas");
-                    } else if (intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("si") || normalizedContent.includes("bien") || normalizedContent.includes("dale") || normalizedContent.includes("perfecto") || normalizedContent.includes("correcto") || normalizedContent.includes("anotame") || normalizedContent.includes("agendame") || normalizedContent.includes("me sirve") || normalizedContent.includes("ese horario") || normalizedContent.includes("esa hora") || normalizedContent.includes("confirmar") || normalizedContent.includes("esta bien")) {
+                    } else if (intent === 'afirmacion_o_agregar_carrito' || intent === 'confirmar_horario' || normalizedContent.includes("si") || normalizedContent.includes("bien") || normalizedContent.includes("esta bien") || normalizedContent.includes("me sirve") || normalizedContent.includes("dale") || normalizedContent.includes("perfecto") || normalizedContent.includes("correcto") || normalizedContent.includes("anotame") || normalizedContent.includes("agendame") || normalizedContent.includes("ese horario") || normalizedContent.includes("esta perfecto") || normalizedContent.includes("confirmar")) {
                         state.stage = 'payment_request';
-                        console.log(`[stateMachine.ts] Transition to payment_request (Availability confirmed)`);
+                        console.log(`[stateMachine.ts] Turn ${i}: Transition to payment_request (Availability confirmed)`);
                     }
                 }
                 if (currentBotAsked === 'payment' || state.stage === 'payment_request' || state.stage === 'waiting_for_receipt') {
@@ -316,24 +316,29 @@ export async function extractState(
             }
         }
 
-        // Final stage progression check
+        // Final stage progression check - DEFENSIVE MODE
         if (state.selectedServiceIds.length > 0 && state.pendingCategoryIds.length === 0 && !state.currentCategoryId) {
             const isInteracting = ['sub_service_selection', 'cart_review', 'cart_confirmation'].includes(state.stage);
-            const isFinished = ['done'].includes(state.stage);
-            const isPreBooking = !['availability_proposal', 'payment_request', 'done', 'waiting_for_receipt'].includes(state.stage);
+            const isFinished = ['done', 'waiting_for_receipt', 'payment_request'].includes(state.stage);
             
-            if (!isInteracting && !isFinished && (isPreBooking || state.stage === 'name_collection' || state.stage === 'phone_collection')) {
+            if (!isInteracting && !isFinished) {
                 if (!state.clientName) {
                     state.stage = 'name_collection';
                     console.log(`[stateMachine.ts] Progression: name_collection`);
                 } else if (!state.clientPhone) {
                     state.stage = 'phone_collection';
                     console.log(`[stateMachine.ts] Progression: phone_collection`);
-                } else if (!state.pendingDate || !state.pendingTime || state.stage === 'availability_proposal') {
+                } else if (!state.pendingDate || !state.pendingTime) {
                     state.stage = 'availability_proposal';
                     console.log(`[stateMachine.ts] Progression: availability_proposal`);
                 }
             }
+        }
+        
+        // Final protection: if we reach payment_request but don't have date/time, something is wrong
+        if (state.stage === 'payment_request' && (!state.pendingDate || !state.pendingTime)) {
+            state.stage = 'availability_proposal';
+            console.log(`[stateMachine.ts] Emergency Fallback: payment_request -> availability_proposal`);
         }
     } catch (error) {
         console.error("[stateMachine.ts] CRITICAL ERROR in extractState:", error);

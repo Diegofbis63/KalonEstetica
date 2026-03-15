@@ -5,171 +5,49 @@
     {
       "intent": "saludo",
       "utterances": [
-        "hola",
-        "holis",
-        "buenas",
-        "buen dia",
-        "buenas tardes",
-        "buenas noches",
-        "que tal",
-        "hola como estas",
-        "hola, tienen turnos?",
-        "holi",
-        "alo",
-        "buenasss",
-        "holaa"
+        "hola", "holis", "buenas", "buen dia", "buenas tardes", "buenas noches", "que tal", "hola como estas", "hola, tienen turnos?", "holi", "alo", "buenasss", "holaa", "buen día", "buen dia bot", "hola kalon", "hola quería consultar", "hola buenas", "hola!", "holaa!", "holaaa", "holaaa!"
       ]
     },
     {
       "intent": "pedir_turno_general",
       "utterances": [
-        "quiero sacar un turno",
-        "necesito un turno",
-        "quería agendar una cita",
-        "tendrás un lugarcito",
-        "quiero reservar",
-        "para pedir turno",
-        "me das un turno",
-        "tienen disponibilidad",
-        "quiero ir",
-        "tienen lugar para hoy",
-        "para la semana que viene",
-        "queria ver si tenian lugar",
-        "como hago para sacar turno"
+        "quiero sacar un turno", "necesito un turno", "quería agendar una cita", "tendrás un lugarcito", "quiero reservar", "para pedir turno", "me das un turno", "tienen disponibilidad", "quiero ir", "tienen lugar para hoy", "para la semana que viene", "queria ver si tenian lugar", "como hago para sacar turno", "querría un turno", "quisiera agendar", "tenes lugar para?", "sacar turno", "reserva de turno", "turnos disponibles", "quiero hacerme algo", "necesito hacerme las uñas", "quiero pestañas", "turno por favor"
       ]
     },
     {
       "intent": "listar_servicios",
       "utterances": [
-        "que servicios tienen",
-        "pasame la lista",
-        "que tratamientos hacen",
-        "cuales son los servicios",
-        "que opciones hay",
-        "que hacen",
-        "mostrame que hacen",
-        "me pasas el menu de servicios",
-        "info de servicios",
-        "que cosas se pueden hacer ahi",
-        "cuales son los tratamientos"
+        "que servicios tienen", "pasame la lista", "que tratamientos hacen", "cuales son los servicios", "que opciones hay", "que hacen", "mostrame que hacen", "me pasas el menu de servicios", "info de servicios", "que cosas se pueden hacer ahi", "cuales son los tratamientos", "que tratamientos ofrecen", "lista de tratamientos", "quiero ver los precios y servicios", "que se puede hacer?", "catalogo de servicios", "servicios disponibles"
       ]
     },
     {
       "intent": "afirmacion_o_agregar_carrito",
       "utterances": [
-        "si",
-        "dale",
-        "de una",
-        "perfecto",
-        "buenisimo",
-        "obvio",
-        "genial",
-        "avancemos",
-        "si, quiero eso",
-        "joya",
-        "mandale",
-        "sisi",
-        "se",
-        "si, agreguemos",
-        "quiero sumar otro",
-        "me gustaria agregar",
-        "correcto",
-        "adelante",
-        "confirmar",
-        "asi esta bien",
-        "proceder",
-        "es correcto"
+        "si", "dale", "de una", "perfecto", "buenisimo", "obvio", "genial", "avancemos", "si, quiero eso", "joya", "mandale", "sisi", "se", "si, agreguemos", "quiero sumar otro", "me gustaria agregar", "correcto", "adelante", "confirmar", "asi esta bien", "proceder", "es correcto", "dale buenisimo", "dale dale", "buenísimo", "está bien", "esta bien", "confirmado", "ok", "okay", "oka", "dale no hay problema", "si, me sirve", "si, anotame", "agregame ese tambien", "me gusta", "copado", "si, por favor", "si!", "sisis", "claro", "por supuesto", "está perfecto", "esta perfecto"
+      ]
+    },
+    {
+      "intent": "confirmar_horario",
+      "utterances": [
+        "esta bien ese horario", "ese horario esta bien", "me sirve ese horario", "si, ese esta bien", "ese me gusta", "esta bien ese", "anotame para ese", "confirmame ese horario", "si, ese", "el de las 9 esta bien", "me queda bien ese horario", "perfecto ese horario", "ese horario me queda comodo", "si, confirmame ese", "esta perfecto ese horario", "anotame ese", "confirmar ese", "si ese horario esta perfecto", "esta bien ese horario dale"
       ]
     },
     {
       "intent": "negacion_o_cerrar_carrito",
       "utterances": [
-        "no",
-        "no gracias",
-        "solo eso",
-        "nada mas",
-        "cerremos ahi",
-        "eso es todo",
-        "listo",
-        "con eso estamos",
-        "ya esta",
-        "no quiero nada mas",
-        "solo me hago eso",
-        "cerremos",
-        "con eso es suficiente",
-        "pasame el total",
-        "modificar",
-        "quiero cambiar algo",
-        "sacar uno",
-        "borrar",
-        "cambiar el servicio"
+        "no", "no gracias", "solo eso", "nada mas", "cerremos ahi", "eso es todo", "listo", "con eso estamos", "ya esta", "no quiero nada mas", "solo me hago eso", "cerremos", "con eso es suficiente", "pasame el total", "modificar", "quiero cambiar algo", "sacar uno", "borrar", "cambiar el servicio", "no por ahora", "ninguno mas", "asi esta bien", "no, gracias", "no no", "nada mas por ahora", "con eso estoy", "gracias, solo eso", "no, cerremos", "no!"
       ]
     },
     {
       "intent": "preguntar_precio",
       "utterances": [
-        "cuanto sale",
-        "que precio tiene",
-        "cuanto cuesta",
-        "cual es el valor",
-        "cuanto me sale",
-        "precios porfa",
-        "me pasas los precios",
-        "tienen lista de precios",
-        "cuanto cobran",
-        "es muy caro?"
-      ]
-    },
-    {
-      "intent": "preguntar_ubicacion",
-      "utterances": [
-        "donde estan",
-        "por donde quedan",
-        "cual es la direccion",
-        "en que zona estan",
-        "estan en el centro?",
-        "me pasas la dire",
-        "donde atienden",
-        "como llego al local",
-        "estan en cordoba capital?"
-      ]
-    },
-    {
-      "intent": "preguntar_horarios",
-      "utterances": [
-        "en que horario atienden",
-        "a que hora abren",
-        "hasta que hora estan",
-        "abren los sabados?",
-        "horarios por favor",
-        "trabajan de tarde?",
-        "que dias atienden"
+        "cuanto sale", "que precio tiene", "cuanto cuesta", "cual es el valor", "cuanto me sale", "precios porfa", "me pasas los precios", "tienen lista de precios", "cuanto cobran", "es muy caro?", "valor de los servicios", "precio de pestañas", "cuanto valen las uñas", "precio", "cuanto es?"
       ]
     },
     {
       "intent": "enviar_comprobante_texto",
       "utterances": [
-        "ya pague",
-        "ahi te pase el comprobante",
-        "te mande la captura",
-        "ya hice la transferencia",
-        "listo el pago",
-        "te transferi",
-        "ahi te paso el ticket",
-        "listo la seña",
-        "ya mande la plata"
-      ]
-    },
-    {
-      "intent": "hablar_con_humano",
-      "utterances": [
-        "quiero hablar con una persona",
-        "pasame con alguien",
-        "no quiero hablar con un bot",
-        "hay alguien ahi",
-        "atencion al cliente",
-        "me podes pasar con un humano",
-        "quiero consultar algo especifico"
+        "ya pague", "ahi te pase el comprobante", "te mande la captura", "ya hice la transferencia", "listo el pago", "te transferi", "ahi te paso el ticket", "listo la seña", "ya mande la plata", "aca esta el comprobante", "comprobante enviado", "ya esta la transferencia", "captura enviada", "listo el comprobante", "te mande el pago"
       ]
     }
   ]
