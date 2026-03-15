@@ -43,22 +43,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log(`[chat.ts] Message: "${incomingMessage}", User: ${userId}`);
 
         // 1. CLEAN MEDIA: Extract and remove WhatsApp Bridge placeholders
-        if (incomingMessage.includes('📸 [Imagen enviada]')) {
-            const urlMatch = incomingMessage.match(/\((https?:\/\/[^)]+)\)/);
-            if (urlMatch) {
-                if (!incomingMediaUrl) incomingMediaUrl = urlMatch[1];
-                incomingMessage = incomingMessage.replace(urlMatch[0], ''); 
-            }
-            incomingMessage = incomingMessage.replace(/📸\s*\[Imagen enviada\]/gi, '').trim();
+        const anyUrlMatch = incomingMessage.match(/(https?:\/\/[^\s)]+)/);
+        if (anyUrlMatch && !incomingMediaUrl) {
+            incomingMediaUrl = anyUrlMatch[1];
+            // Remove the URL and its wrapping parentheses if present
+            incomingMessage = incomingMessage.replace(new RegExp(`\\(?${anyUrlMatch[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)?`, 'g'), '');
+        }
+
+        if (incomingMessage.includes('📸 [Imagen enviada]') || incomingMessage.includes('📷') || incomingMessage.includes('[Foto]')) {
+            incomingMessage = incomingMessage.replace(/📸\s*\[Imagen enviada\]/gi, '');
+            incomingMessage = incomingMessage.replace(/📷/g, '');
+            incomingMessage = incomingMessage.replace(/\[Foto\]/gi, '');
+            incomingMessage = incomingMessage.trim();
         } 
         
-        // 2. DIRECT URL: If message is just a URL, treat it as media
-        if (!incomingMediaUrl && (incomingMessage.match(/^https?:\/\/[^\s]+$/) || incomingMessage.match(/^\(https?:\/\/[^\s]+\)$/))) {
-            const cleanerMatch = incomingMessage.match(/(https?:\/\/[^\s)]+)/);
-            if (cleanerMatch) {
-                incomingMediaUrl = cleanerMatch[1];
-                incomingMessage = ""; 
-            }
+        // 2. DIRECT URL: If message is just whitespace now, it was likely just media
+        if (!incomingMessage.trim() && incomingMediaUrl) {
+            incomingMessage = ""; 
         }
 
         // 3. FETCH DATA (Parallel)
@@ -98,13 +99,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             if (state.clientName && state.clientName !== 'Cliente') { 
                 await updateLeadName(leadId, state.clientName);
             }
-            await insertChatLog(leadId, 'user', incomingMessage, incomingMediaUrl, !!userId);
+            await insertChatLog(leadId, 'user', incomingMessage, incomingMediaUrl, !!userId, body.mediaData);
         } else if (userId || body.clientPhone) {
-             const phone = (userId || body.clientPhone || '').replace(/\D/g, '');
-             const nameToSave = (state.clientName && state.clientName !== 'Cliente') ? state.clientName : 'Cliente';
-             const newLead = await createLead(DEFAULT_ORG_ID, nameToSave, { phone: phone, source: userId ? 'whatsapp' : 'web' });
-             leadId = newLead.id;
-             await insertChatLog(leadId, 'user', incomingMessage, incomingMediaUrl, !!userId);
+            const phone = (userId || body.clientPhone || '').replace(/\D/g, '');
+            const nameToSave = (state.clientName && state.clientName !== 'Cliente') ? state.clientName : 'Cliente';
+            const newLead = await createLead(DEFAULT_ORG_ID, nameToSave, { phone: phone, source: userId ? 'whatsapp' : 'web' });
+            leadId = newLead.id;
+            await insertChatLog(leadId, 'user', incomingMessage, incomingMediaUrl, !!userId, body.mediaData);
         }
 
         if (!isBotEnabled) {

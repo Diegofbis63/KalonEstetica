@@ -299,12 +299,23 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
                                         </div>
                                         
                                         {displayMedia && (
-                                          <div className="mb-3 rounded-xl overflow-hidden border border-white/10 bg-black/40 shadow-inner group/img relative">
+                                          <div className="mb-3 rounded-xl overflow-hidden border border-white/10 bg-black/60 shadow-inner group/img relative min-h-[150px] min-w-[200px] flex items-center justify-center">
                                             <img 
                                               src={displayMedia} 
                                               alt="Multimedia" 
-                                               className="max-w-full h-auto cursor-zoom-in hover:scale-105 transition-transform duration-500" 
+                                              className="max-w-full max-h-[400px] object-contain cursor-zoom-in hover:scale-105 transition-transform duration-500" 
                                               onClick={() => setLightboxImage(displayMedia || null)}
+                                              onError={(e) => {
+                                                const target = e.target as HTMLImageElement;
+                                                target.style.display = 'none';
+                                                const parent = target.parentElement;
+                                                if (parent) {
+                                                  const errHint = document.createElement('div');
+                                                  errHint.className = 'p-4 text-[10px] text-cream/40 text-center italic';
+                                                  errHint.innerHTML = '📷 Imagen no disponible o expirada';
+                                                  parent.appendChild(errHint);
+                                                }
+                                              }}
                                             />
                                           </div>
                                         )}

@@ -39,10 +39,10 @@ export async function updateLeadName(leadId: string, name: string) {
     return await sql`UPDATE leads SET client_name = ${name}, updated_at = NOW() WHERE id = ${leadId}`;
 }
 
-export async function insertChatLog(leadId: string, role: string, content: string, mediaUrl: string | null, sentToWhatsapp: boolean) {
+export async function insertChatLog(leadId: string, role: string, content: string, mediaUrl: string | null, sentToWhatsapp: boolean, mediaData?: string | null) {
     console.log(`[db.ts] Inserting chat log for lead ${leadId} (${role})`);
-    return await sql`INSERT INTO chat_logs (lead_id, role, content, media_url, sent_to_whatsapp) 
-                     VALUES (${leadId}, ${role}, ${content}, ${mediaUrl}, ${sentToWhatsapp})`;
+    return await sql`INSERT INTO chat_logs (lead_id, role, content, media_url, media_data, sent_to_whatsapp) 
+                     VALUES (${leadId}, ${role}, ${content}, ${mediaUrl}, ${mediaData || null}, ${sentToWhatsapp})`;
 }
 
 export async function createLead(orgId: string, name: string, contactInfo: any) {
