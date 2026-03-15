@@ -108,8 +108,15 @@ function formatDurationHuman(minutes: number): string {
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
     if (hours === 0) return `${mins}m`;
-    if (mins === 0) return `${hours}hs`;
+    if (hours === 1 && mins === 0) return `1 hora`;
+    if (hours > 1 && mins === 0) return `${hours}hs`;
     return `${hours}:${mins.toString().padStart(2, '0')}hs`;
+}
+
+function parseDuration(durationStr: string): number {
+    if (!durationStr) return 60;
+    const match = durationStr.match(/(\d+)/);
+    return match ? parseInt(match[1], 10) : 60;
 }
 
 function parseRelativeDate(input: string, referenceDate: Date): string | null {
@@ -534,18 +541,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     try {
         const body = req.body || {};
-        const incomingMessage = body.message || "";
+        let incomingMessage = body.message || "";
         const userIdRaw = body.userId || "";
         const userId = userIdRaw ? userIdRaw.split('@')[0].replace(/\D/g, '') : null;
         let incomingMediaUrl = body.mediaUrl || null;
         
-        if (!incomingMediaUrl && incomingMessage.includes('📸 [Imagen enviada]')) {
+        // Clean up message content if it contains the media URL in parentheses
+        if (incomingMessage.includes('📸 [Imagen enviada]')) {
             const urlMatch = incomingMessage.match(/\((https?:\/\/[^)]+)\)/);
-            if (urlMatch) incomingMediaUrl = urlMatch[1];
+            if (urlMatch) {
+                if (!incomingMediaUrl) incomingMediaUrl = urlMatch[1];
+                incomingMessage = incomingMessage.replace(urlMatch[0], '').trim();
+            }
+        } else if (!incomingMediaUrl && (incomingMessage.match(/^https?:\/\//) || incomingMessage.match(/^\(https?:\/\//))) {
+            const cleanerMatch = incomingMessage.match(/(https?:\/\/[^\s)]+)/);
+            if (cleanerMatch) {
+                incomingMediaUrl = cleanerMatch[1];
+                incomingMessage = "📸 [Imagen enviada]";
+            }
         }
 
         const categories = await sql`SELECT id, name FROM categories WHERE active = true ORDER BY sort_order ASC`;
-        const services = await sql`SELECT id, category_id, title, price, duration FROM services WHERE active = true ORDER BY sort_order ASC`;
+        const services = await sql`SELECT id, category_id, title, price, duration, category as category_name FROM services WHERE active = true ORDER BY sort_order ASC`;
         
         let leadId = null;
         let isBotEnabled = true;
@@ -612,7 +629,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const foundSlots: any[] = [];
         if (state.stage === 'availability_proposal' && state.selectedServiceIds.length > 0) {
             const selectedSvcObjs = services.filter(s => state.selectedServiceIds.includes(s.id));
-            const totalDur = selectedSvcObjs.reduce((a, b) => a + (Number(b.duration)||60), 0);
+            const totalDur = selectedSvcObjs.reduce((a, b) => a + parseDuration(b.duration), 0);
             
             const baseDate = state.requestedDate ? new Date(state.requestedDate + "T12:00:00Z") : new Date();
             if (!state.requestedDate) {
@@ -672,13 +689,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if ((state.stage === 'waiting_for_receipt' || state.stage === 'payment_request' || state.stage === 'done') && (incomingMediaUrl || body.mediaData)) {
             if (leadId) {
                 const selectedSvcObjs = services.filter(s => state.selectedServiceIds.includes(s.id));
-                const svcTitles = selectedSvcObjs.map(s => s.title).join(' + ');
+                const catNames = Array.from(new Set(selectedSvcObjs.map(s => s.category_name || "Servicio"))).join(' + ');
                 const totalPrice = selectedSvcObjs.reduce((a, b) => a + Number(b.price), 0);
-                const totalDur = selectedSvcObjs.reduce((a, b) => a + (Number(b.duration) || 60), 0);
+                const totalDur = selectedSvcObjs.reduce((a, b) => a + parseDuration(b.duration), 0);
                 const dateTime = `${state.pendingDate}T${state.pendingTime}:00Z`;
                 
                 await sql`INSERT INTO appointments (lead_id, organization_id, date_time, service_type, status, total_price, total_duration, selected_services) 
-                          VALUES (${leadId}, ${DEFAULT_ORG_ID}, ${dateTime}, ${svcTitles}, 'confirmed', ${totalPrice}, ${totalDur}, ${JSON.stringify(selectedSvcObjs)})`;
+                          VALUES (${leadId}, ${DEFAULT_ORG_ID}, ${dateTime}, ${catNames}, 'confirmed', ${totalPrice}, ${totalDur}, ${JSON.stringify(selectedSvcObjs)})`;
                 
                 state.stage = 'done';
                 await sql`UPDATE leads SET status = 'converted', updated_at = NOW() WHERE id = ${leadId}`;
