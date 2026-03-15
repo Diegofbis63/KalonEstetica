@@ -299,6 +299,7 @@ async function extractState(
                         state.stage = 'sub_service_selection';
                     } else {
                         state.stage = 'cart_review';
+                        state.currentCategoryId = null; // Clear so fallthrough knows we are done
                     }
                 } else if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("ningun") || normalizedContent.includes("nada") || normalizedContent.includes("no gracias") || normalizedContent.includes("listo")) {
                     if (state.pendingCategoryIds.length > 0) {
@@ -306,6 +307,7 @@ async function extractState(
                         state.stage = 'sub_service_selection';
                     } else {
                         state.stage = state.selectedServiceIds.length > 0 ? 'cart_review' : 'parent_selection';
+                        state.currentCategoryId = null; // Clear
                     }
                 }
             }
@@ -386,11 +388,12 @@ async function extractState(
     }
 
     // Final stage progression check (Safety fallthrough)
-    if (state.selectedServiceIds.length > 0 && state.pendingCategoryIds.length === 0) {
-        // Only override stage if we are in a pre-booking stage
+    if (state.selectedServiceIds.length > 0 && state.pendingCategoryIds.length === 0 && !state.currentCategoryId) {
+        // Only jump to name/phone/availability if we are NOT in an active interaction stage
+        const isInteracting = ['sub_service_selection', 'cart_review', 'cart_confirmation'].includes(state.stage);
         const isPreBooking = !['availability_proposal', 'payment_request', 'done', 'waiting_for_receipt'].includes(state.stage);
         
-        if (isPreBooking || state.stage === 'name_collection' || state.stage === 'phone_collection') {
+        if (!isInteracting && (isPreBooking || state.stage === 'name_collection' || state.stage === 'phone_collection')) {
             if (!state.clientName) {
                 state.stage = 'name_collection';
             } else if (!state.clientPhone) {
