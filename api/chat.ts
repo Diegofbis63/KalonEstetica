@@ -163,7 +163,8 @@ async function extractState(
         isBotEnabled: defaultIsBotEnabled
     };
 
-    const today = new Date("2026-03-14T12:00:00Z"); // Fix reference per user metadata
+    const today = new Date(); 
+    today.setHours(0,0,0,0);
 
     if (messages.length === 0) return state;
 
@@ -384,6 +385,20 @@ async function extractState(
                     state.stage = 'payment_request';
                 }
             }
+            if (currentBotAsked === 'payment') {
+                state.stage = 'waiting_for_receipt';
+            }
+        }
+    }
+
+    // --- Stale Date Check ---
+    if (state.pendingDate) {
+        const pDate = new Date(state.pendingDate + "T23:59:59Z");
+        if (pDate < today) {
+            // Appt date has passed! Reset and search again
+            state.pendingDate = null;
+            state.pendingTime = null;
+            state.stage = 'availability_proposal';
         }
     }
 
@@ -417,7 +432,7 @@ function generateResponse(
 ): string {
     const welcome = isFromWhatsApp ? "¡Hola! Qué lindo saludarte. Bienvenida a *KÂLON Estética* ✨. " : "";
     
-    if (state.stage === 'waiting_for_receipt' && hasMediaInLastMsg) {
+    if ((state.stage === 'waiting_for_receipt' || state.stage === 'done') && hasMediaInLastMsg) {
         return "¡Excelente noticia! 💖 Recibimos tu comprobante correctamente. Tu turno ya quedó agendado y confirmado en nuestro sistema. ¡Qué placer va a ser recibirte en KÂLON para mimarte un rato! Nos vemos pronto. ✨";
     }
 
