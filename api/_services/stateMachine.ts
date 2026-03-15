@@ -100,14 +100,18 @@ export async function extractState(
                     const timeMatch = msg.content.match(/(\d{1,2}):(\d{2})/);
                     if (timeMatch) state.pendingTime = timeMatch[0].padStart(5, '0');
                 }
-                else if (botText.includes("necesitamos una seña")) {
+                else if (botText.includes("necesitamos una seña") || botText.includes("transferi al alias") || botText.includes("comprobante por aca") || botText.includes("senar") || botText.includes("pago de la reserva")) {
                     currentBotAsked = 'payment';
                     state.stage = 'payment_request';
                 }
                 
                 services.forEach(s => {
                     const normalizedTitle = normalizeText(s.title);
-                    if (botText.includes(normalizedTitle) && (botText.includes("agregue") || botText.includes("seleccionaste"))) {
+                    // Captures services from confirmation messages, itemized lists, or totals
+                    const isRecap = botText.includes("revisemos") || botText.includes("pedido") || botText.includes("total") || botText.includes("sesion va a durar") || botText.includes("resumen") || botText.includes("estos son los");
+                    const isConfirmation = botText.includes("agregue") || botText.includes("seleccionaste") || botText.includes("sume");
+                    
+                    if (botText.includes(normalizedTitle) && (isConfirmation || isRecap)) {
                         if (!state.selectedServiceIds.includes(s.id)) state.selectedServiceIds.push(s.id);
                     }
                 });
@@ -365,10 +369,11 @@ export async function extractState(
                     }
                 }
                 if (currentBotAsked === 'payment' || state.stage === 'payment_request' || state.stage === 'waiting_for_receipt') {
-                    const isConfirmationText = normalizedContent.includes("pago") || normalizedContent.includes("comprobante") || normalizedContent.includes("listo") || normalizedContent.includes("enviado") || normalizedContent.includes("aca esta") || normalizedContent.includes("te mando");
+                    const isConfirmationText = normalizedContent.includes("pago") || normalizedContent.includes("comprobante") || normalizedContent.includes("listo") || normalizedContent.includes("enviado") || normalizedContent.includes("aca esta") || normalizedContent.includes("te mando") || normalizedContent.includes("ya esta");
+                    // If they send media OR text confirming payment during this stage, WE MUST transition to waiting_for_receipt
                     if (hasMedia || isConfirmationText) {
                         state.stage = 'waiting_for_receipt';
-                        console.log(`[stateMachine.ts] Turn ${i}: Detected receipt/confirmation. Stage -> waiting_for_receipt`);
+                        console.log(`[stateMachine.ts] Turn ${i}: Detected receipt/confirmation. Transitioning stage definitively to waiting_for_receipt.`);
                     }
                 }
             }
