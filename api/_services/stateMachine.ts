@@ -194,42 +194,44 @@ export async function extractState(
                 }
                 
                 if (currentBotAsked === 'sub_service' || state.stage === 'sub_service_selection') {
-                    // If the user just requested multiple categories in this turn, don't try to match sub-services yet
-                    // to avoid "hallucinating" services based on the category names.
-                    const isOnlyNamingCategories = catsInFoundOrder.length > 0 && normalizedContent.length < (catsInFoundOrder.reduce((acc, c) => acc + c.name.length, 0) + 10);
+                    // Detect if the user is AGAIN naming categories they already requested
+                    // or if they are naming NEW categories.
+                    const isNewCategoryRequest = catsInFoundOrder.some(c => !state.selectedServiceIds.some(sid => services.find(s => s.id === sid)?.category_id === c.id) && state.currentCategoryId !== c.id);
+                    const isOnlyNamingCategories = isNewCategoryRequest && normalizedContent.length < (catsInFoundOrder.reduce((acc, c) => acc + c.name.length, 0) + 12);
 
                     if (!isOnlyNamingCategories) {
                         const inputParts = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 3);
                         let potentialSvcs = services.filter(s => {
-                            if (state.currentCategoryId && s.category_id !== state.currentCategoryId) return false;
-                            const nt = normalizeText(s.title);
+                            // Logic: Match if same category OR if user mentions the specific service title globally
+                            if (state.currentCategoryId && s.category_id !== state.currentCategoryId) {
+                                // Only allow global match if the full title is explicitly mentioned
+                                return normalizedContent.includes(normalizeText(s.title));
+                            }
                             
-                            // Check for full match
+                            const nt = normalizeText(s.title);
                             if (normalizedContent.includes(nt)) return true;
                             
-                            // Check for partial keyword match but ONLY if it's not JUST the category name
                             return inputParts.some(part => {
-                                // If the part is exactly the category name, don't match it as a service keyword
                                 const isCategoryName = categories.some(cat => normalizeText(cat.name) === part);
                                 if (isCategoryName) return false;
 
                                 if (nt.split(/\s+/).some(word => word.length > 3 && word === part)) return true;
                                 const titleParts = nt.split(/\s+/);
-                                return titleParts.some(tp => tp.length > 3 && getSimilarity(part, tp) > 0.9);
+                                return titleParts.some(tp => tp.length > 3 && getSimilarity(part, tp) > 0.85);
                             });
                         });
 
-                        // If multiple found, try to differentiate
+                        // Refined Differentiation for prefixes like "Extensiones"
                         if (potentialSvcs.length > 1) {
-                            const betterMatches = potentialSvcs.filter(s => normalizedContent.includes(normalizeText(s.title)));
-                            if (betterMatches.length > 0) potentialSvcs = betterMatches;
-                            else {
-                                const keyWords = ["ruso", "clasicas", "1x1", "polygel", "kapping", "lifting", "botox", "semi", "esculpida"];
-                                keyWords.forEach(kw => {
-                                    if (normalizedContent.includes(kw)) {
-                                        potentialSvcs = potentialSvcs.filter(s => normalizeText(s.title).includes(kw));
-                                    }
-                                });
+                            const exactMatches = potentialSvcs.filter(s => normalizedContent.includes(normalizeText(s.title)));
+                            if (exactMatches.length > 0) {
+                                potentialSvcs = exactMatches;
+                            } else {
+                                const identifiers = ["ruso", "clasicas", "1x1", "keratina", "polygel", "kapping", "semi", "lifting"];
+                                const foundId = identifiers.find(id => normalizedContent.includes(id));
+                                if (foundId) {
+                                    potentialSvcs = potentialSvcs.filter(s => normalizeText(s.title).includes(foundId));
+                                }
                             }
                         }
 
@@ -238,6 +240,7 @@ export async function extractState(
                                 if (!state.selectedServiceIds.includes(fs.id)) state.selectedServiceIds.push(fs.id);
                             });
                             
+                            // PROGRESSION: If we added services, check if there are more categories or go to review
                             if (state.pendingCategoryIds.length > 0) {
                                 state.currentCategoryId = state.pendingCategoryIds.shift()!;
                                 state.stage = 'sub_service_selection';
