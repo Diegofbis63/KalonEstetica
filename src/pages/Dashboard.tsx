@@ -136,8 +136,9 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
   const currentTab = useMemo(() => {
     if (location.pathname.endsWith('/dashboard/services')) return 'services';
     if (location.pathname.endsWith('/dashboard/appointments')) return 'appointments';
+    if (location.pathname.endsWith('/dashboard/leads')) return 'leads';
     if (location.pathname.endsWith('/dashboard') || location.pathname === '/dashboard/') return 'dashboard';
-    if (defaultTab === 'leads') return 'appointments';
+    if (defaultTab === 'leads') return 'leads';
     return defaultTab;
   }, [location.pathname, defaultTab]);
 
@@ -179,7 +180,8 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
       if (!res.ok) throw new Error('Failed to load dashboard');
       return res.json();
     },
-    refetchInterval: 5000, // Autorefresh every 5 seconds
+    refetchInterval: 2000, // Autorefresh every 2 seconds
+    refetchIntervalInBackground: true,
   });
 
   const { data: timelineData } = useQuery({
@@ -190,7 +192,8 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
       return res.json();
     },
     enabled: currentTab === 'dashboard',
-    refetchInterval: 5000, // Autorefresh every 5 seconds
+    refetchInterval: 2000, 
+    refetchIntervalInBackground: true,
   });
 
   const { data: servData } = useQuery({

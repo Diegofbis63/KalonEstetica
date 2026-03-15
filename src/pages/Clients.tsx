@@ -137,7 +137,8 @@ export default function Clients() {
       if (!res.ok) throw new Error('Failed to load clients');
       return res.json();
     },
-    refetchInterval: 5000, // Autorefresh every 5 seconds
+    refetchInterval: 2000, // Autorefresh every 2 seconds
+    refetchIntervalInBackground: true,
   });
 
   const updateClient = useMutation({

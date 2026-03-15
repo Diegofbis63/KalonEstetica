@@ -57,7 +57,8 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
       return res.json();
     },
     enabled: !!lead && open,
-    refetchInterval: open ? 2000 : false,
+    refetchInterval: open ? 1500 : false,
+    refetchIntervalInBackground: true,
   });
 
   const chatLogs = useMemo(() => chatHistoryData?.history || [], [chatHistoryData?.history]);
@@ -271,12 +272,13 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
                           let displayContent = m.content || "";
                           let displayMedia = m.media_url || m.media_data;
 
-                          if (!displayMedia && displayContent.includes('📸 [Imagen enviada]')) {
+                          if (displayContent.includes('📸 [Imagen enviada]')) {
                               const urlMatch = displayContent.match(/\((https?:\/\/[^)]+)\)/);
                               if (urlMatch) {
-                                  displayMedia = urlMatch[1];
-                                  displayContent = displayContent.replace(urlMatch[0], '').replace(/📸\s*\[Imagen enviada\]/gi, '').trim();
+                                  if (!displayMedia) displayMedia = urlMatch[1];
+                                  displayContent = displayContent.replace(urlMatch[0], '');
                               }
+                              displayContent = displayContent.replace(/📸\s*\[Imagen enviada\]/gi, '').trim();
                           }
 
                           return (

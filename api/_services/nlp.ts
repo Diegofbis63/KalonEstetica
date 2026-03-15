@@ -1,6 +1,6 @@
 
 import pkgNlp from 'node-nlp';
-const { NlpManager } = pkgNlp;
+const NlpManager = (pkgNlp as any).NlpManager || pkgNlp;
 import fs from 'fs';
 import path from 'path';
 
