@@ -82,7 +82,7 @@ export async function extractState(
                 else if (botText.includes("agregar algo mas") || botText.includes("avanzamos con el turno")) currentBotAsked = 'cart_confirmation';
                 else if (botText.includes("tu nombre") || botText.includes("nombre completo") || botText.includes("con quien tengo")) currentBotAsked = 'name';
                 else if (botText.includes("whatsapp") || botText.includes("este mismo numero") || botText.includes("numero de cel")) currentBotAsked = 'phone';
-                else if (botText.includes("proximo horario") || botText.includes("confirmar el turno") || botText.includes("disponibilidad") || botText.includes("te queda bien") || botText.includes("busquemos otro") || botText.includes("horario me queda")) {
+                else if (botText.includes("proximo horario") || botText.includes("confirmar el turno") || botText.includes("disponibilidad") || botText.includes("te queda bien") || botText.includes("busquemos otro") || botText.includes("horario me queda") || botText.includes("estamos listos") || botText.includes("te sirve este horario")) {
                     currentBotAsked = 'availability';
                     const isoMatch = msg.content.match(/(\d{4})-(\d{2})-(\d{2})/);
                     if (isoMatch) state.pendingDate = isoMatch[0];
@@ -167,11 +167,14 @@ export async function extractState(
 
                 if (!state.clientName) {
                     const isNamePrompt = currentBotAsked === 'name' || state.stage === 'name_collection';
-                    if (isNamePrompt || normalizedContent.includes("mi nombre es") || normalizedContent.includes("soy ") || normalizedContent.split(/\s+/).length === 2) {
+                    const hasIntro = normalizedContent.includes("mi nombre es") || normalizedContent.includes("soy ");
+                    
+                    if (isNamePrompt || hasIntro) {
                         if (msg.content.length > 2 && msg.content.length < 40) {
-                            // Avoid capturing typical intents as names
-                            const notNames = ["si", "no", "hola", "chau", "nada", "turno", "bien", "dale", "otro"];
-                            if (!notNames.includes(normalizedContent.trim())) {
+                            const notNames = ["si", "no", "hola", "chau", "nada", "turno", "bien", "dale", "otro", "extensiones", "pestañas", "uñas", "cejas", "lifting", "facial", "masaje"];
+                            const containsServiceWord = notNames.some(word => normalizedContent.includes(word));
+                            
+                            if (!containsServiceWord || hasIntro) {
                                 state.clientName = extractName(msg.content);
                                 console.log(`[stateMachine.ts] Detected name: ${state.clientName}`);
                             }
@@ -189,21 +192,35 @@ export async function extractState(
                 
                 if (currentBotAsked === 'sub_service' || state.stage === 'sub_service_selection') {
                     const inputParts = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 3);
-                    const foundSvcs = services.filter(s => {
+                    let potentialSvcs = services.filter(s => {
                         if (state.currentCategoryId && s.category_id !== state.currentCategoryId) return false;
                         const nt = normalizeText(s.title);
                         if (normalizedContent.includes(nt)) return true;
                         
-                        // Strict matching for keywords
                         return inputParts.some(part => {
                             if (nt.split(/\s+/).some(word => word.length > 3 && word === part)) return true;
                             const titleParts = nt.split(/\s+/);
-                            return titleParts.some(tp => tp.length > 3 && getSimilarity(part, tp) > 0.85);
+                            return titleParts.some(tp => tp.length > 3 && getSimilarity(part, tp) > 0.9);
                         });
                     });
 
-                    if (foundSvcs.length > 0) {
-                        foundSvcs.forEach(fs => {
+                    // If multiple found (like 'Extensiones Clasicas' and 'Extensiones Ruso'), try to differentiate
+                    if (potentialSvcs.length > 1) {
+                        const betterMatches = potentialSvcs.filter(s => normalizedContent.includes(normalizeText(s.title)));
+                        if (betterMatches.length > 0) potentialSvcs = betterMatches;
+                        else {
+                            // Filter by identifying words
+                            const keyWords = ["ruso", "clasicas", "1x1", "polygel", "kapping", "lifting", "botox"];
+                            keyWords.forEach(kw => {
+                                if (normalizedContent.includes(kw)) {
+                                    potentialSvcs = potentialSvcs.filter(s => normalizeText(s.title).includes(kw));
+                                }
+                            });
+                        }
+                    }
+
+                    if (potentialSvcs.length > 0) {
+                        potentialSvcs.forEach(fs => {
                             if (!state.selectedServiceIds.includes(fs.id)) state.selectedServiceIds.push(fs.id);
                         });
                         
@@ -233,10 +250,19 @@ export async function extractState(
                             const s = services.find(x => x.id === sid);
                             if (!s) return false;
                             const nt = normalizeText(s.title);
+                            
+                            // Does the message contain identifying words of THIS specific service?
+                            if (normalizedContent.includes(nt)) return true;
+                            
+                            const svcParts = nt.split(/\s+/).filter(p => p.length > 3);
+                            const identifyingPart = svcParts.find(p => ["ruso", "clasicas", "1x1", "polygel", "kapping", "lifting", "keratina"].includes(p));
+                            
+                            if (identifyingPart && normalizedContent.includes(identifyingPart)) return true;
+                            
                             return inputParts.some(part => {
-                                if (nt.includes(part)) return true;
+                                if (nt.includes(part) && svcParts.length === 1) return true;
                                 const titleParts = nt.split(/\s+/);
-                                return titleParts.some(tp => tp.length > 3 && getSimilarity(part, tp) > 0.8);
+                                return titleParts.some(tp => tp.length > 3 && getSimilarity(part, tp) > 0.95);
                             });
                         });
                         
@@ -283,9 +309,9 @@ export async function extractState(
                     }
                 }
                 if (currentBotAsked === 'cart_confirmation') {
-                    if (intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("si") || normalizedContent.includes("mas")) {
+                    if (intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("si") || normalizedContent.includes("mas") || normalizedContent.includes("agregar")) {
                         state.stage = 'parent_selection';
-                    } else if (intent === 'negacion_o_cerrar_carrito' || intent === 'pedir_turno_general' || normalizedContent.includes("no") || normalizedContent.includes("turno")) {
+                    } else if (intent === 'negacion_o_cerrar_carrito' || intent === 'pedir_turno_general' || normalizedContent.includes("no") || normalizedContent.includes("turno") || normalizedContent.includes("estamos") || normalizedContent.includes("asi esta bien")) {
                         state.stage = 'name_collection';
                     }
                 }
