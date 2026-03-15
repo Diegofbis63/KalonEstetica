@@ -122,9 +122,13 @@ export async function extractState(
                 const intent = nlpResult?.intent;
                 if (isLastMessage) state.lastIntent = intent;
 
-                // Global intent handling
+                // Global intent handling - MODIFIED to avoid reset if services are already selected
                 if (intent === 'saludo' || intent === 'pedir_turno_general' || intent === 'listar_servicios') {
-                    if (state.stage === 'greeting' || (isLastMessage && state.selectedServiceIds.length === 0)) {
+                    const hasSelectedServices = state.selectedServiceIds.length > 0;
+                    const isAlreadyBooking = ['phone_collection', 'availability_proposal', 'payment_request', 'waiting_for_receipt'].includes(state.stage);
+
+                    // Only reset to parent_selection if we are at the beginning OR the user literally asked to list services again
+                    if (state.stage === 'greeting' || (intent === 'listar_servicios' && !isAlreadyBooking)) {
                         state.stage = 'parent_selection';
                     }
                 }
@@ -361,8 +365,10 @@ export async function extractState(
                     }
                 }
                 if (currentBotAsked === 'payment' || state.stage === 'payment_request' || state.stage === 'waiting_for_receipt') {
-                    if (hasMedia || normalizedContent.includes("pago") || normalizedContent.includes("comprobante") || normalizedContent.includes("listo") || normalizedContent.includes("enviado")) {
+                    const isConfirmationText = normalizedContent.includes("pago") || normalizedContent.includes("comprobante") || normalizedContent.includes("listo") || normalizedContent.includes("enviado") || normalizedContent.includes("aca esta") || normalizedContent.includes("te mando");
+                    if (hasMedia || isConfirmationText) {
                         state.stage = 'waiting_for_receipt';
+                        console.log(`[stateMachine.ts] Turn ${i}: Detected receipt/confirmation. Stage -> waiting_for_receipt`);
                     }
                 }
             }
