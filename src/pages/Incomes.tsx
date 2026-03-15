@@ -148,7 +148,8 @@ export default function Incomes() {
       if (!res.ok) throw new Error('Failed to load income data');
       return res.json() as Promise<{ stats: IncomeStats, evolution: EvolutionData[], payments: Payment[] }>;
     },
-    enabled: period !== 'personalizado' || (!!date?.from && !!date?.to)
+    enabled: period !== 'personalizado' || (!!date?.from && !!date?.to),
+    refetchInterval: 5000, // Autorefresh every 5 seconds
   });
 
   const updatePaymentMutation = useMutation({

@@ -178,7 +178,8 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
       const res = await fetch('/api/dashboard');
       if (!res.ok) throw new Error('Failed to load dashboard');
       return res.json();
-    }
+    },
+    refetchInterval: 5000, // Autorefresh every 5 seconds
   });
 
   const { data: timelineData } = useQuery({
@@ -188,7 +189,8 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
       if (!res.ok) throw new Error('Failed to load timeline');
       return res.json();
     },
-    enabled: currentTab === 'dashboard'
+    enabled: currentTab === 'dashboard',
+    refetchInterval: 5000, // Autorefresh every 5 seconds
   });
 
   const { data: servData } = useQuery({

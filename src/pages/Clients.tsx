@@ -136,7 +136,8 @@ export default function Clients() {
       const res = await fetch('/api/clients');
       if (!res.ok) throw new Error('Failed to load clients');
       return res.json();
-    }
+    },
+    refetchInterval: 5000, // Autorefresh every 5 seconds
   });
 
   const updateClient = useMutation({
