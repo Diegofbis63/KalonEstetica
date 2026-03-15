@@ -82,7 +82,7 @@ export async function extractState(
                 else if (botText.includes("agregar algo mas") || botText.includes("avanzamos con el turno")) currentBotAsked = 'cart_confirmation';
                 else if (botText.includes("tu nombre") || botText.includes("nombre completo") || botText.includes("con quien tengo")) currentBotAsked = 'name';
                 else if (botText.includes("whatsapp") || botText.includes("este mismo numero") || botText.includes("numero de cel")) currentBotAsked = 'phone';
-                else if (botText.includes("proximo horario") || botText.includes("confirmar el turno") || botText.includes("disponibilidad") || botText.includes("te queda bien") || botText.includes("busquemos otro") || botText.includes("horario me queda") || botText.includes("estamos listos") || botText.includes("te sirve este horario")) {
+                else if (botText.includes("proximo horario") || botText.includes("disponibilidad") || botText.includes("te queda bien") || botText.includes("busquemos otro") || botText.includes("horario me queda") || botText.includes("te sirve este horario") || botText.includes("podemos agendar") || botText.includes("para el dia")) {
                     currentBotAsked = 'availability';
                     const isoMatch = msg.content.match(/(\d{4})-(\d{2})-(\d{2})/);
                     if (isoMatch) state.pendingDate = isoMatch[0];
@@ -337,7 +337,24 @@ export async function extractState(
                     if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("otro") || normalizedContent.includes("no puedo") || normalizedContent.includes("que mas hay")) {
                         if (state.pendingDate) state.rejectedDates.push(`${state.pendingDate} ${state.pendingTime}`);
                         state.requestedAllOptions = normalizedContent.includes("otro") || normalizedContent.includes("que mas");
-                    } else if (intent === 'afirmacion_o_agregar_carrito' || intent === 'confirmar_horario' || normalizedContent.includes("si") || normalizedContent.includes("bien") || normalizedContent.includes("esta bien") || normalizedContent.includes("me sirve") || normalizedContent.includes("dale") || normalizedContent.includes("perfecto") || normalizedContent.includes("correcto") || normalizedContent.includes("anotame") || normalizedContent.includes("agendame") || normalizedContent.includes("ese horario") || normalizedContent.includes("esta perfecto") || normalizedContent.includes("confirmar")) {
+                    } else if (
+                        intent === 'afirmacion_o_agregar_carrito' || 
+                        intent === 'confirmar_horario' || 
+                        normalizedContent.includes("si") || 
+                        normalizedContent.includes("bien") || 
+                        normalizedContent.includes("esta bien") || 
+                        normalizedContent.includes("me sirve") || 
+                        normalizedContent.includes("dale") || 
+                        normalizedContent.includes("perfecto") || 
+                        normalizedContent.includes("correcto") || 
+                        normalizedContent.includes("anotame") || 
+                        normalizedContent.includes("agendame") || 
+                        normalizedContent.includes("ese horario") || 
+                        normalizedContent.includes("esta perfecto") || 
+                        normalizedContent.includes("perrrfecto") || 
+                        normalizedContent.includes("confirmar") ||
+                        (normalizedContent.includes("turno") && (normalizedContent.includes("ese") || normalizedContent.includes("esta")))
+                    ) {
                         state.stage = 'payment_request';
                         console.log(`[stateMachine.ts] Turn ${i}: Transition to payment_request (Availability confirmed)`);
                     }
