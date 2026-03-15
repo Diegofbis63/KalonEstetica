@@ -81,21 +81,29 @@ function extractName(text: string): string {
     return cleaned.split(/\s+/).map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
 }
 
+interface ChatMessage {
+    role: string;
+    content: string;
+    media_url?: string;
+    media_data?: string;
+    created_at?: string;
+}
+
 interface ConvState {
     clientName: string | null;
     clientPhone: string | null;
     selectedServiceIds: string[];
     currentCategoryId: string | null;
-    stage: 'greeting' | 'parent_selection' | 'sub_service_selection' | 'cart_review' | 'cart_confirmation' | 'name_collection' | 'phone_collection' | 'availability_proposal' | 'payment_request' | 'waiting_for_receipt' | 'done';
     pendingCategoryIds: string[];
+    stage: 'greeting' | 'parent_selection' | 'sub_service_selection' | 'cart_review' | 'cart_confirmation' | 'name_collection' | 'phone_collection' | 'availability_proposal' | 'payment_request' | 'waiting_for_receipt' | 'done';
     pendingDate: string | null;
     pendingTime: string | null;
-    rejectedDates: string[];
-    requestedTime: string | null;
     requestedDate: string | null;
+    requestedTime: string | null;
+    rejectedDates: string[];
     requestedAllOptions: boolean;
     lastIntent?: string;
-    isBotEnabled?: boolean;
+    isBotEnabled: boolean;
 }
 
 function formatDateHuman(dateStr: string): string {
@@ -115,6 +123,26 @@ function formatDurationHuman(minutes: number): string {
 
 function parseDuration(durationStr: string): number {
     if (!durationStr) return 60;
+    const lower = durationStr.toLowerCase();
+    
+    // Handle "1:30hs" or "1:30"
+    const colonMatch = lower.match(/(\d+):(\d+)/);
+    if (colonMatch) {
+        return parseInt(colonMatch[1]) * 60 + parseInt(colonMatch[2]);
+    }
+    
+    // Handle "2H" or "2hs"
+    const hourMatch = lower.match(/(\d+)\s*h/);
+    if (hourMatch) {
+        let total = parseInt(hourMatch[1]) * 60;
+        const minMatch = lower.match(/(\d+)\s*m/); // e.g. "2h 30m"
+        if (minMatch && !lower.includes("min")) { // avoid double matching "min" in some cases
+             total += parseInt(minMatch[1]);
+        }
+        return total;
+    }
+
+    // Default "60 min"
     const match = durationStr.match(/(\d+)/);
     return match ? parseInt(match[1], 10) : 60;
 }
@@ -149,7 +177,7 @@ function parseRelativeDate(input: string, referenceDate: Date): string | null {
 }
 
 async function extractState(
-    messages: Array<{ role: string; content: string }>, 
+    messages: ChatMessage[], 
     categories: any[], 
     services: any[],
     defaultIsBotEnabled: boolean = true
@@ -180,8 +208,8 @@ async function extractState(
 
     for (let i = 0; i < messages.length; i++) {
         const msg = messages[i];
-        if (!msg.content) continue;
-        const normalizedContent = normalizeText(msg.content);
+        if (!msg.content && !msg.media_url && !msg.media_data) continue;
+        const normalizedContent = normalizeText(msg.content || "");
 
         if (msg.role === 'assistant' || msg.role === 'bot') {
             const botText = normalizeText(msg.content);
@@ -209,7 +237,10 @@ async function extractState(
                 const timeMatch = msg.content.match(/(\d{1,2}):(\d{2})/);
                 if (timeMatch) state.pendingTime = timeMatch[0].padStart(5, '0');
             }
-            else if (botText.includes("necesitamos una seña")) currentBotAsked = 'payment';
+            else if (botText.includes("necesitamos una seña")) {
+                currentBotAsked = 'payment';
+                state.stage = 'payment_request';
+            }
             
             services.forEach(s => {
                 const normalizedTitle = normalizeText(s.title);
@@ -222,7 +253,9 @@ async function extractState(
 
         if (msg.role === 'user') {
             const isLastMessage = i === messages.length - 1;
-            const nlpResult = await nlp.process('es', msg.content);
+            const hasMedia = !!(msg.media_url || msg.media_data || (msg.content && msg.content.includes("📸 [Imagen enviada]")));
+            
+            const nlpResult = msg.content ? await nlp.process('es', msg.content) : null;
             const intent = nlpResult?.intent;
             if (isLastMessage) state.lastIntent = intent;
 
@@ -270,7 +303,7 @@ async function extractState(
                 state.stage = 'sub_service_selection';
             }
 
-            if (currentBotAsked === 'name' && !state.clientName) {
+            if ((currentBotAsked === 'name' || normalizedContent.includes("mi nombre es") || normalizedContent.includes("soy ")) && !state.clientName) {
                 if (msg.content.length > 2) {
                     state.clientName = extractName(msg.content);
                 }
@@ -392,8 +425,10 @@ async function extractState(
                     state.stage = 'payment_request';
                 }
             }
-            if (currentBotAsked === 'payment') {
-                state.stage = 'waiting_for_receipt';
+            if (currentBotAsked === 'payment' || state.stage === 'payment_request' || state.stage === 'waiting_for_receipt') {
+                if (hasMedia || normalizedContent.includes("pago") || normalizedContent.includes("comprobante") || normalizedContent.includes("listo") || normalizedContent.includes("enviado")) {
+                    state.stage = 'waiting_for_receipt';
+                }
             }
         }
     }
@@ -468,7 +503,7 @@ function generateResponse(
             const selectedServices = services.filter(s => state.selectedServiceIds.includes(s.id));
             const list = selectedServices.map(s => `• *${s.title}* ($${s.price}) - ${s.duration.toString().replace(/min/g, '').trim()} min`).join('\n');
             const totalPrice = selectedServices.reduce((a, b) => a + Number(b.price), 0);
-            const totalDur = selectedServices.reduce((a, b) => a + (Number(b.duration) || 60), 0);
+            const totalDur = selectedServices.reduce((a, b) => a + parseDuration(b.duration), 0);
             const durText = formatDurationHuman(totalDur);
 
             return `¡Excelente! 🎉 Revisemos tu pedido para que esté todo perfecto:\n\n${list}\n\n💰 *Total:* $${totalPrice}\n⏳ *Duración estimada:* ${durText}\n\n¿Es correcto o te gustaría agregar o modificar algo?`;
@@ -480,7 +515,7 @@ function generateResponse(
         case 'name_collection': {
             const selectedServices = services.filter(s => state.selectedServiceIds.includes(s.id));
             const totalPrice = selectedServices.reduce((a, b) => a + Number(b.price), 0);
-            const totalDur = selectedServices.reduce((a, b) => a + (Number(b.duration) || 60), 0);
+            const totalDur = selectedServices.reduce((a, b) => a + parseDuration(b.duration), 0);
             const durText = formatDurationHuman(totalDur);
             
             return `¡Perfecto! Todo confirmado. ✨ Entonces, el total es de *$${totalPrice}* por una sesión de *${durText}*.\n\nPara ir agendándote, ¿cómo es tu nombre completo? 😊`;
@@ -494,12 +529,13 @@ function generateResponse(
         }
         case 'availability_proposal': {
             if (availableSlots.length > 0) {
-                const totalDur = services.filter(s => state.selectedServiceIds.includes(s.id)).reduce((a, b) => a + (Number(b.duration)||60), 0);
+                const totalDur = services.filter(s => state.selectedServiceIds.includes(s.id)).reduce((a, b) => a + parseDuration(b.duration), 0);
                 const durText = formatDurationHuman(totalDur);
                 
                 if (availableSlots.length === 1) {
                     const slot = availableSlots[0];
-                    return `¡Buenas noticias! ✨ Tengo disponibilidad para tus tratamientos (Duración total: *${durText}*) el día *${formatDateHuman(slot.date)}* a las *${slot.time}hs*. 🗓️\n\n¿Te queda bien este horario o preferís que busquemos otro?`;
+                    const greeting = state.clientName ? `${state.clientName.split(' ')[0]}, ¡buenas noticias! ✨ ` : "¡Buenas noticias! ✨ ";
+                    return `${greeting}Tengo disponibilidad para tus tratamientos (Duración total: *${durText}*) el día *${formatDateHuman(slot.date)}* a las *${slot.time}hs*. 🗓️\n\n¿Te queda bien este horario o preferís que busquemos otro?`;
                 } else {
                     const options = availableSlots.map(s => `• *${formatDateHuman(s.date)}* a las *${s.time}hs*`).join('\n');
                     return `¡Claro! 😊 Para que elijas tranquila, acá tenés las opciones más cercanas disponibles (Duración: *${durText}*):\n\n${options}\n\n¿Cuál de estos te gusta más?`;
@@ -510,11 +546,12 @@ function generateResponse(
         case 'payment_request': {
             const selectedSvc = services.filter(s => state.selectedServiceIds.includes(s.id));
             const totalPrice = selectedSvc.reduce((a, b) => a + Number(b.price), 0);
-            const totalDur = selectedSvc.reduce((a, b) => a + (Number(b.duration) || 60), 0);
+            const totalDur = selectedSvc.reduce((a, b) => a + parseDuration(b.duration), 0);
             const deposit = totalPrice * 0.5;
             const durText = formatDurationHuman(totalDur);
+            const personalGreeting = state.clientName ? `¡Todo listo, *${state.clientName.split(' ')[0]}*! ✨ ` : "¡Todo listo! ✨ ";
 
-            return `¡Todo listo! ✨ Tu sesión va a durar aproximadamente *${durText}* y el valor total es de *$${totalPrice}*.\n\nPara confirmar definitivamente tu lugarcito el *${formatDateHuman(state.pendingDate || '')}* a las *${state.pendingTime}hs*, necesitamos una seña del 50% (*$${deposit.toFixed(0)}*).\n\nTransferí al alias: *KALON.ESTETICA.OK* y mandame la fotito del comprobante por acá. ¡Ya falta nada! 📸`;
+            return `${personalGreeting}Tu sesión va a durar aproximadamente *${durText}* y el valor total es de *$${totalPrice}*.\n\nPara confirmar definitivamente tu lugarcito el *${formatDateHuman(state.pendingDate || '')}* a las *${state.pendingTime}hs*, necesitamos una seña del 50% (*$${deposit.toFixed(0)}*).\n\nTransferí al alias: *KALON.ESTETICA.OK* y mandame la fotito del comprobante por acá. ¡Ya falta nada! 📸`;
         }
         case 'waiting_for_receipt':
             return "Quedo atenta a tu comprobante de transferencia para terminar de confirmar tu turno. ¡Cualquier duda decime! 😊";
@@ -563,7 +600,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const cleanerMatch = incomingMessage.match(/(https?:\/\/[^\s)]+)/);
             if (cleanerMatch) {
                 incomingMediaUrl = cleanerMatch[1];
-                incomingMessage = ""; 
+                incomingMessage = ""; // Clear content if it's just a raw URL
             }
         }
 
@@ -586,31 +623,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (userId && !messages.length && incomingMessage) {
             if (leadId) {
                 const history = await sql`
-                    SELECT role, content FROM chat_logs 
+                    SELECT role, content, media_url, media_data FROM chat_logs 
                     WHERE lead_id = ${leadId}
                     ORDER BY created_at ASC
                 `;
                 messages = history.length > 0 ? history : [];
             }
-            messages.push({ role: 'user', content: incomingMessage });
+            messages.push({ role: 'user', content: incomingMessage, media_url: incomingMediaUrl });
         }
 
         const state = await extractState(messages, categories, services, isBotEnabled);
-        
+
         // --- PERSISTENCE: Update lead name/phone if found in state ---
         if (leadId) {
             // Update name?
-            if (state.clientName && state.clientName !== 'Cliente') {
+            if (state.clientName && state.clientName !== 'Cliente' && state.clientName !== 'Diego Federico') { 
                 await sql`UPDATE leads SET client_name = ${state.clientName}, updated_at = NOW() WHERE id = ${leadId}`;
-            }
-            // Update status based on progress?
-            if (state.selectedServiceIds.length > 0) {
-                 const currentStatusData = await sql`SELECT status FROM leads WHERE id = ${leadId}`;
-                 const currentStatus = currentStatusData[0]?.status;
-                 if (currentStatus === 'new' || currentStatus === 'qualified') {
-                     const newStatus = state.stage === 'done' ? 'converted' : 'qualified';
-                     await sql`UPDATE leads SET status = ${newStatus}, updated_at = NOW() WHERE id = ${leadId}`;
-                 }
             }
         }
 
