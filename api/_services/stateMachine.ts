@@ -143,12 +143,19 @@ export async function extractState(
                     const hasSelectedServices = state.selectedServiceIds.length > 0;
                     const isAlreadyBooking = ['phone_collection', 'availability_proposal', 'payment_request', 'waiting_for_receipt'].includes(state.stage);
 
-                    // If we are in the middle of a flow, IGNORE greetings/general requests that would reset us
-                    if (state.stage === 'greeting' || (intent === 'listar_servicios' && !isAlreadyBooking && !hasSelectedServices)) {
+                    // If we have services OR a date, we are NO LONGER in the greeting phase
+                    if (state.stage === 'greeting' && !hasSelectedServices) {
                         state.stage = 'parent_selection';
-                    } else if (isAlreadyBooking) {
-                        console.log(`[stateMachine.ts] Turn ${i}: Protecting stage ${state.stage} from reset by intent ${intent}`);
-                        // We do NOT change stage here. We stay where we were.
+                    } else if (isAlreadyBooking || hasSelectedServices) {
+                        console.log(`[stateMachine.ts] Turn ${i}: Protecting booking flow (Stage: ${state.stage}) from reset by intent ${intent}`);
+                        // Don't reset stage. If it was category selection, maybe move to parent_selection if they really want lists
+                        if (intent === 'listar_servicios' && state.stage === 'sub_service_selection') {
+                            state.stage = 'parent_selection';
+                        }
+                    } else if (state.stage === 'sub_service_selection') {
+                         // Keep it there or move if requested
+                    } else {
+                         state.stage = 'parent_selection';
                     }
                 }
 
@@ -427,11 +434,16 @@ export async function extractState(
                 }
                 if (currentBotAsked === 'payment' || state.stage === 'payment_request' || state.stage === 'waiting_for_receipt') {
                     const isConfirmationText = normalizedContent.includes("pago") || normalizedContent.includes("comprobante") || normalizedContent.includes("listo") || normalizedContent.includes("enviado") || normalizedContent.includes("aca esta") || normalizedContent.includes("te mando") || normalizedContent.includes("ya esta");
-                    // If they send media OR text confirming payment during this stage, WE MUST transition to waiting_for_receipt
+                    // STICKY MEDIA TRAP: If they send media during THIS stage, WE MUST transition to waiting_for_receipt
                     if (hasMedia || isConfirmationText) {
                         state.stage = 'waiting_for_receipt';
                         console.log(`[stateMachine.ts] Turn ${i}: Detected receipt/confirmation. Transitioning stage definitively to waiting_for_receipt.`);
                     }
+                }
+
+                // EMERGENCY MEDIA TRAP: If they send media and we have a pending date/time, assume it's a receipt
+                if (hasMedia && state.pendingDate && state.pendingTime && state.selectedServiceIds.length > 0) {
+                     state.stage = 'waiting_for_receipt';
                 }
             }
         }
@@ -513,24 +525,29 @@ export function generateResponse(
     isFromWhatsApp: boolean,
     hasMediaInLastMsg: boolean
 ): string {
-    console.log(`[stateMachine.ts] Generating response for stage: ${state.stage}`);
-    const welcome = isFromWhatsApp 
-        ? (state.clientName ? `¡Hola ${state.clientName.split(' ')[0]}! Qué lindo saludarte de nuevo. Bienvenida a *KÂLON Estética* ✨. ` : "¡Hola! Qué lindo saludarte. Bienvenida a *KÂLON Estética* ✨. ")
-        : "";
+    console.log(`[stateMachine.ts] Generating response for stage: ${state.stage}. hasMediaInLastMsg: ${hasMediaInLastMsg}`);
     
-    if ((state.stage === 'waiting_for_receipt' || state.stage === 'done') && hasMediaInLastMsg) {
+    // 1. TERMINAL CONFIRMATION (Top priority)
+    if (state.stage === 'done' || (state.stage === 'waiting_for_receipt' && hasMediaInLastMsg)) {
         return "¡Excelente noticia! 💖 Recibimos tu comprobante correctamente. Tu turno ya quedó agendado y confirmado en nuestro sistema. ¡Qué placer va a ser recibirte en KÂLON para mimarte un rato! Nos vemos pronto. ✨";
     }
+
+    const welcome = isFromWhatsApp 
+        ? (state.clientName ? `¡Hola ${state.clientName.split(' ')[0]}! Qué lindo saludarte de nuevo. ` : "¡Hola! Qué lindo saludarte. Bienvenida a *KÂLON Estética* ✨. ")
+        : "";
+    
+    const isNew = state.selectedServiceIds.length === 0 && !state.currentCategoryId;
 
     try {
         switch (state.stage) {
             case 'greeting':
             case 'parent_selection': {
-                const catList = categories.map(c => `• *${c.name}*`).join('\n');
-                const intro = state.selectedServiceIds.length > 0 
-                    ? "¡Claro que sí! Contame, ¿qué otra cosita te gustaría sumarte hoy? 😊\n\n" 
-                    : `${welcome}Soy tu asistente virtual y estoy acá para ayudarte a reservar un momento para vos. Contame, ¿qué servicios te interesan hoy?\n\n`;
-                return `${intro}${catList}\n\nEscribí el nombre de la categoría para ver los tratamientos.`;
+                const list = categories.map(c => `• *${c.name}*`).join('\n');
+                const intro = isNew 
+                    ? "Bienvenida a *KÂLON Estética* ✨. Soy tu asistente virtual y estoy acá para ayudarte a reservar un momento para vos. Contame, ¿qué servicios te interesan hoy?"
+                    : "Decime de qué categoría te gustaría ver los servicios hoy para seguir:";
+                
+                return `${welcome}${intro}\n\n${list}\n\nEscribí el nombre de la categoría para ver los tratamientos.`;
             }
             case 'sub_service_selection': {
                 const cat = categories.find(c => c.id === state.currentCategoryId);
