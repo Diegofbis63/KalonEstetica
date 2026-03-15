@@ -149,14 +149,17 @@ export async function extractState(
                 // --- Multi-Category Detection ---
                 const catsInFoundOrder = categories
                     .filter(c => normalizedContent.includes(normalizeText(c.name)))
-                    .map(c => ({ id: c.id, pos: normalizedContent.indexOf(normalizeText(c.name)) }))
-                    .sort((a, b) => a.pos - b.pos)
-                    .map(x => x.id);
+                    .map(c => ({ id: c.id, name: c.name, pos: normalizedContent.indexOf(normalizeText(c.name)) }))
+                    .sort((a, b) => a.pos - b.pos);
                 
-                catsInFoundOrder.forEach(cid => {
-                    if (!state.pendingCategoryIds.includes(cid) && state.currentCategoryId !== cid) {
-                        const hasSvcFromCat = state.selectedServiceIds.some(sid => services.find(s => s.id === sid)?.category_id === cid);
-                        if (!hasSvcFromCat) state.pendingCategoryIds.push(cid);
+                let categoriesRequestedInThisTurn = false;
+                catsInFoundOrder.forEach(c => {
+                    if (!state.pendingCategoryIds.includes(c.id) && state.currentCategoryId !== c.id) {
+                        const hasSvcFromCat = state.selectedServiceIds.some(sid => services.find(s => s.id === sid)?.category_id === c.id);
+                        if (!hasSvcFromCat) {
+                            state.pendingCategoryIds.push(c.id);
+                            categoriesRequestedInThisTurn = true;
+                        }
                     }
                 });
 
@@ -191,53 +194,65 @@ export async function extractState(
                 }
                 
                 if (currentBotAsked === 'sub_service' || state.stage === 'sub_service_selection') {
-                    const inputParts = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 3);
-                    let potentialSvcs = services.filter(s => {
-                        if (state.currentCategoryId && s.category_id !== state.currentCategoryId) return false;
-                        const nt = normalizeText(s.title);
-                        if (normalizedContent.includes(nt)) return true;
-                        
-                        return inputParts.some(part => {
-                            if (nt.split(/\s+/).some(word => word.length > 3 && word === part)) return true;
-                            const titleParts = nt.split(/\s+/);
-                            return titleParts.some(tp => tp.length > 3 && getSimilarity(part, tp) > 0.9);
-                        });
-                    });
+                    // If the user just requested multiple categories in this turn, don't try to match sub-services yet
+                    // to avoid "hallucinating" services based on the category names.
+                    const isOnlyNamingCategories = catsInFoundOrder.length > 0 && normalizedContent.length < (catsInFoundOrder.reduce((acc, c) => acc + c.name.length, 0) + 10);
 
-                    // If multiple found (like 'Extensiones Clasicas' and 'Extensiones Ruso'), try to differentiate
-                    if (potentialSvcs.length > 1) {
-                        const betterMatches = potentialSvcs.filter(s => normalizedContent.includes(normalizeText(s.title)));
-                        if (betterMatches.length > 0) potentialSvcs = betterMatches;
-                        else {
-                            // Filter by identifying words
-                            const keyWords = ["ruso", "clasicas", "1x1", "polygel", "kapping", "lifting", "botox"];
-                            keyWords.forEach(kw => {
-                                if (normalizedContent.includes(kw)) {
-                                    potentialSvcs = potentialSvcs.filter(s => normalizeText(s.title).includes(kw));
-                                }
+                    if (!isOnlyNamingCategories) {
+                        const inputParts = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 3);
+                        let potentialSvcs = services.filter(s => {
+                            if (state.currentCategoryId && s.category_id !== state.currentCategoryId) return false;
+                            const nt = normalizeText(s.title);
+                            
+                            // Check for full match
+                            if (normalizedContent.includes(nt)) return true;
+                            
+                            // Check for partial keyword match but ONLY if it's not JUST the category name
+                            return inputParts.some(part => {
+                                // If the part is exactly the category name, don't match it as a service keyword
+                                const isCategoryName = categories.some(cat => normalizeText(cat.name) === part);
+                                if (isCategoryName) return false;
+
+                                if (nt.split(/\s+/).some(word => word.length > 3 && word === part)) return true;
+                                const titleParts = nt.split(/\s+/);
+                                return titleParts.some(tp => tp.length > 3 && getSimilarity(part, tp) > 0.9);
                             });
-                        }
-                    }
-
-                    if (potentialSvcs.length > 0) {
-                        potentialSvcs.forEach(fs => {
-                            if (!state.selectedServiceIds.includes(fs.id)) state.selectedServiceIds.push(fs.id);
                         });
-                        
-                        if (state.pendingCategoryIds.length > 0) {
-                            state.currentCategoryId = state.pendingCategoryIds.shift()!;
-                            state.stage = 'sub_service_selection';
-                        } else {
-                            state.stage = 'cart_review';
-                            state.currentCategoryId = null;
+
+                        // If multiple found, try to differentiate
+                        if (potentialSvcs.length > 1) {
+                            const betterMatches = potentialSvcs.filter(s => normalizedContent.includes(normalizeText(s.title)));
+                            if (betterMatches.length > 0) potentialSvcs = betterMatches;
+                            else {
+                                const keyWords = ["ruso", "clasicas", "1x1", "polygel", "kapping", "lifting", "botox", "semi", "esculpida"];
+                                keyWords.forEach(kw => {
+                                    if (normalizedContent.includes(kw)) {
+                                        potentialSvcs = potentialSvcs.filter(s => normalizeText(s.title).includes(kw));
+                                    }
+                                });
+                            }
                         }
-                    } else if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("ningun") || normalizedContent.includes("nada") || normalizedContent.includes("no gracias") || normalizedContent.includes("listo")) {
-                        if (state.pendingCategoryIds.length > 0) {
-                            state.currentCategoryId = state.pendingCategoryIds.shift()!;
-                            state.stage = 'sub_service_selection';
-                        } else {
-                            state.stage = state.selectedServiceIds.length > 0 ? 'cart_review' : 'parent_selection';
-                            state.currentCategoryId = null;
+
+                        if (potentialSvcs.length > 0) {
+                            potentialSvcs.forEach(fs => {
+                                if (!state.selectedServiceIds.includes(fs.id)) state.selectedServiceIds.push(fs.id);
+                            });
+                            
+                            if (state.pendingCategoryIds.length > 0) {
+                                state.currentCategoryId = state.pendingCategoryIds.shift()!;
+                                state.stage = 'sub_service_selection';
+                            } else {
+                                state.stage = 'cart_review';
+                                state.currentCategoryId = null;
+                            }
+                        } else if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("ningun") || normalizedContent.includes("nada") || normalizedContent.includes("no gracias") || normalizedContent.includes("listo")) {
+                            if (state.pendingCategoryIds.length > 0) {
+                                state.currentCategoryId = state.pendingCategoryIds.shift()!;
+                                state.stage = 'sub_service_selection';
+                            } else {
+                                state.stage = state.selectedServiceIds.length > 0 ? 'cart_review' : 'parent_selection';
+                                state.currentCategoryId = null;
+                            }
                         }
                     }
                 }
@@ -409,9 +424,15 @@ export function generateResponse(
                 }).join('\n');
                 
                 const selectedCount = state.selectedServiceIds.length;
-                const prefix = selectedCount > 0 
-                    ? `¡Qué buena elección! Ya te sumé lo anterior. 💖 Ahora contame, de *${cat?.name}*, ¿cuál te gustaría realizarte?\n\n`
-                    : `¡Perfecto! Estos son los tratamientos que tenemos en *${cat?.name}*. ¿Cuál te gustaría realizarte?\n\n`;
+                let prefix = "";
+                
+                if (selectedCount > 0) {
+                    prefix = `¡Qué buena elección! Ya te sumé lo anterior. 💖 Ahora contame, de *${cat?.name}*, ¿cuál te gustaría realizarte?\n\n`;
+                } else if (state.pendingCategoryIds.length > 0) {
+                    prefix = `¡Perfecto! Vamos por partes. Primero contame de *${cat?.name}*, ¿cuál te gustaría? (Después vemos las otras categorías que pediste) 😊\n\n`;
+                } else {
+                    prefix = `¡Excelente! Estos son los tratamientos que tenemos en *${cat?.name}*. ¿Cuál te gustaría realizarte?\n\n`;
+                }
                 
                 return `${prefix}${list}\n\nSolo escribí el nombre del tratamiento y lo agrego a tu plan.`;
             }
