@@ -574,13 +574,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         const state = await extractState(messages, categories, services, isBotEnabled);
         
+        // --- PERSISTENCE: Update lead name/phone if found in state ---
+        if (leadId) {
+            // Update name?
+            if (state.clientName && state.clientName !== 'Cliente') {
+                await sql`UPDATE leads SET client_name = ${state.clientName}, updated_at = NOW() WHERE id = ${leadId}`;
+            }
+            // Update status based on progress?
+            if (state.selectedServiceIds.length > 0) {
+                 const currentStatusData = await sql`SELECT status FROM leads WHERE id = ${leadId}`;
+                 const currentStatus = currentStatusData[0]?.status;
+                 if (currentStatus === 'new' || currentStatus === 'qualified') {
+                     const newStatus = state.stage === 'done' ? 'converted' : 'qualified';
+                     await sql`UPDATE leads SET status = ${newStatus}, updated_at = NOW() WHERE id = ${leadId}`;
+                 }
+            }
+        }
+
         if (leadId) {
             await sql`INSERT INTO chat_logs (lead_id, role, content, media_url, sent_to_whatsapp) 
                       VALUES (${leadId}, 'user', ${incomingMessage}, ${incomingMediaUrl}, ${!!userId})`;
         } else if (userId || body.clientPhone) {
              const phone = (userId || body.clientPhone || '').replace(/\D/g, '');
+             const nameToSave = (state.clientName && state.clientName !== 'Cliente') ? state.clientName : 'Cliente';
              const leadInsert = await sql`INSERT INTO leads (organization_id, client_name, contact_info, status, intent_score) 
-                                   VALUES (${DEFAULT_ORG_ID}, 'Cliente', ${JSON.stringify({ phone: phone, source: userId ? 'whatsapp' : 'web' })}, 'qualified', 70) 
+                                   VALUES (${DEFAULT_ORG_ID}, ${nameToSave}, ${JSON.stringify({ phone: phone, source: userId ? 'whatsapp' : 'web' })}, 'qualified', 70) 
                                    RETURNING id` as any[];
              leadId = leadInsert[0].id;
              await sql`INSERT INTO chat_logs (lead_id, role, content, media_url, sent_to_whatsapp) 
@@ -593,7 +611,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         const foundSlots: any[] = [];
         if (state.stage === 'availability_proposal' && state.selectedServiceIds.length > 0) {
-            const totalDur = services.filter(s => state.selectedServiceIds.includes(s.id)).reduce((a, b) => a + (Number(b.duration)||60), 0);
+            const selectedSvcObjs = services.filter(s => state.selectedServiceIds.includes(s.id));
+            const totalDur = selectedSvcObjs.reduce((a, b) => a + (Number(b.duration)||60), 0);
             
             const baseDate = state.requestedDate ? new Date(state.requestedDate + "T12:00:00Z") : new Date();
             if (!state.requestedDate) {
@@ -650,13 +669,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
         }
 
-        if ((state.stage === 'waiting_for_receipt' || state.stage === 'payment_request') && (incomingMediaUrl || body.mediaData)) {
+        if ((state.stage === 'waiting_for_receipt' || state.stage === 'payment_request' || state.stage === 'done') && (incomingMediaUrl || body.mediaData)) {
             if (leadId) {
-                const svcTitles = services.filter(s => state.selectedServiceIds.includes(s.id)).map(s => s.title).join(' + ');
+                const selectedSvcObjs = services.filter(s => state.selectedServiceIds.includes(s.id));
+                const svcTitles = selectedSvcObjs.map(s => s.title).join(' + ');
+                const totalPrice = selectedSvcObjs.reduce((a, b) => a + Number(b.price), 0);
+                const totalDur = selectedSvcObjs.reduce((a, b) => a + (Number(b.duration) || 60), 0);
                 const dateTime = `${state.pendingDate}T${state.pendingTime}:00Z`;
-                await sql`INSERT INTO appointments (lead_id, organization_id, date_time, service_type, status) 
-                          VALUES (${leadId}, ${DEFAULT_ORG_ID}, ${dateTime}, ${svcTitles}, 'confirmed')`;
+                
+                await sql`INSERT INTO appointments (lead_id, organization_id, date_time, service_type, status, total_price, total_duration, selected_services) 
+                          VALUES (${leadId}, ${DEFAULT_ORG_ID}, ${dateTime}, ${svcTitles}, 'confirmed', ${totalPrice}, ${totalDur}, ${JSON.stringify(selectedSvcObjs)})`;
+                
                 state.stage = 'done';
+                await sql`UPDATE leads SET status = 'converted', updated_at = NOW() WHERE id = ${leadId}`;
             }
         }
 
