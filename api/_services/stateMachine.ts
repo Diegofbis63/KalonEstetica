@@ -126,14 +126,17 @@ export async function extractState(
                 const intent = nlpResult?.intent;
                 if (isLastMessage) state.lastIntent = intent;
 
-                // Global intent handling - MODIFIED to avoid reset if services are already selected
+                // Global intent handling - STICKY FLOW PROTECTION
                 if (intent === 'saludo' || intent === 'pedir_turno_general' || intent === 'listar_servicios') {
                     const hasSelectedServices = state.selectedServiceIds.length > 0;
                     const isAlreadyBooking = ['phone_collection', 'availability_proposal', 'payment_request', 'waiting_for_receipt'].includes(state.stage);
 
-                    // Only reset to parent_selection if we are at the beginning OR the user literally asked to list services again
-                    if (state.stage === 'greeting' || (intent === 'listar_servicios' && !isAlreadyBooking)) {
+                    // If we are in the middle of a flow, IGNORE greetings/general requests that would reset us
+                    if (state.stage === 'greeting' || (intent === 'listar_servicios' && !isAlreadyBooking && !hasSelectedServices)) {
                         state.stage = 'parent_selection';
+                    } else if (isAlreadyBooking) {
+                        console.log(`[stateMachine.ts] Turn ${i}: Protecting stage ${state.stage} from reset by intent ${intent}`);
+                        // We do NOT change stage here. We stay where we were.
                     }
                 }
 
@@ -408,6 +411,28 @@ export async function extractState(
             }
         }
         
+        // --- Continuity Recovery Logic (The "Anti-Amnesia" Filter) ---
+        // If the current stage is greeting but there are selected services and we were deep in a flow, 
+        // it means we lost context. Let's recover the last logical stage.
+        if (state.stage === 'greeting' && state.selectedServiceIds.length > 0) {
+            let lastKnownStage: any = null;
+            // Scan backwards through messages to find the last bot question
+            for (let k = messages.length - 1; k >= 0; k--) {
+               const m = messages[k];
+               if (m.role === 'assistant' || m.role === 'bot') {
+                   const t = normalizeText(m.content);
+                   if (t.includes("necesitamos una seña") || t.includes("alias") || t.includes("comprobante")) { lastKnownStage = 'payment_request'; break; }
+                   if (t.includes("confirmar el turno") || t.includes("disponibilidad") || t.includes("te queda bien")) { lastKnownStage = 'availability_proposal'; break; }
+                   if (t.includes("tu nombre") || t.includes("nombre completo")) { lastKnownStage = 'name_collection'; break; }
+                   if (t.includes("tu carrito") || t.includes("revisemos tu pedido")) { lastKnownStage = 'cart_review'; break; }
+               }
+            }
+            if (lastKnownStage) {
+                state.stage = lastKnownStage;
+                console.log(`[stateMachine.ts] BACKTRACKING SUCCESS: Recovered stage ${lastKnownStage}`);
+            }
+        }
+
         // Final protection: if we reach payment_request but don't have date/time, something is wrong
         if (state.stage === 'payment_request' && (!state.pendingDate || !state.pendingTime)) {
             state.stage = 'availability_proposal';
