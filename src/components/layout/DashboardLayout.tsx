@@ -10,7 +10,7 @@ export default function DashboardLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen bg-noir text-cream overflow-hidden">
+    <div className="flex min-h-screen bg-noir text-cream overflow-x-hidden">
       {/* Global Chat Modal */}
       <ChatModal 
         open={isChatModalOpen} 
@@ -24,9 +24,9 @@ export default function DashboardLayout() {
       <Sidebar isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
 
       {/* Main Content Area */}
-      <main className="flex-1 lg:ml-64 min-h-screen relative flex flex-col overflow-hidden">
+      <main className="flex-1 lg:ml-64 min-h-screen relative flex flex-col">
         {/* Mobile Header */}
-        <div className="lg:hidden flex items-center justify-between px-6 py-4 border-b border-cream/5 bg-noir/50 backdrop-blur-md sticky top-0 z-40">
+        <div className="lg:hidden flex items-center justify-between px-6 py-4 border-b border-cream/5 bg-noir sticky top-0 z-[60]">
            <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gold to-gold-light flex items-center justify-center">
                 <span className="text-noir font-serif font-bold text-sm">K</span>
@@ -44,13 +44,13 @@ export default function DashboardLayout() {
         </div>
 
         {/* Global Glass Background Effect */}
-        <div className="fixed inset-0 pointer-events-none opacity-40 overflow-hidden">
+        <div className="fixed inset-0 pointer-events-none opacity-40 overflow-hidden z-0">
           <div className="absolute top-[-10%] left-[20%] w-[1000px] h-[800px] bg-gold/[0.03] rounded-full blur-[150px] animate-pulse" />
           <div className="absolute bottom-[-10%] right-[10%] w-[800px] h-[600px] bg-rose/[0.02] rounded-full blur-[120px]" />
         </div>
 
         {/* Scrollable Page Content */}
-        <div className="relative z-10 flex-1 overflow-y-auto custom-scrollbar">
+        <div className="relative z-10 flex-1 flex flex-col">
           <Outlet />
         </div>
       </main>
