@@ -23,6 +23,14 @@ const Index = () => {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  useEffect(() => {
+    if (isMobileMenuOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "auto";
+    }
+  }, [isMobileMenuOpen]);
+
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -38,8 +46,8 @@ const Index = () => {
       <div className="relative z-10 pt-20 md:pt-24">
         {/* Header - Fixed & Glassmorphism */}
         <header
-          className={`fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 md:px-12 py-4 transition-all duration-300 ${isScrolled
-            ? "bg-noir/80 backdrop-blur-md shadow-lg border-b border-cream/5 py-3"
+          className={`fixed top-0 left-0 right-0 z-[100] flex items-center justify-between px-6 md:px-12 py-4 transition-all duration-300 ${isScrolled || isMobileMenuOpen
+            ? "bg-noir backdrop-blur-md shadow-lg border-b border-cream/5 py-3"
             : "bg-transparent py-6"
             }`}
         >
@@ -81,7 +89,7 @@ const Index = () => {
 
             {/* Mobile Menu Toggle */}
             <button
-              className="md:hidden p-2 text-cream/60 hover:text-gold transition-colors"
+              className="md:hidden p-2 text-cream/60 hover:text-gold transition-colors relative z-[110]"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               aria-label={isMobileMenuOpen ? "Cerrar menú" : "Abrir menú"}
             >
@@ -95,7 +103,7 @@ const Index = () => {
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="fixed inset-0 z-40 md:hidden bg-noir/95 backdrop-blur-xl pt-24 px-8 flex flex-col gap-8 transition-all"
+              className="fixed inset-0 z-[105] md:hidden bg-noir pt-24 px-8 flex flex-col gap-8 transition-all h-screen overflow-y-auto"
             >
               <a
                 href="#servicios"
