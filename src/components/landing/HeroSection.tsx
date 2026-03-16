@@ -21,18 +21,21 @@ const HeroSection = () => {
       <div className="max-w-7xl mx-auto w-full relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-2 items-center min-h-[70vh]">
           {/* Left Column: Content block */}
-          <div className="flex flex-col items-center lg:items-start text-center lg:text-left space-y-8 lg:pl-8">
-            {/* 1. Logo */}
-            <ScrollReveal delay={0.05} direction="down" className="w-48 sm:w-64 md:w-80 lg:w-[420px]">
+          <div className="flex flex-col items-center lg:items-start text-center lg:text-left lg:pl-8">
+            {/* 1. Logo - Resized to 60% and tinted to match the brand color */}
+            <ScrollReveal delay={0.05} direction="down" className="w-40 sm:w-48 md:w-56 lg:w-[250px] mb-2 -ml-2">
               <motion.img 
                 src={logoKalon} 
                 alt="KÂLON Logo" 
-                className="w-full h-auto drop-shadow-[0_10px_20px_rgba(0,0,0,0.4)] mx-auto lg:mx-0"
+                className="w-full h-auto drop-shadow-[0_5px_15px_rgba(0,0,0,0.3)] mx-auto lg:mx-0"
+                style={{ 
+                  filter: "brightness(0) saturate(100%) invert(74%) sepia(13%) saturate(1055%) hue-rotate(338deg) brightness(89%) contrast(85%)"
+                }}
                 animate={{ 
-                  y: [0, -10, 0],
+                  y: [0, -5, 0],
                 }}
                 transition={{ 
-                  duration: 4, 
+                  duration: 5, 
                   repeat: Infinity, 
                   ease: "easeInOut" 
                 }}
@@ -40,7 +43,7 @@ const HeroSection = () => {
             </ScrollReveal>
 
             {/* 2. Text Content */}
-            <div className="space-y-6">
+            <div className="space-y-6 mt-2">
               <ScrollReveal delay={0.1} direction="left">
                 <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-serif font-bold tracking-tight leading-[1.1] drop-shadow-[0_5px_15px_rgba(0,0,0,0.6)]">
                   <span className="text-white block">Tu Belleza,</span>
