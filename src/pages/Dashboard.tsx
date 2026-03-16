@@ -471,13 +471,12 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
               {/* 2. Main Layout Split */}
               <div className="grid grid-cols-1 lg:grid-cols-10 gap-8">
                 {/* Column Left: Daily Timeline (70%) */}
-                <div className="lg:col-span-7 space-y-6">
-                   <div className="flex items-center justify-between mb-2">
+                <div className="lg:col-span-7 space-y-6">                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
                       <div className="flex items-center gap-3">
                         <div className="w-1 h-6 bg-gold rounded-full shadow-[0_0_10px_rgba(194,154,91,0.5)]" />
                         <h3 className="text-xl font-serif font-bold tracking-tight">Agenda del Día</h3>
                       </div>
-                      <div className="flex items-center gap-4">
+                      <div className="flex flex-wrap items-center gap-3">
                         <div className="flex items-center gap-2 bg-noir-light/50 px-3 py-1.5 rounded-xl border border-white/5">
                           <span className="text-[10px] uppercase font-bold tracking-widest text-cream/40">Mostrar Realizados</span>
                           <Switch 
@@ -486,20 +485,20 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                             className="scale-75 data-[state=checked]:bg-gold"
                           />
                         </div>
-                        <Badge variant="outline" className="border-gold/20 text-gold/60 uppercase text-[9px] tracking-widest px-3">
+                        <Badge variant="outline" className="border-gold/20 text-gold/60 uppercase text-[9px] tracking-widest px-3 py-1">
                           {new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Argentina/Cordoba' })}
                         </Badge>
                       </div>
                    </div>
                    
-                   <div className="relative pl-8 space-y-8 before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-px before:bg-gradient-to-b before:from-gold/40 before:via-gold/10 before:to-transparent">
+                   <div className="relative pl-6 sm:pl-8 space-y-6 sm:space-y-8 before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-px before:bg-gradient-to-b before:from-gold/40 before:via-gold/10 before:to-transparent">
                       {timelineAppts.length > 0 ? (
                         timelineAppts
                           .sort((a,b) => new Date(a.date_time).getTime() - new Date(b.date_time).getTime())
                           .map((appt, i) => (
                           <div 
                             key={appt.id} 
-                            className={`relative p-5 rounded-2xl border transition-all animate-in fade-in slide-in-from-left-4 ${
+                            className={`relative p-4 sm:p-5 rounded-2xl border transition-all animate-in fade-in slide-in-from-left-4 ${
                               appt.canManage 
                                 ? 'bg-gold/5 border-gold/20 shadow-[0_0_20px_rgba(194,154,91,0.05)]' 
                                 : 'bg-white/[0.02] border-white/5 opacity-80'
@@ -507,148 +506,87 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                             style={{ animationDelay: `${i * 100}ms` }}
                           >
                             {/* Dot indicator */}
-                            <div className={`absolute -left-[27px] top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 ${
+                            <div className={`absolute -left-[25px] sm:-left-[27px] top-6 sm:top-1/2 sm:-translate-y-1/2 w-4 h-4 rounded-full border-2 ${
                               appt.canManage ? 'bg-gold border-noir' : 'bg-noir-light border-white/10'
                             }`} />
 
-                            <div className="flex items-center justify-between">
-                              <div className="flex-1 min-w-0 pr-4">
-                                <div className="flex items-center gap-3 mb-1.5">
-                                  <Clock className={`w-3.5 h-3.5 ${appt.canManage ? 'text-gold' : 'text-cream/20'}`} />
-                                  <span className={`text-sm font-bold font-sans ${appt.canManage ? 'text-gold' : 'text-cream/40'}`}>
-                                    {new Date(appt.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Cordoba' })}hs
-                                  </span>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                                  <h4 className={`text-lg font-serif font-bold ${appt.canManage ? 'text-cream' : 'text-cream/30'}`}>
+                            <div className="flex flex-col gap-4">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-3 mb-2">
+                                    <Clock className={`w-3.5 h-3.5 ${appt.canManage ? 'text-gold' : 'text-cream/20'}`} />
+                                    <span className={`text-sm font-bold font-sans ${appt.canManage ? 'text-gold' : 'text-cream/40'}`}>
+                                      {new Date(appt.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Cordoba' })}hs
+                                    </span>
+                                  </div>
+                                  
+                                  <h4 className={`text-lg sm:text-xl font-serif font-bold mb-3 ${appt.canManage ? 'text-cream' : 'text-cream/30'}`}>
                                     {appt.canManage ? appt.client_name : `Ocupado — ${appt.category_name}`}
                                   </h4>
-                                  {appt.canManage && (
-                                    <>
-                                      {appt.total_duration ? (
-                                        <div className="flex items-center gap-3">
-                                          <div className="inline-flex items-center gap-4 px-5 py-3 rounded-2xl bg-gold/10 border border-gold/30 shadow-[0_0_30px_rgba(194,154,91,0.15)] group/duration hover:bg-gold/15 transition-all">
-                                            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gold/20 border border-gold/20 flex-shrink-0">
-                                              <Clock className="w-5 h-5 text-gold animate-pulse" />
-                                            </div>
-                                            <div className="flex flex-col">
-                                              <span className="text-[10px] text-gold/50 uppercase font-black tracking-[0.2em] leading-none mb-1">Duración</span>
-                                              <span className="text-2xl font-serif font-black text-gold leading-none tracking-tight">
-                                                {appt.total_duration >= 60 
-                                                  ? `${Math.floor(appt.total_duration/60)}h ${appt.total_duration%60 > 0 ? `${appt.total_duration%60}m` : ''}`
-                                                  : `${appt.total_duration} min`
-                                                }
-                                              </span>
-                                            </div>
-                                          </div>
 
-                                          <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                              <button className="outline-none focus:outline-none focus-visible:outline-none">
-                                                <Badge 
-                                                  variant="outline" 
-                                                  className={`
-                                                    text-[10px] font-black tracking-[0.2em] px-4 py-2 rounded-xl border shadow-lg cursor-pointer hover:brightness-125 transition-all uppercase h-[64px] flex flex-col justify-center items-center gap-1 min-w-[120px]
-                                                    ${ (appt.status === 'scheduled' || appt.status === 'confirmed')
-                                                      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' 
-                                                      : (appt.status === 'completed' || appt.status === 'REALIZADA')
-                                                      ? 'border-sky-500/30 bg-sky-500/10 text-sky-400'
-                                                      : appt.status === 'canceled'
-                                                      ? 'border-rose-500/30 bg-rose-500/10 text-rose-400'
-                                                      : 'border-gold/30 bg-gold/10 text-gold'}
-                                                  `}
-                                                >
-                                                  <span className="text-[8px] opacity-50 font-sans tracking-widest">ESTADO</span>
-                                                  { (appt.status === 'scheduled' || appt.status === 'confirmed') ? 'CONFIRMADA' : 
-                                                    (appt.status === 'completed' || appt.status === 'REALIZADA') ? 'REALIZADA' : 
-                                                    appt.status === 'canceled' ? 'CANCELADA' : 'PENDIENTE'}
-                                                </Badge>
-                                              </button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="center" className="bg-noir-light border-white/10 text-cream/80 backdrop-blur-xl">
-                                              <DropdownMenuItem className="focus:bg-gold/10 focus:text-gold cursor-pointer" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'pending' })}>
-                                                <Clock className="w-3.5 h-3.5 mr-2" /> Marcar como PENDIENTE
-                                              </DropdownMenuItem>
-                                              <DropdownMenuItem className="focus:bg-emerald-500/10 focus:text-emerald-400 cursor-pointer" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'confirmed' })}>
-                                                <CalendarCheck className="w-3.5 h-3.5 mr-2" /> Marcar como CONFIRMADA
-                                              </DropdownMenuItem>
-                                              <DropdownMenuItem className="focus:bg-sky-500/10 focus:text-sky-400 cursor-pointer" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'REALIZADA' })}>
-                                                <CheckCircle2 className="w-3.5 h-3.5 mr-2" /> Marcar como REALIZADA
-                                              </DropdownMenuItem>
-                                              <DropdownMenuItem className="focus:bg-rose/10 focus:text-rose cursor-pointer" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'canceled' })}>
-                                                <XCircle className="w-3.5 h-3.5 mr-2" /> Marcar como CANCELADA
-                                              </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                          </DropdownMenu>
+                                  {appt.canManage && (
+                                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                                      {appt.total_duration ? (
+                                        <div className="inline-flex items-center gap-4 px-4 py-2 sm:px-5 sm:py-3 rounded-2xl bg-gold/10 border border-gold/30 shadow-[0_0_30px_rgba(194,154,91,0.15)] group/duration hover:bg-gold/15 transition-all">
+                                          <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gold/20 border border-gold/20 flex-shrink-0">
+                                            <Clock className="w-4 h-4 sm:w-5 h-5 text-gold animate-pulse" />
+                                          </div>
+                                          <div className="flex flex-col">
+                                            <span className="text-[9px] sm:text-[10px] text-gold/50 uppercase font-black tracking-[0.2em] leading-none mb-1">Duración</span>
+                                            <span className="text-xl sm:text-2xl font-serif font-black text-gold leading-none tracking-tight">
+                                              {appt.total_duration >= 60 
+                                                ? `${Math.floor(appt.total_duration/60)}h ${appt.total_duration%60 > 0 ? `${appt.total_duration%60}m` : ''}`
+                                                : `${appt.total_duration} min`
+                                              }
+                                            </span>
+                                          </div>
                                         </div>
                                       ) : null}
-                                    </>
+
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <button className="outline-none focus:outline-none focus-visible:outline-none w-full sm:w-auto">
+                                            <Badge 
+                                              variant="outline" 
+                                              className={`
+                                                text-[10px] font-black tracking-[0.2em] px-4 py-2 rounded-xl border shadow-lg cursor-pointer hover:brightness-125 transition-all uppercase h-[56px] sm:h-[64px] flex flex-col justify-center items-center gap-1 min-w-full sm:min-w-[120px]
+                                                ${ (appt.status === 'scheduled' || appt.status === 'confirmed')
+                                                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' 
+                                                  : (appt.status === 'completed' || appt.status === 'REALIZADA')
+                                                  ? 'border-sky-500/30 bg-sky-500/10 text-sky-400'
+                                                  : appt.status === 'canceled'
+                                                  ? 'border-rose-500/30 bg-rose-500/10 text-rose-400'
+                                                  : 'border-gold/30 bg-gold/10 text-gold'}
+                                              `}
+                                            >
+                                              <span className="text-[8px] opacity-50 font-sans tracking-widest">ESTADO</span>
+                                              { (appt.status === 'scheduled' || appt.status === 'confirmed') ? 'CONFIRMADA' : 
+                                                (appt.status === 'completed' || appt.status === 'REALIZADA') ? 'REALIZADA' : 
+                                                appt.status === 'canceled' ? 'CANCELADA' : 'PENDIENTE'}
+                                            </Badge>
+                                          </button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="center" className="bg-noir-light border-white/10 text-cream/80 backdrop-blur-xl">
+                                          <DropdownMenuItem className="focus:bg-gold/10 focus:text-gold cursor-pointer" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'pending' })}>
+                                            <Clock className="w-3.5 h-3.5 mr-2" /> Marcar como PENDIENTE
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem className="focus:bg-emerald-500/10 focus:text-emerald-400 cursor-pointer" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'confirmed' })}>
+                                            <CalendarCheck className="w-3.5 h-3.5 mr-2" /> Marcar como CONFIRMADA
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem className="focus:bg-sky-500/10 focus:text-sky-400 cursor-pointer" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'REALIZADA' })}>
+                                            <CheckCircle2 className="w-3.5 h-3.5 mr-2" /> Marcar como REALIZADA
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem className="focus:bg-rose/10 focus:text-rose cursor-pointer" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'canceled' })}>
+                                            <XCircle className="w-3.5 h-3.5 mr-2" /> Marcar como CANCELADA
+                                          </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                    </div>
                                   )}
                                 </div>
+                                
                                 {appt.canManage && (
-                                  <div className="mt-3">
-                                      <Popover>
-                                        <PopoverTrigger asChild>
-                                          <button className="flex items-center gap-1.5 hover:text-gold transition-colors text-left text-[11px] font-bold uppercase tracking-widest bg-white/5 hover:bg-gold/5 border border-white/10 hover:border-gold/30 px-3 py-1.5 rounded-lg text-cream/50 group/btn">
-                                            <ClipboardList className="w-3.5 h-3.5 group-hover/btn:scale-110 transition-transform" />
-                                            Ver Servicios <span className="text-cream/30 border-l border-white/10 pl-1.5 ml-0.5">({appt.selected_services?.length || 0})</span>
-                                          </button>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-72 bg-noir/95 backdrop-blur-xl border-gold/20 shadow-[0_10px_40px_rgba(0,0,0,0.5)] p-0 z-50">
-                                          <div className="p-3 border-b border-white/5 bg-white/5">
-                                            <p className="text-[10px] uppercase font-bold tracking-widest text-gold mb-1">Detalle del Turno</p>
-                                            <p className="text-xs text-cream/60">Servicios agendados:</p>
-                                          </div>
-                                          <ScrollArea className="max-h-[280px] overflow-y-auto">
-                                            <div className="p-3 space-y-3">
-                                              {appt.selected_services && appt.selected_services.length > 0 ? (
-                                                appt.selected_services.map((s, idx) => (
-                                                  <div key={idx} className="flex justify-between items-start gap-2 group/item">
-                                                    <div className="space-y-0.5">
-                                                      <p className="text-xs font-bold text-cream group-hover/item:text-gold transition-colors">{s.title}</p>
-                                                      <p className="text-[10px] text-cream/40 flex items-center gap-1">
-                                                        <Clock className="w-2.5 h-2.5" /> {s.duration}
-                                                      </p>
-                                                    </div>
-                                                    <p className="text-xs font-sans font-bold text-cream/80 whitespace-nowrap">${Number(s.price).toLocaleString('es-AR')}</p>
-                                                  </div>
-                                                ))
-                                              ) : (
-                                                <div className="text-[10px] text-cream/20 italic py-2">Sin sub-servicios detallados</div>
-                                              )}
-                                            </div>
-                                          </ScrollArea>
-                                          {(appt.total_price || appt.total_duration) && (
-                                            <div className="p-3 border-t border-white/5 bg-gold/5 space-y-2">
-                                              {appt.total_duration && (
-                                                <div className="flex justify-between items-center text-[10px] text-cream/40">
-                                                  <p className="uppercase tracking-widest leading-none">Duración Total</p>
-                                                  <p className="font-bold flex items-center gap-1 leading-none text-cream/80">
-                                                    <Clock className="w-2.5 h-2.5" />
-                                                    {appt.total_duration >= 60 
-                                                      ? `${Math.floor(appt.total_duration/60)}H${appt.total_duration%60 > 0 ? ` ${appt.total_duration%60}M` : ''}`
-                                                      : `${appt.total_duration} MIN`
-                                                    }
-                                                  </p>
-                                                </div>
-                                              )}
-                                              {appt.total_price && appt.total_price > 0 && (
-                                                <div className="flex justify-between items-center">
-                                                  <p className="text-xs font-bold text-gold uppercase tracking-tighter leading-none">Total</p>
-                                                  <p className="text-sm font-sans font-black text-gold whitespace-nowrap leading-none">${Number(appt.total_price).toLocaleString('es-AR')}</p>
-                                                </div>
-                                              )}
-                                            </div>
-                                          )}
-                                        </PopoverContent>
-                                      </Popover>
-                                  </div>
-                                )}
-                              </div>
-                              
-                              {appt.canManage && (
-                                <div className="flex items-center gap-2">
-                                  {appt.canManage && (
+                                  <div className="flex sm:flex-col items-center gap-2">
                                     <button 
                                       onClick={() => { 
                                         const leadObj: Lead = {
@@ -664,14 +602,12 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                         openChat(leadObj);
                                       }}
                                       disabled={!appt.lead_id || !appt.canManage}
-                                      className={`p-3 rounded-xl bg-white/5 border border-white/10 transition-all flex items-center justify-center group/btn hover:text-gold hover:border-gold/30 ${
+                                      className={`p-3 sm:p-4 rounded-xl bg-white/5 border border-white/10 transition-all flex items-center justify-center group/btn hover:text-gold hover:border-gold/30 flex-1 sm:flex-none ${
                                         appt.canManage && appt.lead_id ? '' : 'opacity-20 cursor-not-allowed'
                                       }`}
                                     >
-                                      <MessageSquare className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+                                      <MessageSquare className="w-4 h-4 sm:w-5 h-5 group-hover/btn:scale-110 transition-transform" />
                                     </button>
-                                  )}
-                                  {appt.canManage && (
                                     <button 
                                       onClick={() => {
                                         setSelectedAppointmentForEdit(appt);
@@ -684,11 +620,71 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                         setSelectedServices(appt.selected_services || []);
                                         setIsEditAppointmentModalOpen(true);
                                       }}
-                                      className="p-3 rounded-xl bg-gold text-noir hover:scale-110 active:scale-95 transition-all shadow-lg shadow-gold/10"
+                                      className="p-3 sm:p-4 rounded-xl bg-gold text-noir hover:scale-110 active:scale-95 transition-all shadow-lg shadow-gold/10 flex-1 sm:flex-none"
                                     >
-                                      <Edit className="w-4 h-4" />
+                                      <Edit className="w-4 h-4 sm:w-5 h-5" />
                                     </button>
-                                  )}
+                                  </div>
+                                )}
+                              </div>
+
+                              {appt.canManage && (
+                                <div className="pt-2">
+                                  <Popover>
+                                    <PopoverTrigger asChild>
+                                      <button className="flex items-center gap-1.5 hover:text-gold transition-colors text-left text-[11px] font-bold uppercase tracking-widest bg-white/5 hover:bg-gold/5 border border-white/10 hover:border-gold/30 px-4 py-2 rounded-xl text-cream/50 group/btn w-full sm:w-auto justify-center sm:justify-start">
+                                        <ClipboardList className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+                                        Ver Servicios <span className="text-cream/30 border-l border-white/10 pl-2 ml-1">({appt.selected_services?.length || 0})</span>
+                                      </button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-72 bg-noir/95 backdrop-blur-xl border-gold/20 shadow-[0_10px_40px_rgba(0,0,0,0.5)] p-0 z-50">
+                                      <div className="p-3 border-b border-white/5 bg-white/5">
+                                        <p className="text-[10px] uppercase font-bold tracking-widest text-gold mb-1">Detalle del Turno</p>
+                                        <p className="text-xs text-cream/60">Servicios agendados:</p>
+                                      </div>
+                                      <ScrollArea className="max-h-[280px] overflow-y-auto">
+                                        <div className="p-3 space-y-3">
+                                          {appt.selected_services && appt.selected_services.length > 0 ? (
+                                            appt.selected_services.map((s, idx) => (
+                                              <div key={idx} className="flex justify-between items-start gap-2 group/item">
+                                                <div className="space-y-0.5">
+                                                  <p className="text-xs font-bold text-cream group-hover/item:text-gold transition-colors">{s.title}</p>
+                                                  <p className="text-[10px] text-cream/40 flex items-center gap-1">
+                                                    <Clock className="w-2.5 h-2.5" /> {s.duration}
+                                                  </p>
+                                                </div>
+                                                <p className="text-xs font-sans font-bold text-cream/80 whitespace-nowrap">${Number(s.price).toLocaleString('es-AR')}</p>
+                                              </div>
+                                            ))
+                                          ) : (
+                                            <div className="text-[10px] text-cream/20 italic py-2">Sin sub-servicios detallados</div>
+                                          )}
+                                        </div>
+                                      </ScrollArea>
+                                      {(appt.total_price || appt.total_duration) && (
+                                        <div className="p-3 border-t border-white/5 bg-gold/5 space-y-2">
+                                          {appt.total_duration && (
+                                            <div className="flex justify-between items-center text-[10px] text-cream/40">
+                                              <p className="uppercase tracking-widest leading-none">Duración Total</p>
+                                              <p className="font-bold flex items-center gap-1 leading-none text-cream/80">
+                                                <Clock className="w-2.5 h-2.5" />
+                                                {appt.total_duration >= 60 
+                                                  ? `${Math.floor(appt.total_duration/60)}H${appt.total_duration%60 > 0 ? ` ${appt.total_duration%60}M` : ''}`
+                                                  : `${appt.total_duration} MIN`
+                                                }
+                                              </p>
+                                            </div>
+                                          )}
+                                          {appt.total_price && appt.total_price > 0 && (
+                                            <div className="flex justify-between items-center">
+                                              <p className="text-xs font-bold text-gold uppercase tracking-tighter leading-none">Total</p>
+                                              <p className="text-sm font-sans font-black text-gold whitespace-nowrap leading-none">${Number(appt.total_price).toLocaleString('es-AR')}</p>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </PopoverContent>
+                                  </Popover>
                                 </div>
                               )}
                             </div>
