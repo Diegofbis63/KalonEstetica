@@ -70,15 +70,42 @@ export async function extractState(
     let resetCause: string | null = null;
     
     if (initialState) {
-        // Reset if already finished
-        if (initialState.stage === 'done') {
-            resetCause = 'completion';
-        } 
-        // Reset by time (12h amnesia check)
-        else if (lastUpdatedAt) {
+        // 1. Reset by time (12h amnesia check) - Priority #1
+        if (lastUpdatedAt) {
             const lastUpdate = new Date(lastUpdatedAt);
             if (now.getTime() - lastUpdate.getTime() > TWELVE_HOURS) {
                 resetCause = 'timeout';
+            }
+        }
+
+        // 2. Logic check for 'done' stage (Courtesy Shield) - Priority #2
+        if (initialState.stage === 'done' && !resetCause) {
+            const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
+            const normalizedText = lastMsg ? normalizeText(lastMsg.content || "") : "";
+            // Regex to detect if message is ONLY emojis (plus potential whitespace)
+            const isEmojiOnly = lastMsg?.content ? /^(\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff]|[ \t\n\r\f\v])+$/.test(lastMsg.content.trim()) : false;
+
+            const courtesyWords = ['gracias', 'muchas gracias', 'genial', 'buenisimo', 'chau', 'nos vemos', 'perfecto'];
+            const isCourtesy = courtesyWords.some(kw => normalizedText === kw) || isEmojiOnly;
+
+            // Check for "Reset triggers" (intents for new booking or category names)
+            const nlp = await getNlpManager();
+            const nlpResult = lastMsg?.content ? await nlp.process('es', lastMsg.content) : null;
+            const intent = nlpResult?.intent;
+            
+            const isNewBookingIntent = ['saludo', 'pedir_turno_general', 'listar_servicios'].includes(intent);
+            const mentionsCategory = categories.some(c => normalizedText.includes(normalizeText(c.name)));
+
+            if (isNewBookingIntent || mentionsCategory || (normalizedText.length > 0 && !isCourtesy)) {
+                resetCause = 'new_request';
+            } else if (isCourtesy) {
+                // SHIELD: Stay in 'done' and flag it to generate a brief response
+                console.log("[stateMachine.ts] Courtesy detected. Shielding 'done' state.");
+                const resultState = { ...initialState, lastIntent: 'courtesy_ack' };
+                return resultState;
+            } else {
+                // If it's silence or unrecognized but not a clear new request, stay in done
+                return { ...initialState };
             }
         }
     }
@@ -585,8 +612,12 @@ export function generateResponse(
 ): string {
     console.log(`[stateMachine.ts] Generating response for stage: ${state.stage}. hasMediaInLastMsg: ${hasMediaInLastMsg}`);
     
-    // 1. TERMINAL CONFIRMATION (Top priority)
+    // 1. TERMINAL CONFIRMATION & COURTESY (Top priority)
     if (state.stage === 'done' || (state.stage === 'waiting_for_receipt' && hasMediaInLastMsg)) {
+        if (state.lastIntent === 'courtesy_ack') {
+            const name = state.clientName ? state.clientName.split(' ')[0] : '';
+            return `¡De nada${name ? `, ${name}` : ''}! Te esperamos. ✨`;
+        }
         return "¡Excelente noticia! 💖 Recibimos tu comprobante correctamente. Tu turno ya quedó agendado y confirmado en nuestro sistema. ¡Qué placer va a ser recibirte en KÂLON para mimarte un rato! Nos vemos pronto. ✨";
     }
 
