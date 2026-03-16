@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { ChevronRight, Star } from "lucide-react";
 import ScrollReveal from "./ScrollReveal";
 import heroBg from "@/assets/centro-kalon-estetica.png";
+import logoKalon from "@/assets/logo kalon sin fondo.png";
 
 const HeroSection = () => {
   return (
@@ -18,44 +19,63 @@ const HeroSection = () => {
       </div>
 
       <div className="max-w-7xl mx-auto w-full relative z-10">
-        <div className="max-w-3xl">
-          <ScrollReveal delay={0.1} direction="left">
-            <h1 className="text-4xl sm:text-5xl md:text-8xl lg:text-9xl font-serif font-bold tracking-tight mb-6 md:mb-8 leading-[1.1] md:leading-[0.95] drop-shadow-[0_5px_5px_rgba(0,0,0,0.5)]">
-              <span className="text-white block">Tu Belleza,</span>
-              <span className="bg-gradient-to-r from-gold via-gold-light to-gold-light bg-clip-text text-transparent italic">
-                Nuestra Pasión
-              </span>
-            </h1>
+        <div className="flex flex-col md:flex-row items-center gap-8 md:gap-12">
+          {/* Logo to the left on desktop, centered above on mobile */}
+          <ScrollReveal delay={0.05} direction="left" className="shrink-0 w-48 sm:w-64 md:w-80 lg:w-[450px]">
+            <motion.img 
+              src={logoKalon} 
+              alt="KÂLON Logo" 
+              className="w-full h-auto drop-shadow-[0_10px_10px_rgba(0,0,0,0.3)]"
+              animate={{ 
+                y: [0, -10, 0],
+              }}
+              transition={{ 
+                duration: 4, 
+                repeat: Infinity, 
+                ease: "easeInOut" 
+              }}
+            />
           </ScrollReveal>
 
-          <ScrollReveal delay={0.2} direction="left">
-            <p className="text-lg md:text-2xl text-white/90 font-sans max-w-xl mb-10 md:mb-14 leading-relaxed drop-shadow-[0_2px_2px_rgba(0,0,0,0.5)] font-medium">
-              Descubre un espacio donde la ciencia y el arte se unen para realzar
-              tu belleza natural. Tratamientos personalizados con resultados excepcionales.
-            </p>
-          </ScrollReveal>
+          <div className="max-w-3xl">
+            <ScrollReveal delay={0.1} direction="left">
+              <h1 className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl xl:text-9xl font-serif font-bold tracking-tight mb-6 md:mb-8 leading-[1.1] md:leading-[0.95] drop-shadow-[0_5px_5px_rgba(0,0,0,0.5)]">
+                <span className="text-white block">Tu Belleza,</span>
+                <span className="bg-gradient-to-r from-gold via-gold-light to-gold-light bg-clip-text text-transparent italic">
+                  Nuestra Pasión
+                </span>
+              </h1>
+            </ScrollReveal>
 
-          <ScrollReveal delay={0.3} direction="left">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 md:gap-6">
-              <motion.a
-                href="#chat"
-                className="inline-flex items-center justify-center gap-3 bg-gradient-to-r from-gold to-gold-light text-noir font-sans font-black px-8 md:px-12 py-5 rounded-full shadow-2xl transition-all text-base tracking-wide"
-                whileHover={{ scale: 1.05, boxShadow: "0 0 35px rgba(212, 175, 55, 0.6)" }}
-                whileTap={{ scale: 0.97 }}
-              >
-                Agendar Cita
-                <ChevronRight className="w-5 h-5" />
-              </motion.a>
-              <motion.a
-                href="#servicios"
-                className="inline-flex items-center justify-center gap-3 bg-white/10 backdrop-blur-xl border border-white/20 hover:border-gold/60 text-white px-8 md:px-12 py-5 rounded-full transition-all text-base font-sans font-bold shadow-xl shadow-noir/40"
-                whileHover={{ scale: 1.05, backgroundColor: "rgba(255,255,255,0.2)" }}
-                whileTap={{ scale: 0.97 }}
-              >
-                Ver Tratamientos
-              </motion.a>
-            </div>
-          </ScrollReveal>
+            <ScrollReveal delay={0.2} direction="left">
+              <p className="text-lg md:text-xl lg:text-2xl text-white/90 font-sans max-w-xl mb-10 md:mb-14 leading-relaxed drop-shadow-[0_2px_2px_rgba(0,0,0,0.5)] font-medium">
+                Descubre un espacio donde la ciencia y el arte se unen para realzar
+                tu belleza natural. Tratamientos personalizados con resultados excepcionales.
+              </p>
+            </ScrollReveal>
+
+            <ScrollReveal delay={0.3} direction="left">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 md:gap-6">
+                <motion.a
+                  href="#chat"
+                  className="inline-flex items-center justify-center gap-3 bg-gradient-to-r from-gold to-gold-light text-noir font-sans font-black px-8 md:px-12 py-5 rounded-full shadow-2xl transition-all text-base tracking-wide"
+                  whileHover={{ scale: 1.05, boxShadow: "0 0 35px rgba(212, 175, 55, 0.6)" }}
+                  whileTap={{ scale: 0.97 }}
+                >
+                  Agendar Cita
+                  <ChevronRight className="w-5 h-5" />
+                </motion.a>
+                <motion.a
+                  href="#servicios"
+                  className="inline-flex items-center justify-center gap-3 bg-white/10 backdrop-blur-xl border border-white/20 hover:border-gold/60 text-white px-8 md:px-12 py-5 rounded-full transition-all text-base font-sans font-bold shadow-xl shadow-noir/40"
+                  whileHover={{ scale: 1.05, backgroundColor: "rgba(255,255,255,0.2)" }}
+                  whileTap={{ scale: 0.97 }}
+                >
+                  Ver Tratamientos
+                </motion.a>
+              </div>
+            </ScrollReveal>
+          </div>
         </div>
       </div>
     </section>
