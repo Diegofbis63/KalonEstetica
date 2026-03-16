@@ -1,5 +1,5 @@
-
 import { neon } from '@neondatabase/serverless';
+import type { ConvState, Category, Service } from './stateMachine.js';
 
 const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 if (!connectionString) {
@@ -8,19 +8,21 @@ if (!connectionString) {
 
 export const sql = neon(connectionString!);
 
-export async function getCategories() {
+export async function getCategories(): Promise<Category[]> {
     console.log("[db.ts] Fetching categories...");
-    return await sql`SELECT id, name FROM categories WHERE active = true ORDER BY sort_order ASC`;
+    const results = await sql`SELECT id, name FROM categories WHERE active = true ORDER BY sort_order ASC`;
+    return results as Category[];
 }
 
-export async function getActiveServices() {
+export async function getActiveServices(): Promise<Service[]> {
     console.log("[db.ts] Fetching active services...");
-    return await sql`SELECT id, category_id, title, price, duration, category as category_name FROM services WHERE active = true ORDER BY sort_order ASC`;
+    const results = await sql`SELECT id, category_id, title, price, duration, category as category_name FROM services WHERE active = true ORDER BY sort_order ASC`;
+    return results as unknown as Service[];
 }
 
 export async function getLeadByPhone(phone: string) {
     console.log(`[db.ts] Searching lead by phone: ${phone}`);
-    const results = await sql`SELECT id, is_bot_enabled, client_name, contact_info FROM leads WHERE regexp_replace(contact_info->>'phone', '\\D', '', 'g') LIKE ${'%' + phone} LIMIT 1`;
+    const results = await sql`SELECT id, is_bot_enabled, client_name, contact_info, current_state FROM leads WHERE regexp_replace(contact_info->>'phone', '\\D', '', 'g') LIKE ${'%' + phone} LIMIT 1`;
     return results.length > 0 ? results[0] : null;
 }
 
@@ -45,7 +47,7 @@ export async function insertChatLog(leadId: string, role: string, content: strin
                      VALUES (${leadId}, ${role}, ${content}, ${mediaUrl}, ${mediaData || null}, ${sentToWhatsapp})`;
 }
 
-export async function createLead(orgId: string, name: string, contactInfo: any) {
+export async function createLead(orgId: string, name: string, contactInfo: { phone: string, source: string }) {
     console.log(`[db.ts] Creating a new lead for: ${name}`);
     const results = await sql`INSERT INTO leads (organization_id, client_name, contact_info, status, intent_score) 
                               VALUES (${orgId}, ${name}, ${JSON.stringify(contactInfo)}, 'qualified', 70) 
@@ -58,7 +60,7 @@ export async function getAppointmentsForDate(dateStr: string) {
     return await sql`SELECT date_time FROM appointments WHERE date_time::date = ${dateStr} AND status != 'canceled'`;
 }
 
-export async function createAppointment(leadId: string, orgId: string, dateTime: string, catNames: string, price: number, duration: number, selectedServices: any) {
+export async function createAppointment(leadId: string, orgId: string, dateTime: string, catNames: string, price: number, duration: number, selectedServices: Service[]) {
     console.log(`[db.ts] Creating appointment for lead ${leadId} at ${dateTime}`);
     return await sql`INSERT INTO appointments (lead_id, organization_id, date_time, service_type, status, total_price, total_duration, selected_services) 
                      VALUES (${leadId}, ${orgId}, ${dateTime}, ${catNames}, 'confirmed', ${price}, ${duration}, ${JSON.stringify(selectedServices)})`;
@@ -67,4 +69,8 @@ export async function createAppointment(leadId: string, orgId: string, dateTime:
 export async function markLeadAsConverted(leadId: string) {
     console.log(`[db.ts] Marking lead ${leadId} as converted`);
     return await sql`UPDATE leads SET status = 'converted', updated_at = NOW() WHERE id = ${leadId}`;
+}
+export async function updateLeadState(leadId: string, state: ConvState) {
+    console.log(`[db.ts] Updating lead ${leadId} current_state`);
+    return await sql`UPDATE leads SET current_state = ${state as any}, updated_at = NOW() WHERE id = ${leadId}`;
 }

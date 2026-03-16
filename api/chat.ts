@@ -10,7 +10,8 @@ import {
     createLead, 
     getAppointmentsForDate, 
     createAppointment, 
-    markLeadAsConverted 
+    markLeadAsConverted,
+    updateLeadState
 } from './_services/db.js';
 import { 
     parseDuration, 
@@ -94,19 +95,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // 6. EXTRACT STATE
-        const state = await extractState(messages, categories, services, isBotEnabled, leadName, leadPhone);
+        const savedState = userId ? (await getLeadByPhone(userId))?.current_state : null;
+        const state = await extractState(messages, categories, services, isBotEnabled, leadName, leadPhone, savedState);
 
         // 7. PERSISTENCE & UPDATES
         if (leadId) {
             if (state.clientName && state.clientName !== 'Cliente') { 
                 await updateLeadName(leadId, state.clientName);
             }
+            await updateLeadState(leadId, state);
             await insertChatLog(leadId, 'user', incomingMessage, incomingMediaUrl, !!userId, body.mediaData);
         } else if (userId || body.clientPhone) {
             const phone = (userId || body.clientPhone || '').replace(/\D/g, '');
             const nameToSave = (state.clientName && state.clientName !== 'Cliente') ? state.clientName : 'Cliente';
             const newLead = await createLead(DEFAULT_ORG_ID, nameToSave, { phone: phone, source: userId ? 'whatsapp' : 'web' });
             leadId = newLead.id;
+            await updateLeadState(leadId, state);
             await insertChatLog(leadId, 'user', incomingMessage, incomingMediaUrl, !!userId, body.mediaData);
         }
 
@@ -198,6 +202,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const responseText = generateResponse(state, categories, services, foundSlots, !!userId, !!(incomingMediaUrl || body.mediaData));
         
         if (leadId) {
+            await updateLeadState(leadId, state);
             await insertChatLog(leadId, 'bot', responseText, null, !!userId);
         }
 

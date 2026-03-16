@@ -60,11 +60,12 @@ export async function extractState(
     services: Service[],
     defaultIsBotEnabled: boolean = true,
     initialName: string | null = null,
-    initialPhone: string | null = null
+    initialPhone: string | null = null,
+    initialState: ConvState | null = null
 ): Promise<ConvState> {
-    console.log(`[stateMachine.ts] Extracting state. InitialName: ${initialName}, InitialPhone: ${initialPhone}`);
+    console.log(`[stateMachine.ts] Extracting state. InitialName: ${initialName}, InitialPhone: ${initialPhone}, HasInitialState: ${!!initialState}`);
     
-    const state: ConvState = {
+    const state: ConvState = initialState ? { ...initialState } : {
         clientName: initialName && initialName !== 'Cliente' ? initialName : null,
         clientPhone: initialPhone || null,
         selectedServiceIds: [],
@@ -80,17 +81,21 @@ export async function extractState(
         isBotEnabled: defaultIsBotEnabled
     };
 
+    // If we have an initialState, we only process messages that occurred AFTER the stored state.
+    // In this serverless context, we typically only need to process the LATEST user message.
+    const messagesToProcess = initialState ? messages.slice(-1) : messages;
+
     try {
         const today = new Date(); 
         today.setHours(0,0,0,0);
 
-        if (messages.length === 0) return state;
+        if (messagesToProcess.length === 0) return state;
 
-        let currentBotAsked: string | null = null;
+        let currentBotAsked: string | null = state.lastIntent || null;
         const nlp = await getNlpManager();
 
-        for (let i = 0; i < messages.length; i++) {
-            const msg = messages[i];
+        for (let i = 0; i < messagesToProcess.length; i++) {
+            const msg = messagesToProcess[i];
             if (!msg.content && !msg.media_url && !msg.media_data) continue;
             const normalizedContent = normalizeText(msg.content || "");
 
@@ -549,6 +554,7 @@ export async function extractState(
             state.stage = 'availability_proposal';
             console.log(`[stateMachine.ts] Emergency Fallback: payment_request -> availability_proposal`);
         }
+        state.lastIntent = currentBotAsked || undefined;
     } catch (error) {
         console.error("[stateMachine.ts] CRITICAL ERROR in extractState:", error);
         // We keep the state as is to prevent complete reset, but mark a potential error if needed
