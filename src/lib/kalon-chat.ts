@@ -1,4 +1,4 @@
-type Msg = { role: "user" | "assistant"; content: string };
+type Msg = { role: "user" | "assistant"; content: string; mediaUrl?: string; media_url?: string };
 
 const CHAT_URL = "/api/chat";
 
@@ -9,6 +9,7 @@ export async function streamKalonChat({
   onError,
   onStage,
   clientPhone,
+  mediaUrl,
 }: {
   messages: Msg[];
   onDelta: (deltaText: string) => void;
@@ -16,14 +17,23 @@ export async function streamKalonChat({
   onError: (error: string) => void;
   onStage?: (stage: string) => void;
   clientPhone?: string;
+  mediaUrl?: string;
 }) {
   try {
+    const lastMsg = messages[messages.length - 1];
+    const body: Record<string, any> = { 
+      messages, 
+      clientPhone, 
+      mediaUrl: mediaUrl || lastMsg?.media_url 
+    };
+    if (lastMsg) body.message = lastMsg.content;
+
     const resp = await fetch(CHAT_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ messages, clientPhone }),
+      body: JSON.stringify(body),
     });
 
     if (!resp.ok) {

@@ -4,8 +4,24 @@ import { streamKalonChat } from "@/lib/kalon-chat";
 import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
 
-type Msg = { role: "user" | "assistant"; content: string };
+type Msg = { 
+  role: "user" | "assistant"; 
+  content: string; 
+  mediaUrl?: string;
+  media_url?: string;
+};
+
 type ChatStep = "identifying" | "phone_input" | "chatting";
+
+interface Lead {
+  id: string;
+  client_name: string;
+  contact_info: {
+    phone: string;
+    source: string;
+  };
+  current_state?: unknown;
+}
 
 export default function KalonChat() {
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -14,7 +30,7 @@ export default function KalonChat() {
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<ChatStep>("identifying");
   const [phone, setPhone] = useState("");
-  const [identifiedLead, setIdentifiedLead] = useState<any>(null);
+  const [identifiedLead, setIdentifiedLead] = useState<Lead | null>(null);
   const [currentStage, setCurrentStage] = useState<string>("initial");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -109,15 +125,24 @@ export default function KalonChat() {
   const handleSend = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const content = input.trim();
-    if (!content || isLoading) return;
+    if ((!content && !selectedFile) || isLoading) return;
 
     setError(null);
-    const userMsg: Msg = { role: "user", content };
+    const userMsg: Msg = { 
+      role: "user", 
+      content: content || (selectedFile ? "📸 Comprobante adjunto" : ""),
+      mediaUrl: previewUrl || undefined,
+      media_url: selectedFile ? `https://simulated.com/${selectedFile.name}` : undefined
+    };
+    
+    // Captured for API call
+    const mediaToSend = userMsg.media_url;
+
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     
-    // Clear preview
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    // Clear preview - WE DON'T REVOKE YET because we want it visible in the chat bubble
+    // URL.revokeObjectURL(previewUrl); 
     setPreviewUrl(null);
     setSelectedFile(null);
     
@@ -140,7 +165,8 @@ export default function KalonChat() {
 
     await streamKalonChat({
       messages: [...messages, userMsg],
-      clientPhone: phone || (identifiedLead?.phone) || undefined,
+      clientPhone: phone || (identifiedLead?.contact_info?.phone) || undefined,
+      mediaUrl: mediaToSend,
       onDelta: (chunk) => upsertAssistant(chunk),
       onStage: (s) => setCurrentStage(s),
       onDone: () => {
@@ -311,12 +337,34 @@ export default function KalonChat() {
                 : `bg-cream/5 border border-cream/8 text-cream/70 rounded-tl-sm ${m.content.includes('\n*') || m.content.includes('\n-') ? 'chat-bubble-list-container' : ''}`
                 }`}
             >
+              {(m.mediaUrl || m.media_url) && (
+                <div className="mb-2 rounded-lg overflow-hidden border border-white/10 shadow-lg">
+                  {(m.mediaUrl || m.media_url)?.toLowerCase().includes('.pdf') ? (
+                    <div className="bg-noir/60 p-4 flex items-center gap-3">
+                      <FileText className="w-8 h-8 text-gold" />
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-gold uppercase font-bold tracking-widest">Documento</span>
+                        <span className="text-xs text-cream/80 truncate max-w-[150px]">Comprobante.pdf</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <img 
+                      src={m.mediaUrl || m.media_url} 
+                      alt="Adjunto" 
+                      className="max-w-full h-auto max-h-64 object-contain mx-auto rounded-md"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  )}
+                </div>
+              )}
               {m.role === "assistant" ? (
                 <div className="prose prose-sm prose-invert max-w-none prose-p:my-1 prose-headings:my-2 chat-bubble-content">
                   <ReactMarkdown>{m.content}</ReactMarkdown>
                 </div>
               ) : (
-                m.content
+                <div className="whitespace-pre-wrap">{m.content}</div>
               )}
             </div>
           </div>
