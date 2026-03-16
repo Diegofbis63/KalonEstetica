@@ -19,13 +19,13 @@ const HeroSection = () => {
       </div>
 
       <div className="max-w-7xl mx-auto w-full relative z-10">
-        <div className="flex flex-col md:flex-row items-center gap-8 md:gap-12">
-          {/* Logo to the left on desktop, centered above on mobile */}
-          <ScrollReveal delay={0.05} direction="left" className="shrink-0 w-48 sm:w-64 md:w-80 lg:w-[450px]">
+        <div className="flex flex-col items-center md:items-start text-center md:text-center max-w-2xl">
+          {/* Logo centered above the text */}
+          <ScrollReveal delay={0.05} direction="down" className="w-48 sm:w-64 md:w-80 lg:w-[400px] mb-8">
             <motion.img 
               src={logoKalon} 
               alt="KÂLON Logo" 
-              className="w-full h-auto drop-shadow-[0_10px_10px_rgba(0,0,0,0.3)]"
+              className="w-full h-auto drop-shadow-[0_10px_20px_rgba(0,0,0,0.4)] mx-auto"
               animate={{ 
                 y: [0, -10, 0],
               }}
@@ -37,9 +37,9 @@ const HeroSection = () => {
             />
           </ScrollReveal>
 
-          <div className="max-w-3xl">
-            <ScrollReveal delay={0.1} direction="left">
-              <h1 className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl xl:text-9xl font-serif font-bold tracking-tight mb-6 md:mb-8 leading-[1.1] md:leading-[0.95] drop-shadow-[0_5px_5px_rgba(0,0,0,0.5)]">
+          <div className="w-full">
+            <ScrollReveal delay={0.1} direction="up">
+              <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-serif font-bold tracking-tight mb-6 md:mb-8 leading-[1.1] md:leading-[1.1] drop-shadow-[0_5px_15px_rgba(0,0,0,0.6)]">
                 <span className="text-white block">Tu Belleza,</span>
                 <span className="bg-gradient-to-r from-gold via-gold-light to-gold-light bg-clip-text text-transparent italic">
                   Nuestra Pasión
@@ -47,18 +47,18 @@ const HeroSection = () => {
               </h1>
             </ScrollReveal>
 
-            <ScrollReveal delay={0.2} direction="left">
-              <p className="text-lg md:text-xl lg:text-2xl text-white/90 font-sans max-w-xl mb-10 md:mb-14 leading-relaxed drop-shadow-[0_2px_2px_rgba(0,0,0,0.5)] font-medium">
+            <ScrollReveal delay={0.2} direction="up">
+              <p className="text-lg md:text-xl text-white/90 font-sans max-w-xl mb-10 md:mb-14 leading-relaxed drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)] font-medium mx-auto">
                 Descubre un espacio donde la ciencia y el arte se unen para realzar
                 tu belleza natural. Tratamientos personalizados con resultados excepcionales.
               </p>
             </ScrollReveal>
 
-            <ScrollReveal delay={0.3} direction="left">
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 md:gap-6">
+            <ScrollReveal delay={0.3} direction="up">
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 md:gap-6">
                 <motion.a
                   href="#chat"
-                  className="inline-flex items-center justify-center gap-3 bg-gradient-to-r from-gold to-gold-light text-noir font-sans font-black px-8 md:px-12 py-5 rounded-full shadow-2xl transition-all text-base tracking-wide"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-3 bg-gradient-to-r from-gold to-gold-light text-noir font-sans font-black px-8 md:px-12 py-4 rounded-full shadow-2xl transition-all text-base tracking-wide"
                   whileHover={{ scale: 1.05, boxShadow: "0 0 35px rgba(212, 175, 55, 0.6)" }}
                   whileTap={{ scale: 0.97 }}
                 >
@@ -67,7 +67,7 @@ const HeroSection = () => {
                 </motion.a>
                 <motion.a
                   href="#servicios"
-                  className="inline-flex items-center justify-center gap-3 bg-white/10 backdrop-blur-xl border border-white/20 hover:border-gold/60 text-white px-8 md:px-12 py-5 rounded-full transition-all text-base font-sans font-bold shadow-xl shadow-noir/40"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-3 bg-white/10 backdrop-blur-xl border border-white/20 hover:border-gold/60 text-white px-8 md:px-12 py-4 rounded-full transition-all text-base font-sans font-bold shadow-xl shadow-noir/40"
                   whileHover={{ scale: 1.05, backgroundColor: "rgba(255,255,255,0.2)" }}
                   whileTap={{ scale: 0.97 }}
                 >
