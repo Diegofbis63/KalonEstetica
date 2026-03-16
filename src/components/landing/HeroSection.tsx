@@ -19,43 +19,48 @@ const HeroSection = () => {
       </div>
 
       <div className="max-w-7xl mx-auto w-full relative z-10">
-        <div className="flex flex-col md:flex-row items-center gap-8 md:gap-16">
-          {/* Logo to the left on desktop, centered above on mobile */}
-          <ScrollReveal delay={0.05} direction="left" className="shrink-0 w-48 sm:w-64 md:w-80 lg:w-[450px]">
-            <motion.img 
-              src={logoKalon} 
-              alt="KÂLON Logo" 
-              className="w-full h-auto drop-shadow-[0_10px_20px_rgba(0,0,0,0.4)] mx-auto md:mx-0"
-              animate={{ 
-                y: [0, -10, 0],
-              }}
-              transition={{ 
-                duration: 4, 
-                repeat: Infinity, 
-                ease: "easeInOut" 
-              }}
-            />
-          </ScrollReveal>
-
-          <div className="max-w-3xl text-center md:text-left">
-            <ScrollReveal delay={0.1} direction="left">
-              <h1 className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl xl:text-9xl font-serif font-bold tracking-tight mb-6 md:mb-8 leading-[1.1] md:leading-[0.95] drop-shadow-[0_5px_15px_rgba(0,0,0,0.6)]">
-                <span className="text-white block">Tu Belleza,</span>
-                <span className="bg-gradient-to-r from-gold via-gold-light to-gold-light bg-clip-text text-transparent italic">
-                  Nuestra Pasión
-                </span>
-              </h1>
+        <div className="grid grid-cols-1 lg:grid-cols-2 items-center min-h-[70vh]">
+          {/* Left Column: Content block */}
+          <div className="flex flex-col items-center lg:items-start text-center lg:text-left space-y-8 lg:pl-8">
+            {/* 1. Logo */}
+            <ScrollReveal delay={0.05} direction="down" className="w-48 sm:w-64 md:w-80 lg:w-[420px]">
+              <motion.img 
+                src={logoKalon} 
+                alt="KÂLON Logo" 
+                className="w-full h-auto drop-shadow-[0_10px_20px_rgba(0,0,0,0.4)] mx-auto lg:mx-0"
+                animate={{ 
+                  y: [0, -10, 0],
+                }}
+                transition={{ 
+                  duration: 4, 
+                  repeat: Infinity, 
+                  ease: "easeInOut" 
+                }}
+              />
             </ScrollReveal>
 
-            <ScrollReveal delay={0.2} direction="left">
-              <p className="text-lg md:text-xl lg:text-2xl text-white/90 font-sans max-w-xl mb-10 md:mb-14 leading-relaxed drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)] font-medium md:mx-0 mx-auto">
-                Descubre un espacio donde la ciencia y el arte se unen para realzar
-                tu belleza natural. Tratamientos personalizados con resultados excepcionales.
-              </p>
-            </ScrollReveal>
+            {/* 2. Text Content */}
+            <div className="space-y-6">
+              <ScrollReveal delay={0.1} direction="left">
+                <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-serif font-bold tracking-tight leading-[1.1] drop-shadow-[0_5px_15px_rgba(0,0,0,0.6)]">
+                  <span className="text-white block">Tu Belleza,</span>
+                  <span className="bg-gradient-to-r from-gold via-gold-light to-gold-light bg-clip-text text-transparent italic">
+                    Nuestra Pasión
+                  </span>
+                </h1>
+              </ScrollReveal>
 
-            <ScrollReveal delay={0.3} direction="left">
-              <div className="flex flex-col sm:flex-row items-center md:items-start justify-center md:justify-start gap-4 md:gap-6">
+              <ScrollReveal delay={0.2} direction="left">
+                <p className="text-lg md:text-xl text-white/90 font-sans max-w-xl leading-relaxed drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)] font-medium">
+                  Descubre un espacio donde la ciencia y el arte se unen para realzar
+                  tu belleza natural. Tratamientos personalizados con resultados excepcionales.
+                </p>
+              </ScrollReveal>
+            </div>
+
+            {/* 3. Buttons */}
+            <ScrollReveal delay={0.3} direction="up">
+              <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 md:gap-6">
                 <motion.a
                   href="#chat"
                   className="w-full sm:w-auto inline-flex items-center justify-center gap-3 bg-gradient-to-r from-gold to-gold-light text-noir font-sans font-black px-8 md:px-12 py-4 rounded-full shadow-2xl transition-all text-base tracking-wide"
@@ -76,6 +81,9 @@ const HeroSection = () => {
               </div>
             </ScrollReveal>
           </div>
+
+          {/* Right Column: Empty to show the background image */}
+          <div className="hidden lg:block h-full" />
         </div>
       </div>
     </section>
