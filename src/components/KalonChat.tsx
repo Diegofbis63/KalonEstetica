@@ -83,6 +83,7 @@ export default function KalonChat() {
       const data = await res.json();
       if (data.found) {
         setIdentifiedLead(data.lead);
+        setCurrentStage(data.lead.current_state?.stage || null);
         setStep("chatting");
         setMessages([{ 
           role: "assistant", 
