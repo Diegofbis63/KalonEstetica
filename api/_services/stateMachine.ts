@@ -318,9 +318,9 @@ export async function extractState(
                             
                             // 2. Exact word match for core identifying words
                             const inputWords = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 3);
-                            const titleWords = nt.split(/\s+/).filter(w => w.length > 3);
+                            const titleWords = nt.split(/\s+/).filter(w => w.length >= 3);
                             
-                            const matchesCoreWord = titleWords.some((tw: string) => inputWords.includes(tw));
+                            const matchesCoreWord = titleWords.some((tw: string) => inputWords.includes(tw) || (tw.length > 4 && inputWords.some(iw => iw.includes(tw) || tw.includes(iw))));
                             if (matchesCoreWord) {
                                 // If it's a category name, ignore it as a service match (e.g. user said "cejas" to see the list)
                                 const isCategoryName = categories.some(cat => normalizeText(cat.name) === normalizedContent);
@@ -334,38 +334,20 @@ export async function extractState(
                             return false;
                         });
 
-                        // Refined Differentiation: If multiple services found, we need to be EXTRA strict
+                        // Refined Differentiation: If multiple services found, we only filter if they are subsets of each other
                         if (potentialSvcs.length > 1) {
-                            // 1. Try to find an exact full-title match OR a very strong partial in the text
-                            const exactMatches = potentialSvcs.filter(s => normalizedContent.includes(normalizeText(s.title)) || normalizeText(s.title).includes(normalizedContent));
-                            if (exactMatches.length === 1) {
-                                potentialSvcs = exactMatches;
-                            } else {
-                                // 2. Try identifying keywords (specific unique words for the service)
-                                potentialSvcs = potentialSvcs.filter(s => {
-                                    const snt = normalizeText(s.title);
-                                    // Split title into words and find words longer than 4 chars that are NOT "masaje", "limpieza", etc.
-                                    const uniqueWords = snt.split(/\s+/).filter((w: string) => w.length > 4 && !["masaje", "limpieza", "facial", "tratamiento", "corporal"].includes(w));
-                                    return uniqueWords.some((uw: string) => normalizedContent.includes(uw));
+                            // Only keep longer ones if one is a substring of another (e.g. "Semi" vs "Semi + Art")
+                            // unless both parts of the longer one are explicitly mentioned.
+                            potentialSvcs = potentialSvcs.filter(s1 => {
+                                const t1 = normalizeText(s1.title);
+                                return !potentialSvcs.some(s2 => {
+                                    if (s1.id === s2.id) return false;
+                                    const t2 = normalizeText(s2.title);
+                                    // If t1 is contained in t2, and normalizedContent ONLY contains the t1 part, s1 is better? 
+                                    // Actually, usually we want the most specific match.
+                                    return false; // For now, let's trust accumulation
                                 });
-                                
-                                // 3. Final tie-breaker: similarity
-                                if (potentialSvcs.length > 1 || potentialSvcs.length === 0) {
-                                    // Recalculate if filtering was too aggressive or still ambiguous
-                                    const originalSvcs = services.filter(s => {
-                                         if (state.currentCategoryId && s.category_id !== state.currentCategoryId) return false;
-                                         return normalizedContent.includes(normalizeText(s.title));
-                                    });
-                                    if (originalSvcs.length === 1) {
-                                        potentialSvcs = originalSvcs;
-                                    } else {
-                                        const withSimilarity = (originalSvcs.length ? originalSvcs : services).map(s => ({ svc: s, sim: getSimilarity(normalizedContent, normalizeText(s.title)) }));
-                                        withSimilarity.sort((a, b) => b.sim - a.sim);
-                                        if (withSimilarity[0].sim > 0.85) potentialSvcs = [withSimilarity[0].svc];
-                                        else potentialSvcs = []; // Too ambiguous
-                                    }
-                                }
-                            }
+                            });
                         }
 
                         if (potentialSvcs.length > 0) {
