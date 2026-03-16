@@ -146,7 +146,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 const taken = await getAppointmentsForDate(dateStr);
                 const takenIntervals = taken.map(r => {
                     const start = new Date(r.date_time);
-                    return { start: start.getUTCHours() * 60 + start.getUTCMinutes(), end: (start.getUTCHours() * 60 + start.getUTCMinutes()) + 60 };
+                    const argTime = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Argentina/Cordoba', hour: '2-digit', minute: '2-digit', hour12: false }).format(start);
+                    const [h, m] = argTime.split(':').map(Number);
+                    const startMin = h * 60 + m;
+                    return { start: startMin, end: startMin + 60 };
                 });
 
                 let startSearch = 9 * 60;
@@ -192,7 +195,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 const catNames = Array.from(new Set(selectedSvcObjs.map(s => s.category_name || "Servicio"))).join(' + ');
                 const totalPrice = selectedSvcObjs.reduce((a, b) => a + Number(b.price), 0);
                 const totalDur = selectedSvcObjs.reduce((a, b) => a + parseDuration(b.duration), 0);
-                const dateTime = `${state.pendingDate}T${state.pendingTime}:00Z`;
+                const dateTime = `${state.pendingDate}T${state.pendingTime}:00-03:00`;
                 
                 await createAppointment(leadId, DEFAULT_ORG_ID, dateTime, catNames, totalPrice, totalDur, selectedSvcObjs);
                 

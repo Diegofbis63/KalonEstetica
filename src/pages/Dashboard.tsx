@@ -426,7 +426,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                         <h3 className="text-xl font-serif font-bold tracking-tight">Agenda del Día</h3>
                       </div>
                       <Badge variant="outline" className="border-gold/20 text-gold/60 uppercase text-[9px] tracking-widest px-3">
-                        {new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}
+                        {new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Argentina/Cordoba' })}
                       </Badge>
                    </div>
                    
@@ -454,7 +454,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                 <div className="flex items-center gap-3 mb-1.5">
                                   <Clock className={`w-3.5 h-3.5 ${appt.canManage ? 'text-gold' : 'text-cream/20'}`} />
                                   <span className={`text-sm font-bold font-sans ${appt.canManage ? 'text-gold' : 'text-cream/40'}`}>
-                                    {new Date(appt.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}hs
+                                    {new Date(appt.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Cordoba' })}hs
                                   </span>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -594,8 +594,8 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                       onClick={() => {
                                         setSelectedAppointmentForEdit(appt);
                                         const d = new Date(appt.date_time);
-                                        setFormDate(d.toLocaleDateString('sv-SE'));
-                                        setFormTime(d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }));
+                                        setFormDate(d.toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Cordoba' }));
+                                        setFormTime(d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Cordoba' }));
                                         setFormService(appt.service_type);
                                         setFormClientName(appt.client_name || "");
                                         setFormPhone(appt.phone || "");
@@ -871,10 +871,10 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                           </TableCell>
                           <TableCell className="px-5 py-6 text-center font-sans">
                             <div className="text-sm font-medium text-cream/60 capitalize whitespace-nowrap">
-                              {new Intl.DateTimeFormat('es-AR', { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(a.date_time))}
+                              {new Intl.DateTimeFormat('es-AR', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'America/Argentina/Cordoba' }).format(new Date(a.date_time))}
                               <span className="mx-2 text-cream/10">•</span>
                               <span className="text-gold font-bold">
-                                {new Date(a.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}hs
+                                {new Date(a.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Cordoba' })}hs
                               </span>
                             </div>
                           </TableCell>
@@ -945,8 +945,8 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                   onClick={() => {
                                     setSelectedAppointmentForEdit(a);
                                     const d = new Date(a.date_time);
-                                    setFormDate(d.toLocaleDateString('sv-SE'));
-                                    setFormTime(d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }));
+                                    setFormDate(d.toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Cordoba' }));
+                                    setFormTime(d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Cordoba' }));
                                     setFormService(a.service_type);
                                     setFormClientName(a.client_name || "");
                                     setFormPhone(a.phone || "");
@@ -1089,10 +1089,10 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                             <div className="text-sm text-cream/40 flex flex-col items-center">
                                 {l.updated_at || l.created_at ? (
                                     <div className="flex items-center gap-2 whitespace-nowrap">
-                                        <span>{new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(l.updated_at || l.created_at))}</span>
+                                        <span>{new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Cordoba' }).format(new Date(l.updated_at || l.created_at))}</span>
                                         <span className="text-cream/10">•</span>
                                         <span className="text-gold font-bold">
-                                            {new Date(l.updated_at || l.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}hs
+                                            {new Date(l.updated_at || l.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Cordoba' })}hs
                                         </span>
                                     </div>
                                 ) : '-'}
@@ -1310,7 +1310,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                         }
                         createAppointment.mutate({ 
                           lead_id: selectedLeadForAppt!.id, 
-                          date_time: new Date(`${formDate}T${formTime}`).toISOString(), 
+                          date_time: new Date(`${formDate}T${formTime}:00-03:00`).toISOString(), 
                           service_type: selectedServices![0].title + (selectedServices!.length > 1 ? "..." : ""),
                           selected_services: selectedServices,
                           total_price: selectedServices?.reduce((acc, s) => acc + Number(s.price), 0),
@@ -1456,7 +1456,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                     disabled={updateAppointment.isPending || !selectedServices?.length}
                     onClick={() => updateAppointment.mutate({ 
                         id: selectedAppointmentForEdit!.id,
-                        date_time: new Date(`${formDate}T${formTime}`).toISOString(),
+                        date_time: new Date(`${formDate}T${formTime}:00-03:00`).toISOString(),
                         service_type: selectedServices![0].title + (selectedServices!.length > 1 ? "..." : ""),
                         client_name: formClientName,
                         phone: formPhone,

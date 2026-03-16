@@ -199,7 +199,7 @@ export default function Incomes() {
   const chartData = useMemo(() => {
     return (data?.evolution || []).map(d => ({
       ...d,
-      formattedDate: format(new Date(d.date), 'dd MMM', { locale: es })
+      formattedDate: new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: 'short', timeZone: 'America/Argentina/Cordoba' }).format(new Date(d.date))
     }));
   }, [data?.evolution]);
 
@@ -213,7 +213,7 @@ export default function Incomes() {
   const handleCopyReceipt = (payment: Payment) => {
     const text = `*COMPROBANTE DE PAGO - KÂLON*\n\n` +
       `*Cliente:* ${payment.client_name}\n` +
-      `*Fecha:* ${format(new Date(payment.date), "dd/MM/yyyy HH:mm")}\n` +
+      `*Fecha:* ${new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Cordoba' }).format(new Date(payment.date))}hs\n` +
       `*Servicios:* ${payment.parent_service}\n` +
       `*Monto:* ${formatCurrency(payment.amount)}\n` +
       `*Método:* ${payment.payment_method}\n\n` +
@@ -266,7 +266,7 @@ export default function Incomes() {
     const exportData = payments.map(p => ({
       Cliente: p.client_name,
       Servicio: p.parent_service,
-      Fecha: format(new Date(p.date), 'dd/MM/yyyy HH:mm'),
+      Fecha: new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Cordoba' }).format(new Date(p.date)),
       Monto: p.amount,
       Método: p.payment_method,
       Estado: p.status
@@ -317,7 +317,7 @@ export default function Incomes() {
     const tableData = payments.map(p => [
       p.client_name,
       p.parent_service,
-      format(new Date(p.date), 'dd/MM/yyyy HH:mm'),
+      new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Cordoba' }).format(new Date(p.date)),
       formatCurrency(p.amount),
       p.payment_method,
       p.status
@@ -635,10 +635,10 @@ export default function Incomes() {
                     <TableCell className="px-8 py-8">
                       <div className="flex flex-col gap-1">
                         <span className="text-xs text-cream font-bold tracking-tight">
-                          {format(new Date(payment.date), "dd MMMM", { locale: es })}
+                          {new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'long', timeZone: 'America/Argentina/Cordoba' }).format(new Date(payment.date))}
                         </span>
                         <span className="text-[10px] text-cream/30 font-black uppercase tracking-widest">
-                          {format(new Date(payment.date), "HH:mm 'hs'", { locale: es })}
+                          {new Date(payment.date).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Cordoba' })}hs
                         </span>
                       </div>
                     </TableCell>
@@ -746,7 +746,7 @@ export default function Incomes() {
               <div className="text-right space-y-1">
                 <p className="text-[10px] uppercase font-black tracking-[0.2em] text-gold/50">Fecha</p>
                 <p className="text-sm font-semibold text-cream/70">
-                  {selectedPayment && format(new Date(selectedPayment.date), "dd/MM/yyyy HH:mm")}
+                  {selectedPayment && new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Cordoba' }).format(new Date(selectedPayment.date))}hs
                 </p>
               </div>
             </div>

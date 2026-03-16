@@ -1,5 +1,4 @@
 import React from 'react';
-import { format } from "date-fns";
 import { FileText, Filter, CreditCard, Wallet } from 'lucide-react';
 
 interface ReceiptTemplateProps {
@@ -25,9 +24,23 @@ export const ReceiptTemplate = React.forwardRef<HTMLDivElement, ReceiptTemplateP
   // Use a stable date to avoid hydration mismatches or errors with invalid dates
   const displayDate = React.useMemo(() => {
     try {
-      return format(new Date(payment.date), "dd/MM/yyyy HH:mm");
+      return new Intl.DateTimeFormat('es-AR', { 
+        day: '2-digit', 
+        month: '2-digit', 
+        year: 'numeric', 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        timeZone: 'America/Argentina/Cordoba' 
+      }).format(new Date(payment.date));
     } catch (e) {
-      return format(new Date(), "dd/MM/yyyy HH:mm");
+      return new Intl.DateTimeFormat('es-AR', { 
+        day: '2-digit', 
+        month: '2-digit', 
+        year: 'numeric', 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        timeZone: 'America/Argentina/Cordoba' 
+      }).format(new Date());
     }
   }, [payment.date]);
 
