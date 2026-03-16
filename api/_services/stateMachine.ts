@@ -61,13 +61,37 @@ export async function extractState(
     defaultIsBotEnabled: boolean = true,
     initialName: string | null = null,
     initialPhone: string | null = null,
-    initialState: ConvState | null = null
+    initialState: ConvState | null = null,
+    lastUpdatedAt: string | Date | null = null
 ): Promise<ConvState> {
-    console.log(`[stateMachine.ts] Extracting state. InitialName: ${initialName}, InitialPhone: ${initialPhone}, HasInitialState: ${!!initialState}`);
+    const TWELVE_HOURS = 12 * 60 * 60 * 1000;
+    const now = new Date();
+    let resetCause: string | null = null;
     
-    const state: ConvState = initialState ? { ...initialState } : {
-        clientName: initialName && initialName !== 'Cliente' ? initialName : null,
-        clientPhone: initialPhone || null,
+    if (initialState) {
+        // Reset if already finished
+        if (initialState.stage === 'done') {
+            resetCause = 'completion';
+        } 
+        // Reset by time (12h amnesia check)
+        else if (lastUpdatedAt) {
+            const lastUpdate = new Date(lastUpdatedAt);
+            if (now.getTime() - lastUpdate.getTime() > TWELVE_HOURS) {
+                resetCause = 'timeout';
+            }
+        }
+    }
+
+    if (resetCause) {
+        console.log(`[stateMachine.ts] Session RESET triggered. Cause: ${resetCause}`);
+        // If we reset, we MUST only process the LATEST message as a fresh start
+    }
+
+    console.log(`[stateMachine.ts] Extracting state. InitialName: ${initialName}, InitialPhone: ${initialPhone}, HasInitialState: ${!!initialState}, Reset: ${resetCause || 'no'}`);
+    
+    const state: ConvState = (initialState && !resetCause) ? { ...initialState } : {
+        clientName: initialState?.clientName || (initialName && initialName !== 'Cliente' ? initialName : null),
+        clientPhone: initialState?.clientPhone || initialPhone || null,
         selectedServiceIds: [],
         currentCategoryId: null,
         pendingCategoryIds: [],
@@ -78,12 +102,13 @@ export async function extractState(
         requestedTime: null,
         rejectedDates: [],
         requestedAllOptions: false,
-        isBotEnabled: defaultIsBotEnabled
+        isBotEnabled: initialState ? initialState.isBotEnabled : defaultIsBotEnabled
     };
 
-    // If we have an initialState, we only process messages that occurred AFTER the stored state.
-    // In this serverless context, we typically only need to process the LATEST user message.
-    const messagesToProcess = initialState ? messages.slice(-1) : messages;
+    // If we have an initialState and NO reset, we only process the LATEST message.
+    // If it's a fresh session OR a reset session, we process the latest message too (but we start from greeting).
+    // Note: We only process the LAST message to avoid re-triggering old intents.
+    const messagesToProcess = messages.length > 0 ? [messages[messages.length - 1]] : [];
 
     try {
         const today = new Date(); 
