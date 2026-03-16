@@ -511,19 +511,60 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                   {appt.canManage && (
                                     <>
                                       {appt.total_duration ? (
-                                        <div className="inline-flex items-center gap-4 px-5 py-3 rounded-2xl bg-gold/10 border border-gold/30 shadow-[0_0_30px_rgba(194,154,91,0.15)] group/duration hover:bg-gold/15 transition-all">
-                                          <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gold/20 border border-gold/20 flex-shrink-0">
-                                            <Clock className="w-5 h-5 text-gold animate-pulse" />
+                                        <div className="flex items-center gap-3">
+                                          <div className="inline-flex items-center gap-4 px-5 py-3 rounded-2xl bg-gold/10 border border-gold/30 shadow-[0_0_30px_rgba(194,154,91,0.15)] group/duration hover:bg-gold/15 transition-all">
+                                            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gold/20 border border-gold/20 flex-shrink-0">
+                                              <Clock className="w-5 h-5 text-gold animate-pulse" />
+                                            </div>
+                                            <div className="flex flex-col">
+                                              <span className="text-[10px] text-gold/50 uppercase font-black tracking-[0.2em] leading-none mb-1">Duración</span>
+                                              <span className="text-2xl font-serif font-black text-gold leading-none tracking-tight">
+                                                {appt.total_duration >= 60 
+                                                  ? `${Math.floor(appt.total_duration/60)}h ${appt.total_duration%60 > 0 ? `${appt.total_duration%60}m` : ''}`
+                                                  : `${appt.total_duration} min`
+                                                }
+                                              </span>
+                                            </div>
                                           </div>
-                                          <div className="flex flex-col">
-                                            <span className="text-[10px] text-gold/50 uppercase font-black tracking-[0.2em] leading-none mb-1">Duración</span>
-                                            <span className="text-2xl font-serif font-black text-gold leading-none tracking-tight">
-                                              {appt.total_duration >= 60 
-                                                ? `${Math.floor(appt.total_duration/60)}h ${appt.total_duration%60 > 0 ? `${appt.total_duration%60}m` : ''}`
-                                                : `${appt.total_duration} min`
-                                              }
-                                            </span>
-                                          </div>
+
+                                          <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                              <button className="outline-none focus:outline-none focus-visible:outline-none">
+                                                <Badge 
+                                                  variant="outline" 
+                                                  className={`
+                                                    text-[10px] font-black tracking-[0.2em] px-4 py-2 rounded-xl border shadow-lg cursor-pointer hover:brightness-125 transition-all uppercase h-[64px] flex flex-col justify-center items-center gap-1 min-w-[120px]
+                                                    ${ (appt.status === 'scheduled' || appt.status === 'confirmed')
+                                                      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' 
+                                                      : (appt.status === 'completed' || appt.status === 'REALIZADA')
+                                                      ? 'border-sky-500/30 bg-sky-500/10 text-sky-400'
+                                                      : appt.status === 'canceled'
+                                                      ? 'border-rose-500/30 bg-rose-500/10 text-rose-400'
+                                                      : 'border-gold/30 bg-gold/10 text-gold'}
+                                                  `}
+                                                >
+                                                  <span className="text-[8px] opacity-50 font-sans tracking-widest">ESTADO</span>
+                                                  { (appt.status === 'scheduled' || appt.status === 'confirmed') ? 'CONFIRMADA' : 
+                                                    (appt.status === 'completed' || appt.status === 'REALIZADA') ? 'REALIZADA' : 
+                                                    appt.status === 'canceled' ? 'CANCELADA' : 'PENDIENTE'}
+                                                </Badge>
+                                              </button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="center" className="bg-noir-light border-white/10 text-cream/80 backdrop-blur-xl">
+                                              <DropdownMenuItem className="focus:bg-gold/10 focus:text-gold cursor-pointer" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'pending' })}>
+                                                <Clock className="w-3.5 h-3.5 mr-2" /> Marcar como PENDIENTE
+                                              </DropdownMenuItem>
+                                              <DropdownMenuItem className="focus:bg-emerald-500/10 focus:text-emerald-400 cursor-pointer" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'confirmed' })}>
+                                                <CalendarCheck className="w-3.5 h-3.5 mr-2" /> Marcar como CONFIRMADA
+                                              </DropdownMenuItem>
+                                              <DropdownMenuItem className="focus:bg-sky-500/10 focus:text-sky-400 cursor-pointer" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'REALIZADA' })}>
+                                                <CheckCircle2 className="w-3.5 h-3.5 mr-2" /> Marcar como REALIZADA
+                                              </DropdownMenuItem>
+                                              <DropdownMenuItem className="focus:bg-rose/10 focus:text-rose cursor-pointer" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'canceled' })}>
+                                                <XCircle className="w-3.5 h-3.5 mr-2" /> Marcar como CANCELADA
+                                              </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                          </DropdownMenu>
                                         </div>
                                       ) : null}
                                     </>
@@ -914,9 +955,9 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                     className={`
                                       text-[9px] font-black tracking-[0.15em] px-3 py-1 rounded-full border shadow-sm mx-auto cursor-pointer hover:brightness-125 transition-all
                                       ${ (a.status === 'scheduled' || a.status === 'confirmed')
-                                        ? 'border-sky-500/30 bg-sky-500/5 text-sky-400' 
+                                        ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-400' 
                                         : (a.status === 'completed' || a.status === 'REALIZADA')
-                                        ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-400'
+                                        ? 'border-sky-500/30 bg-sky-500/5 text-sky-400'
                                         : a.status === 'canceled'
                                         ? 'border-rose-500/30 bg-rose-500/5 text-rose-400'
                                         : 'border-gold/30 bg-gold/5 text-gold'}
@@ -932,10 +973,10 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                 <DropdownMenuItem className="focus:bg-gold/10 focus:text-gold cursor-pointer" onClick={() => updateAppointment.mutate({ id: a.id, status: 'pending' })}>
                                   <Clock className="w-3.5 h-3.5 mr-2" /> Marcar como PENDIENTE
                                 </DropdownMenuItem>
-                                <DropdownMenuItem className="focus:bg-sky-500/10 focus:text-sky-400 cursor-pointer" onClick={() => updateAppointment.mutate({ id: a.id, status: 'confirmed' })}>
+                                <DropdownMenuItem className="focus:bg-emerald-500/10 focus:text-emerald-400 cursor-pointer" onClick={() => updateAppointment.mutate({ id: a.id, status: 'confirmed' })}>
                                   <CalendarCheck className="w-3.5 h-3.5 mr-2" /> Marcar como CONFIRMADA
                                 </DropdownMenuItem>
-                                <DropdownMenuItem className="focus:bg-emerald-500/10 focus:text-emerald-400 cursor-pointer" onClick={() => updateAppointment.mutate({ id: a.id, status: 'REALIZADA' })}>
+                                <DropdownMenuItem className="focus:bg-sky-500/10 focus:text-sky-400 cursor-pointer" onClick={() => updateAppointment.mutate({ id: a.id, status: 'REALIZADA' })}>
                                   <CheckCircle2 className="w-3.5 h-3.5 mr-2" /> Marcar como REALIZADA
                                 </DropdownMenuItem>
                                 <DropdownMenuItem className="focus:bg-rose/10 focus:text-rose cursor-pointer" onClick={() => updateAppointment.mutate({ id: a.id, status: 'canceled' })}>
