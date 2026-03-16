@@ -305,35 +305,52 @@ export async function extractState(
 
                     if (!isOnlyNamingCategories) {
                         const inputParts = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 3);
+                        // Identify category words to ignore them in service matching
+                        const categoryWords = categories.map(c => normalizeText(c.name)).flatMap(n => n.split(/\s+/));
+                        
                         let potentialSvcs = services.filter(s => {
                             const nt = normalizeText(s.title);
+                            const currentCat = categories.find(c => c.id === state.currentCategoryId);
+                            const currentCatName = currentCat ? normalizeText(currentCat.name) : '';
+                            
                             // Logic: Match if same category OR if user mentions the specific service title globally
                             if (state.currentCategoryId && s.category_id !== state.currentCategoryId) {
                                 // Only allow global match if the full title is explicitly mentioned
                                 return normalizedContent.includes(nt);
                             }
                             
-                            // 1. EXACT OR PARTIAL PHRASE MATCH
-                            if (normalizedContent.includes(nt) || nt.includes(normalizedContent)) return true;
+                            // 1. EXACT PHRASE MATCH (but exclude if it's JUST the category name)
+                            if (normalizedContent === nt) return true;
+                            if (normalizedContent.includes(nt) && nt.length > currentCatName.length) return true;
                             
-                            // 2. Exact word match for core identifying words
+                            // 2. Exact word match for core identifying words (EXCLUDING category generic words)
                             const inputWords = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 3);
-                            const titleWords = nt.split(/\s+/).filter(w => w.length >= 3);
+                            // Words in the title that are NOT category names or generic "de", "con", etc.
+                            const titleWords = nt.split(/\s+/).filter(w => 
+                                w.length >= 3 && 
+                                !categoryWords.includes(w) && 
+                                !["con", "sin", "para", "los", "las", "del"].includes(w)
+                            );
                             
-                            const matchesCoreWord = titleWords.some((tw: string) => inputWords.includes(tw) || (tw.length > 4 && inputWords.some(iw => iw.includes(tw) || tw.includes(iw))));
-                            if (matchesCoreWord) {
-                                // If it's a category name, ignore it as a service match (e.g. user said "cejas" to see the list)
-                                const isCategoryName = categories.some(cat => normalizeText(cat.name) === normalizedContent);
-                                if (isCategoryName) return false;
+                            if (titleWords.length === 0) {
+                                // If the title is mostly category words (e.g. "Pestañas"), we only match if user is explicit
+                                return normalizedContent === nt;
+                            }
 
-                                // Permissive matching for core words: if they type "laminado" and it's in the title, it's a match
-                                // unless it's way too short or generic. 
-                                if (normalizedContent.length > 5 || normalizedContent === nt || getSimilarity(normalizedContent, nt) > 0.6) return true;
+                            const matchesDifferentiatingWord = titleWords.some((tw: string) => 
+                                inputWords.includes(tw) || (tw.length > 4 && inputWords.some(iw => iw.includes(tw) || tw.includes(iw)))
+                            );
+
+                            if (matchesDifferentiatingWord) {
+                                // Double check: if user ONLY said words that are category names, ignore
+                                const hasDifferentiatingInput = inputWords.some(iw => !categoryWords.includes(iw));
+                                if (!hasDifferentiatingInput && normalizedContent !== nt) return false;
+
+                                if (normalizedContent.length > 5 || normalizedContent === nt || getSimilarity(normalizedContent, nt) > 0.7) return true;
                             }
 
                             return false;
                         });
-
                         // Refined Differentiation: If multiple services found, we only filter if they are subsets of each other
                         if (potentialSvcs.length > 1) {
                             // Only keep longer ones if one is a substring of another (e.g. "Semi" vs "Semi + Art")
