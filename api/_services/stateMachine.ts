@@ -140,25 +140,11 @@ export async function extractState(
                 botText.includes("elegir tranquila") || botText.includes("opciones mas cercanas")
             ) {
                 currentBotAsked = 'availability';
-                const isoMatch = lastBotMsg.content.match(/(\d{4})-(\d{2})-(\d{2})/);
-                if (isoMatch) state.pendingDate = isoMatch[0];
-                const timeMatch = lastBotMsg.content.match(/(\d{1,2}):(\d{2})/);
-                if (timeMatch) state.pendingTime = timeMatch[0].padStart(5, '0');
             }
             else if (botText.includes("necesitamos una seña") || botText.includes("transferi al alias") || botText.includes("comprobante por aca") || botText.includes("senar") || botText.includes("pago de la reserva")) {
                 currentBotAsked = 'payment';
                 state.stage = 'payment_request';
             }
-
-            // State reconstruction from bot recap
-            services.forEach(s => {
-                const normalizedTitle = normalizeText(s.title);
-                const isRecap = botText.includes("revisemos") || botText.includes("pedido") || botText.includes("total") || botText.includes("sesion va a durar") || botText.includes("resumen") || botText.includes("confirmado");
-                const isConfirmation = botText.includes("agregue") || botText.includes("seleccionaste") || botText.includes("sume") || botText.includes("ya te sume") || botText.includes("que buena eleccion");
-                if (botText.includes(normalizedTitle) && (isConfirmation || isRecap)) {
-                    if (!state.selectedServiceIds.includes(s.id)) state.selectedServiceIds.push(s.id);
-                }
-            });
         }
 
         for (let i = 0; i < messagesToProcess.length; i++) {
