@@ -762,7 +762,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                 <TrendingUp className="w-5 h-5 text-emerald-400" />
                               </div>
                               <div className="flex-1">
-                                <p className="text-xs font-bold text-cream">Leads Calientes</p>
+                                <p className="text-xs font-bold text-cream">Clientes Potenciales</p>
                                 <p className="text-[10px] text-cream/30">{actionAlerts.hotLeads.length} de alta intención</p>
                               </div>
                               <ChevronRight className="w-3 h-3 text-cream/20 group-hover:translate-x-1 transition-transform" />
