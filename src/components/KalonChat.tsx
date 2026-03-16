@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { MessageCircle, Send, AlertTriangle, Sparkles, Clock, Paperclip } from "lucide-react";
+import { MessageCircle, Send, AlertTriangle, Sparkles, Clock, Paperclip, X, FileText } from "lucide-react";
 import { streamKalonChat } from "@/lib/kalon-chat";
 import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
@@ -16,6 +16,8 @@ export default function KalonChat() {
   const [phone, setPhone] = useState("");
   const [identifiedLead, setIdentifiedLead] = useState<any>(null);
   const [currentStage, setCurrentStage] = useState<string>("initial");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -113,6 +115,12 @@ export default function KalonChat() {
     const userMsg: Msg = { role: "user", content };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
+    
+    // Clear preview
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+    setSelectedFile(null);
+    
     setIsLoading(true);
 
     let assistantSoFar = "";
@@ -147,20 +155,34 @@ export default function KalonChat() {
   };
 
   const handleFileUpload = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*,application/pdf';
-    input.onchange = (e) => {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*,application/pdf';
+    fileInput.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
-        toast.info(`Subiendo comprobante: ${file.name}...`);
-        // Simmulamos envío de comprobante
-        setInput("He subido mi comprobante de pago");
-        // En una implementación real, aquí se subiría el archivo a S3/Supabase Storage
-        // y se enviaría la URL como mediaUrl al backend.
+        setSelectedFile(file);
+        const url = URL.createObjectURL(file);
+        setPreviewUrl(url);
+        
+        // If input is empty, put a default text
+        if (!input.trim()) {
+          setInput("Adjunto comprobante de pago");
+        }
+        
+        toast.success(`Comprobante listo: ${file.name}`);
       }
     };
-    input.click();
+    fileInput.click();
+  };
+
+  const removePreview = () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+    setSelectedFile(null);
+    if (input === "Adjunto comprobante de pago") {
+      setInput("");
+    }
   };
 
   return (
@@ -320,6 +342,40 @@ export default function KalonChat() {
 
       {/* Input */}
       <div className="p-4 bg-noir/60 border-t border-cream/8">
+        {/* Preview Area */}
+        {previewUrl && (
+          <div className="mb-3 flex items-start gap-3 relative animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="relative group overflow-hidden rounded-xl border border-gold/30 bg-gold/5 p-1">
+              {selectedFile?.type.startsWith('image/') ? (
+                <img 
+                  src={previewUrl} 
+                  alt="Preview" 
+                  className="w-20 h-20 object-cover rounded-lg"
+                />
+              ) : (
+                <div className="w-20 h-20 flex flex-col items-center justify-center gap-1 text-gold/60">
+                  <FileText className="w-8 h-8" />
+                  <span className="text-[8px] font-bold uppercase truncate max-w-full px-1">
+                    {selectedFile?.name.split('.').pop()}
+                  </span>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={removePreview}
+                className="absolute top-1 right-1 p-1 bg-noir/80 text-cream hover:bg-destructive hover:text-white rounded-full transition-all shadow-lg opacity-0 group-hover:opacity-100"
+                title="Quitar archivo"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+            <div className="flex-1 pt-1">
+              <p className="text-[10px] text-cream/40 font-bold uppercase tracking-widest mb-0.5">Archivo seleccionado</p>
+              <p className="text-xs text-cream/80 font-medium truncate max-w-[200px]">{selectedFile?.name}</p>
+            </div>
+          </div>
+        )}
+
         <form
           onSubmit={handleSend}
           className="flex items-center gap-3 bg-cream/5 border border-cream/10 rounded-full p-1.5 focus-within:border-gold/30 transition-all duration-300"
@@ -346,7 +402,7 @@ export default function KalonChat() {
           <button
             type="submit"
             aria-label="Enviar mensaje"
-            disabled={isLoading || !input.trim()}
+            disabled={isLoading || (!input.trim() && !selectedFile)}
             className="bg-gradient-to-r from-gold to-gold-light disabled:from-cream/10 disabled:to-cream/10 disabled:cursor-not-allowed text-noir p-2.5 rounded-full transition-all active:scale-95 mr-0.5"
           >
             <Send className="w-4 h-4" />
