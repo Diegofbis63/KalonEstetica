@@ -49,6 +49,12 @@
       "utterances": [
         "ya pague", "ahi te pase el comprobante", "te mande la captura", "ya hice la transferencia", "listo el pago", "te transferi", "ahi te paso el ticket", "listo la seña", "ya mande la plata", "aca esta el comprobante", "comprobante enviado", "ya esta la transferencia", "captura enviada", "listo el comprobante", "te mande el pago"
       ]
+    },
+    {
+      "intent": "cortesia",
+      "utterances": [
+        "gracias", "muchas gracias", "genial", "buenisimo", "chau", "nos vemos", "perfecto", "mil gracias", "gracias!", "genial!", "joya", "barbaro", "espectacular", "dale gracias", "buenísimo", "muchísimas gracias", "gracias genia", "abrazo", "beso", "chau chau"
+      ]
     }
   ]
 }

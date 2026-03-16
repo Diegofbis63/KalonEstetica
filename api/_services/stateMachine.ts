@@ -85,18 +85,20 @@ export async function extractState(
             // Regex to detect if message is ONLY emojis (plus potential whitespace)
             const isEmojiOnly = lastMsg?.content ? /^(\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff]|[ \t\n\r\f\v])+$/.test(lastMsg.content.trim()) : false;
 
-            const courtesyWords = ['gracias', 'muchas gracias', 'genial', 'buenisimo', 'chau', 'nos vemos', 'perfecto'];
-            const isCourtesy = courtesyWords.some(kw => normalizedText === kw) || isEmojiOnly;
-
-            // Check for "Reset triggers" (intents for new booking or category names)
+            const courtesyWords = ['gracias', 'muchas gracias', 'genial', 'buenisimo', 'chau', 'nos vemos', 'perfecto', 'mil gracias', 'muchisimas', 'joya', 'barbaro', 'espectacular'];
+            
+            // Check intents
             const nlp = await getNlpManager();
             const nlpResult = lastMsg?.content ? await nlp.process('es', lastMsg.content) : null;
             const intent = nlpResult?.intent;
-            
+
+            const isCourtesy = intent === 'cortesia' || courtesyWords.some(kw => normalizedText.includes(kw)) || isEmojiOnly;
+
+            // Check for "Reset triggers" (intents for new booking or category names)
             const isNewBookingIntent = ['saludo', 'pedir_turno_general', 'listar_servicios'].includes(intent);
             const mentionsCategory = categories.some(c => normalizedText.includes(normalizeText(c.name)));
 
-            if (isNewBookingIntent || mentionsCategory || (normalizedText.length > 0 && !isCourtesy)) {
+            if (isNewBookingIntent || mentionsCategory) {
                 resetCause = 'new_request';
             } else if (isCourtesy) {
                 // SHIELD: Stay in 'done' and flag it to generate a brief response
@@ -592,7 +594,7 @@ export async function extractState(
             state.stage = 'availability_proposal';
             console.log(`[stateMachine.ts] Emergency Fallback: payment_request -> availability_proposal`);
         }
-        state.lastIntent = currentBotAsked || undefined;
+        if (currentBotAsked) state.lastIntent = currentBotAsked;
     } catch (error) {
         console.error("[stateMachine.ts] CRITICAL ERROR in extractState:", error);
         // We keep the state as is to prevent complete reset, but mark a potential error if needed
