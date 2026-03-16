@@ -33,7 +33,7 @@ export interface ConvState {
     requestedAllOptions: boolean;
     lastIntent?: string;
     isBotEnabled: boolean;
-    errorType?: 'service_not_found' | 'category_not_found';
+    errorType?: 'service_not_found' | 'category_not_found' | 'unrecognized_cart_action';
 }
 
 export interface Category {
@@ -431,7 +431,7 @@ export async function extractState(
                             state.stage = state.selectedServiceIds.length > 0 ? 'cart_review' : 'parent_selection';
                         }
                     } else {
-                        // Check for specific service additions BEFORE generic confirmation
+                        // 1. Identify specific service additions first
                         const singularize = (w: string) => (w.endsWith('s') && w.length > 3 ? w.slice(0, -1) : w);
                         const inputWords = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 2).map(singularize);
                         
@@ -443,23 +443,38 @@ export async function extractState(
                             return keyWords.some(kw => inputWords.includes(kw));
                         });
 
+                        // 2. Define robust confirmation keywords
+                        const confirmationKeywords = ['si', 'correcto', 'perfecto', 'bien', 'dale', 'ok', 'listo', 'avanzar', 'genial', 'obvio', 'adelante', 'confirmo', 'estamos', 'avancemos'];
+                        
+                        // 3. Evaluate Intents
                         const isUserAskingToAdd = normalizedContent.includes("agregar") || normalizedContent.includes("sumar") || normalizedContent.includes("mas") || foundSvcsToAdd.length > 0;
-                        const isUserConfirming = normalizedContent.includes("correcto") || normalizedContent.includes("bien") || normalizedContent.includes("si") || normalizedContent.includes("adelante") || normalizedContent.includes("avancemos") || intent === 'afirmacion_o_agregar_carrito';
+                        const hasConfirmationKeyword = confirmationKeywords.some(kw => {
+                            // Match as whole word or part of it if long enough
+                            const regex = new RegExp(`\\b${kw}\\b`, 'i');
+                            return regex.test(normalizedContent);
+                        });
+                        const isUserConfirming = hasConfirmationKeyword || intent === 'afirmacion_o_agregar_carrito';
 
                         if (foundSvcsToAdd.length > 0) {
                             foundSvcsToAdd.forEach(fs => {
                                 if (!state.selectedServiceIds.includes(fs.id)) state.selectedServiceIds.push(fs.id);
                             });
                             state.stage = 'cart_review';
+                            state.errorType = undefined;
                         } else if (isUserAskingToAdd) {
-                            // Intent to add but no specific service? Go to categories
                             state.stage = 'parent_selection';
                             state.currentCategoryId = null;
+                            state.errorType = undefined;
                         } else if (isUserConfirming) {
-                            // User said "si" or "correcto" without mentioning a service
                             state.stage = 'name_collection';
+                            state.errorType = undefined;
                         } else if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("modificar") || normalizedContent.includes("no")) {
                             state.stage = 'parent_selection';
+                            state.errorType = undefined;
+                        } else {
+                            // Fallback for unrecognized input in this state
+                            state.errorType = 'unrecognized_cart_action';
+                            state.stage = 'cart_review'; 
                         }
                     }
                 }
@@ -646,6 +661,10 @@ export function generateResponse(
                 const totalPrice = selectedServices.reduce((a, b) => a + Number(b.price), 0);
                 const totalDur = selectedServices.reduce((a, b) => a + parseDuration(b.duration), 0);
                 const durText = formatDurationHuman(totalDur);
+
+                if (state.errorType === 'unrecognized_cart_action') {
+                    return `Perdón, no te entendí del todo. 🧐 ¿Te gustaría confirmar este pedido, o preferís agregar / modificar algo?\n\n*Resumen actual:*\n${list}\n💰 *Total:* $${totalPrice}`;
+                }
 
                 return `¡Excelente! 🎉 Revisemos tu pedido para que esté todo perfecto:\n\n${list}\n\n💰 *Total:* $${totalPrice}\n⏳ *Duración estimada:* ${durText}\n\n¿Es correcto o te gustaría agregar o modificar algo?`;
             }
