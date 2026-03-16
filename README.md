@@ -1,73 +1,81 @@
-# KÂLON MULTIESPACIO ESTÉTICO 💎
+# ✨ KÂLON Multiespacio Estético — Inteligencia Operativa
 
-| Status | Tech Stack | Design System | Deployment |
-| :--- | :--- | :--- | :--- |
-| ![Development](https://img.shields.io/badge/Status-Production--Ready-emerald?style=for-the-badge) | ![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white) ![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB) | ![Liquid Luxury](https://img.shields.io/badge/Style-Liquid_Luxury-D4AF37?style=for-the-badge) | ![Vercel](https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white) |
+![KÂLON Hero](https://kalon-estetica.vercel.app/assets/centro-kalon-estetica.png)
 
----
-
-## ✨ Visión del Proyecto
-
-**KÂLON** representa la cúspide de la estética moderna. No es simplemente un sitio web, sino un ecosistema digital de alta gama diseñado para automatizar y elevar la gestión de un multiespacio estético. Bajo nuestra filosofía **Liquid Luxury**, cada interacción fluye con elegancia, ofreciendo una experiencia de usuario premium tanto para el cliente final como para el equipo administrativo.
-
-## 🚀 Módulos Principales
-
-### 1. Landing Page de Alta Conversión
-- **Hero Dinámico**: Impacto visual inmediato con tipografía de lujo y diseño responsivo.
-- **Catálogo de Servicios**: Sistema de categorías con scroll inteligente y visualización premium.
-- **Galería de Resultados**: Muro de transformaciones reales con efectos de hover y diseño cohesivo.
-- **Reseñas y Confianza**: Sección de testimonios y "Por qué elegirnos" con narrativa persuasiva.
-
-### 2. Dashboard de Gestión Senior
-- **Finanzas e Ingresos**: 
-  - Monitoreo de KPIs en tiempo real (Facturación, Tickets, Citas).
-  - Filtros personalizados por fecha y servicios.
-  - **Exportación Profesional**: Generación instantánea de reportes en **Excel** y **PDF** (plantilla contable).
-- **Gestión de Citas (Agenda)**:
-  - Vista de tabla detallada con estados de confirmación.
-  - Desglose de servicios por turno con scroll funcional para múltiples tratamientos.
-  - Control directo del estado del Asistente Virtual por cliente.
-- **CRM de Leads y Clientes**:
-  - Seguimiento de prospectos con Score de Intención.
-  - Chat en tiempo real integrado con historial de WhatsApp.
-  - Base de datos de clientes con historial de frecuencia y última visita.
-- **Administración del Multiespacio**:
-  - **RBAC (Role Based Access Control)**: Gestión de equipo con permisos específicos por categoría.
-  - Editor de servicios dinámico con sistema de arrastrar y soltar (Drag & Drop).
-
-### 3. Asistente Virtual Inteligente (KÂLON Bot)
-- **Omnicanalidad**: Funciona en la web (SSE Streaming) y mediante integración con WhatsApp.
-- **Agendamiento Automatizado**: Detecta servicios, solicita datos de contacto y propone horarios disponibles consultando la base de datos en tiempo real.
-- **Modo Híbrido**: Switch de sincronización global para alternar entre atención automatizada y manual.
-
-## 🛠️ Stack Tecnológico
-
-- **Frontend Core**: React 18 + TypeScript + Vite.
-- **Styling**: Tailwind CSS + Shadcn/UI (Customizado con estética "Dark Glass").
-- **Animaciones**: Framer Motion para transiciones suaves y estados de carga.
-- **Data Layer**: TanStack Query (React Query) para sincronización de estado y caché eficiente.
-- **Backend & DB**: API Routes (Edge Runtime) + Neon Serverless Postgre (SQL).
-- **Reporting**: Biblioteca `jspdf` y `xlsx` para generación de documentos en el cliente.
-
-## 📁 Estructura del Proyecto
-
-```text
-api/              # Endpoints Edge centralizados (Citas, Chat, Ingresos, etc.)
-src/
-├── components/   # UI atomizada, componentes del dashboard y landing
-├── context/      # Proveedores de estado (Auth, Chat)
-├── lib/          # Utilidades core, configuraciones de API y hooks
-├── pages/        # Vistas principales (SPA Routing)
-└── types/        # Definiciones estrictas de TypeScript
-```
-
-## 💅 Design System: Liquid Luxury
-
-Implementamos un estándar estético de **Clase Mundial**:
-- **Dark Mode**: Fondo `#020617` con acentos en `Gold (#D4AF37)`.
-- **Glassmorphism**: Capas translúcidas con `backdrop-blur` y bordes de alta definición.
-- **Micro-interacciones**: Feedback visual en cada clic, hover y transición de página.
+## 💎 Visión General
+**KÂLON** no es solo una landing page; es una plataforma de **Inteligencia Operativa** diseñada para transformar un centro de estética tradicional en un negocio automatizado de alto rendimiento. Combina una interfaz de usuario de lujo con un motor de procesamiento de lenguaje natural (NLP) local que gestiona citas de forma autónoma las 24 horas del día.
 
 ---
 
-Desarrollado para **KÂLON MULTIESPACIO ESTÉTICO**. La elegancia hecha software. 🌟
+## 🛠️ Stack Tecnológico (The Dream Team Stack)
+
+### **Frontend (Vanguardia Visual)**
+- **Framework**: [Next.js 14](https://nextjs.org/) (App Router) con TypeScript para máxima estabilidad.
+- **Styling**: [Tailwind CSS](https://tailwindcss.com/) con diseño **Glassmorphism** y tipografía serif premium.
+- **Interactividad**: [Framer Motion](https://www.framer.com/motion/) y **ScrollReveal** para una experiencia de usuario fluida y "viva".
+- **Gestión de Estado**: React Hooks & Context API para sincronización de datos en tiempo real.
+
+### **Backend & Base de Datos (Robustez)**
+- **Database**: [Neon DB](https://neon.tech/) (PostgreSQL Serverless) para una escalabilidad instantánea.
+- **Serverless Runtime**: Vercel Edge / Node Functions.
+- **Lógica de Servidor**: Arquitectura modular con servicios desacoplados para base de datos, NLP y gestión de estados.
+
+### **Inteligencia Artificial (NLP Local - 0 Cost)**
+- **Motor**: [node-nlp](https://github.com/axa-group/nlp.js) personalizado.
+- **Entrenamiento**: Modelo entrenado desde cero con un corpus específico para el sector estético cordobés.
+- **Ventaja**: **Costo $0**. Al ser un modelo local, no depende de APIs externas (como OpenAI), eliminando costos por mensaje y garantizando privacidad total.
+
+---
+
+## 🚀 Funcionalidades Clave
+
+### 🤖 Chatbot Omnicanal (Web & WhatsApp)
+- **Reconocimiento de Intenciones**: El bot entiende si el usuario quiere saludar, consultar precios o agendar directamente.
+- **Identificación de Clientes**: Reconoce automáticamente a clientes recurrentes por su número de teléfono o ID, manteniendo el historial de conversación.
+- **Carrito de Servicios**: Permite agendar múltiples servicios en una sola sesión (Cejas + Faciales, etc.).
+
+### 📅 Gestión Automática de Turnos
+- **Cálculo de Disponibilidad**: Busca huecos contiguos basados en la **duración total** de los servicios elegidos.
+- **Validación de Comprobantes**: El sistema detecta cuando el usuario envía una imagen (comprobante) y confirma el turno automáticamente en la base de datos sin intervención humana.
+- **Escudo de Cortesía**: Lógica unificada que evita que el bot sea repetitivo y gestiona las despedidas de forma humana.
+
+### 📊 Dashboard Administrativo (Centro de Mando)
+- **Agenda Interactiva**: Cambio de estado de turnos con un clic (Pendiente, Confirmada, Realizada).
+- **Gestión de Leads**: Filtro de "Clientes Potenciales" para identificar personas que iniciaron el proceso pero no concretaron.
+- **KPIs Financieros**: Visualización de ingresos estimados, clientes activos y tasas de conversión.
+
+---
+
+## 🧠 Lógica de Negocio: La Máquina de Estados
+
+El corazón del sistema es una **Máquina de Estados Finita (FSM)** que garantiza que el bot nunca pierda el hilo de la conversación:
+
+1. **Exploración**: El bot presenta el menú dinámico desde `categories` y `services` de la DB.
+2. **Reserva**: Recolecta Nombre y WhatsApp de forma inteligente (limpieza de frases).
+3. **Propuesta**: Ofrece huecos disponibles cruzando datos con `appointments` en tiempo real.
+4. **Validación**: Espera la transferencia (50% de seña) y confirma al recibir la captura de pantalla.
+
+---
+
+## 📈 Instrucciones de Escalabilidad
+
+El proyecto ha sido diseñado para crecer sin tocar el código fuente:
+
+- **Cambio de Precios/Servicios**: Se gestiona directamente desde la base de datos Neon. El bot lee los cambios instantáneamente.
+- **Nuevas Categorías**: Solo basta con añadir una entrada en la tabla `categories`, y el flujo de navegación del chatbot se adaptará automáticamente.
+- **Re-entrenamiento**: La lógica de NLP está separada en `/Entrenamiento NLP`, permitiendo mejorar la comprensión del bot sin afectar la lógica de citas.
+
+---
+
+## 📦 Instalación y Despliegue
+
+1. **Clonar repositorio**: `git clone ...`
+2. **Variables de Entorno**: Configurar `DATABASE_URL` y `WHATSAPP_API_URL` en el archivo `.env`.
+3. **Instalación**: `npm install`
+4. **Desarrollo**: `npm run dev`
+5. **Deploy**: Configurado para despliegue automático en **Vercel**.
+
+---
+
+> [!NOTE]
+> Este proyecto representa la unión perfecta entre **Estética de Lujo** y **Software de Ingeniería de Datos**. Desarrollado por **Diegofbis63** & **Antigravity AI**.
