@@ -304,11 +304,13 @@ export async function extractState(
                     const isOnlyNamingCategories = isNewCategoryRequest && normalizedContent.length < (catsInFoundOrder.reduce((acc, c) => acc + c.name.length, 0) + 12);
 
                     if (!isOnlyNamingCategories) {
-                        const inputParts = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 3);
-                        // Identify category words to ignore them in service matching
-                        const categoryWords = categories.map(c => normalizeText(c.name)).flatMap(n => n.split(/\s+/));
+                        const singularize = (w: string) => (w.endsWith('s') && w.length > 3 ? w.slice(0, -1) : w);
+                        const inputWords = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 3);
+                        const singularInputWords = inputWords.map(singularize);
                         
                         const hasConjunction = /[\s,]+(y|e|con|[+])[\s,]+/.test(normalizedContent) || normalizedContent.includes(",");
+                        
+                        const categoryWords = categories.map(c => normalizeText(c.name)).flatMap(n => n.split(/\s+/)).map(singularize);
                         
                         const scoredSvcs = services.map(s => {
                             const nt = normalizeText(s.title);
@@ -323,21 +325,21 @@ export async function extractState(
                             else if (normalizedContent.includes(nt) && nt.length > currentCatName.length) score += 50;
 
                             // 2. Word matching
-                            const inputWords = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 3);
                             const titleWords = nt.split(/\s+/).filter(w => 
                                 w.length >= 3 && 
-                                !categoryWords.includes(w) && 
+                                !categoryWords.includes(singularize(w)) && 
                                 !["con", "sin", "para", "los", "las", "del"].includes(w)
                             );
+                            const singularTitleWords = titleWords.map(singularize);
 
                             if (titleWords.length === 0) {
                                 if (normalizedContent === nt) score += 10;
                             } else {
-                                titleWords.forEach(tw => {
-                                    if (inputWords.includes(tw)) {
+                                singularTitleWords.forEach((tw, idx) => {
+                                    if (singularInputWords.includes(tw)) {
                                         score += 10;
                                         matchesDifferentiating = true;
-                                    } else if (tw.length > 4 && inputWords.some(iw => iw.includes(tw) || tw.includes(iw))) {
+                                    } else if (tw.length > 3 && singularInputWords.some(iw => iw.includes(tw) || tw.includes(iw))) {
                                         score += 5;
                                         matchesDifferentiating = true;
                                     }
@@ -346,7 +348,7 @@ export async function extractState(
 
                             // Global match check
                             if (state.currentCategoryId && s.category_id !== state.currentCategoryId) {
-                                if (!normalizedContent.includes(nt)) score = 0; // Global must be exact-ish
+                                if (!normalizedContent.includes(nt) && score < 40) score = 0; // Global must be strong match
                             }
 
                             return { service: s, score, matchesDifferentiating };
@@ -361,17 +363,17 @@ export async function extractState(
                                 // If conjunction, take all that have a decent score
                                 potentialSvcs = scoredSvcs.filter(s => s.score >= 5).map(s => s.service);
                             } else {
-                                // No conjunction: 
-                                // Take only the best ones. If there are multiple with same max score, 
-                                // it might still be an ambiguous phrase.
-                                const bestOnes = scoredSvcs.filter(s => s.score === maxScore);
-                                if (bestOnes.length === 1) {
-                                    potentialSvcs = [bestOnes[0].service];
-                                } else {
-                                    // Ambiguity between top matches. If they match differentiating words, 
-                                    // we might have to be careful. For now, take the first to avoid double adding.
-                                    potentialSvcs = [bestOnes[0].service];
-                                }
+                                // No conjunction: Filter candidates by family
+                                // A family is basically the same category.
+                                // If services are from DIFFERENT categories, we keep them both even without conjunction
+                                // if they have strong matches.
+                                potentialSvcs = scoredSvcs.filter(s => {
+                                    if (s.score === maxScore) return true;
+                                    // If it's a DIFFERENT category than the one with maxScore, and score is high enough, keep it
+                                    const bestSvc = scoredSvcs.find(x => x.score === maxScore)!;
+                                    if (s.service.category_id !== bestSvc.service.category_id && s.score >= 10) return true;
+                                    return false;
+                                }).map(s => s.service);
                             }
                         }
 
@@ -402,7 +404,8 @@ export async function extractState(
                     const isRemoval = normalizedContent.includes("quitar") || normalizedContent.includes("sacar") || normalizedContent.includes("eliminar") || normalizedContent.includes("borrar") || normalizedContent.includes("menos") || normalizedContent.includes("saca");
                     
                     if (isRemoval) {
-                        const inputParts = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 3);
+                        const singularize = (w: string) => (w.endsWith('s') && w.length > 3 ? w.slice(0, -1) : w);
+                        const inputParts = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 3).map(singularize);
                         const toRemove = state.selectedServiceIds.filter(sid => {
                             const s = services.find(x => x.id === sid);
                             if (!s) return false;
@@ -411,14 +414,14 @@ export async function extractState(
                             // Does the message contain identifying words of THIS specific service?
                             if (normalizedContent.includes(nt)) return true;
                             
-                            const svcParts = nt.split(/\s+/).filter(p => p.length > 3);
+                            const svcParts = nt.split(/\s+/).filter(p => p.length > 3).map(singularize);
                             const identifyingPart = svcParts.find(p => ["ruso", "clasicas", "1x1", "polygel", "kapping", "lifting", "keratina"].includes(p));
                             
                             if (identifyingPart && normalizedContent.includes(identifyingPart)) return true;
                             
                             return inputParts.some(part => {
                                 if (nt.includes(part) && svcParts.length === 1) return true;
-                                const titleParts = nt.split(/\s+/);
+                                const titleParts = nt.split(/\s+/).map(singularize);
                                 return titleParts.some(tp => tp.length > 3 && getSimilarity(part, tp) > 0.95);
                             });
                         });
@@ -426,6 +429,33 @@ export async function extractState(
                         if (toRemove.length > 0) {
                             state.selectedServiceIds = state.selectedServiceIds.filter(sid => !toRemove.includes(sid));
                             state.stage = state.selectedServiceIds.length > 0 ? 'cart_review' : 'parent_selection';
+                        }
+                    } else if (intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("agregar") || normalizedContent.includes("sumar")) {
+                        // User wants to add something from the review stage
+                        const singularize = (w: string) => (w.endsWith('s') && w.length > 3 ? w.slice(0, -1) : w);
+                        const inputWords = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 2).map(singularize);
+                        
+                        const foundSvcsToAdd = services.filter(s => {
+                            const nt = normalizeText(s.title);
+                            const sn = nt.split(/\s+/).map(singularize);
+                            
+                            // High priority: exact phrase or part of phrase in message
+                            if (normalizedContent.includes(nt)) return true;
+                            
+                            // Low priority: key differentiating words
+                            const keyWords = sn.filter(w => w.length > 3 && !["masaje", "limpieza", "pestaña", "uña"].some(g => w.includes(g)));
+                            return keyWords.some(kw => inputWords.includes(kw));
+                        });
+
+                        if (foundSvcsToAdd.length > 0) {
+                            foundSvcsToAdd.forEach(fs => {
+                                if (!state.selectedServiceIds.includes(fs.id)) state.selectedServiceIds.push(fs.id);
+                            });
+                            state.stage = 'cart_review'; // Stay here to show updated total
+                        } else {
+                            // Intention to add but no specific service found? Go back to categories
+                            state.stage = 'parent_selection';
+                            state.currentCategoryId = null;
                         }
                     } else {
                         const foundSvcsToAdd = services.filter(s => {
