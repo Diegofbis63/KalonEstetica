@@ -120,68 +120,55 @@ export async function extractState(
 
         if (messagesToProcess.length === 0) return state;
 
-        let currentBotAsked: string | null = state.lastIntent || null;
+        let currentBotAsked: string | null = null;
         const nlp = await getNlpManager();
+
+        // 1. Scan history for bot context (What did the bot just ask?)
+        const lastBotMsg = [...messages].reverse().find(m => m.role === 'assistant' || m.role === 'bot');
+        if (lastBotMsg) {
+            const botText = normalizeText(lastBotMsg.content);
+            if (botText.includes("elige una categoria") || botText.includes("nuestras categorias")) currentBotAsked = 'category';
+            else if (botText.includes("servicios de") || botText.includes("tratamientos de") || botText.includes("estos son los tratamientos")) currentBotAsked = 'sub_service';
+            else if (botText.includes("revisemos tu pedido") || botText.includes("tu carrito") || botText.includes("listado de todos")) currentBotAsked = 'cart_review';
+            else if (botText.includes("agregar algo mas") || botText.includes("avanzamos con el turno")) currentBotAsked = 'cart_confirmation';
+            else if (botText.includes("tu nombre") || botText.includes("nombre completo") || botText.includes("con quien tengo")) currentBotAsked = 'name';
+            else if (botText.includes("whatsapp") || botText.includes("este mismo numero") || botText.includes("numero de cel")) currentBotAsked = 'phone';
+            else if (
+                botText.includes("proximo horario") || botText.includes("disponibilidad") || botText.includes("te queda bien") || 
+                botText.includes("busquemos otro") || botText.includes("horario me queda") || botText.includes("te sirve este horario") || 
+                botText.includes("podemos agendar") || botText.includes("para el dia") || botText.includes("buenas noticias") || 
+                botText.includes("elegir tranquila") || botText.includes("opciones mas cercanas")
+            ) {
+                currentBotAsked = 'availability';
+                const isoMatch = lastBotMsg.content.match(/(\d{4})-(\d{2})-(\d{2})/);
+                if (isoMatch) state.pendingDate = isoMatch[0];
+                const timeMatch = lastBotMsg.content.match(/(\d{1,2}):(\d{2})/);
+                if (timeMatch) state.pendingTime = timeMatch[0].padStart(5, '0');
+            }
+            else if (botText.includes("necesitamos una seña") || botText.includes("transferi al alias") || botText.includes("comprobante por aca") || botText.includes("senar") || botText.includes("pago de la reserva")) {
+                currentBotAsked = 'payment';
+                state.stage = 'payment_request';
+            }
+
+            // State reconstruction from bot recap
+            services.forEach(s => {
+                const normalizedTitle = normalizeText(s.title);
+                const isRecap = botText.includes("revisemos") || botText.includes("pedido") || botText.includes("total") || botText.includes("sesion va a durar") || botText.includes("resumen") || botText.includes("confirmado");
+                const isConfirmation = botText.includes("agregue") || botText.includes("seleccionaste") || botText.includes("sume") || botText.includes("ya te sume") || botText.includes("que buena eleccion");
+                if (botText.includes(normalizedTitle) && (isConfirmation || isRecap)) {
+                    if (!state.selectedServiceIds.includes(s.id)) state.selectedServiceIds.push(s.id);
+                }
+            });
+        }
 
         for (let i = 0; i < messagesToProcess.length; i++) {
             const msg = messagesToProcess[i];
             if (!msg.content && !msg.media_url && !msg.media_data) continue;
             const normalizedContent = normalizeText(msg.content || "");
 
-            if (msg.role === 'assistant' || msg.role === 'bot') {
-                const botText = normalizeText(msg.content);
-                if (botText.includes("elige una categoria") || botText.includes("nuestras categorias")) currentBotAsked = 'category';
-                else if (botText.includes("servicios de") || botText.includes("tratamientos de") || botText.includes("estos son los tratamientos")) currentBotAsked = 'sub_service';
-                else if (botText.includes("revisemos tu pedido") || botText.includes("tu carrito") || botText.includes("listado de todos")) currentBotAsked = 'cart_review';
-                else if (botText.includes("agregar algo mas") || botText.includes("avanzamos con el turno")) currentBotAsked = 'cart_confirmation';
-                else if (botText.includes("tu nombre") || botText.includes("nombre completo") || botText.includes("con quien tengo")) currentBotAsked = 'name';
-                else if (botText.includes("whatsapp") || botText.includes("este mismo numero") || botText.includes("numero de cel")) currentBotAsked = 'phone';
-                else if (
-                    botText.includes("proximo horario") || 
-                    botText.includes("disponibilidad") || 
-                    botText.includes("te queda bien") || 
-                    botText.includes("busquemos otro") || 
-                    botText.includes("horario me queda") || 
-                    botText.includes("te sirve este horario") || 
-                    botText.includes("podemos agendar") || 
-                    botText.includes("para el dia") ||
-                    botText.includes("buenas noticias") ||
-                    botText.includes("elegir tranquila") ||
-                    botText.includes("opciones mas cercanas")
-                ) {
-                    currentBotAsked = 'availability';
-                    const isoMatch = msg.content.match(/(\d{4})-(\d{2})-(\d{2})/);
-                    if (isoMatch) state.pendingDate = isoMatch[0];
-                    else {
-                        const months: Record<string, string> = {
-                            "enero": "01", "febrero": "02", "marzo": "03", "abril": "04", "mayo": "05", "junio": "06",
-                            "julio": "07", "agosto": "08", "septiembre": "09", "octubre": "10", "noviembre": "11", "diciembre": "12"
-                        };
-                        const humanMatch = msg.content.match(/(\d{1,2})\s+(Enero|Febrero|Marzo|Abril|Mayo|Junio|Julio|Agosto|Septiembre|Octubre|Noviembre|Diciembre)\s+(\d{4})/i);
-                        if (humanMatch) {
-                            state.pendingDate = `${humanMatch[3]}-${months[humanMatch[2].toLowerCase()]}-${humanMatch[1].padStart(2, '0')}`;
-                        }
-                    }
-                    const timeMatch = msg.content.match(/(\d{1,2}):(\d{2})/);
-                    if (timeMatch) state.pendingTime = timeMatch[0].padStart(5, '0');
-                }
-                else if (botText.includes("necesitamos una seña") || botText.includes("transferi al alias") || botText.includes("comprobante por aca") || botText.includes("senar") || botText.includes("pago de la reserva")) {
-                    currentBotAsked = 'payment';
-                    state.stage = 'payment_request';
-                }
-                
-                services.forEach(s => {
-                    const normalizedTitle = normalizeText(s.title);
-                    // Captures services from confirmation messages, itemized lists, or totals
-                    const isRecap = botText.includes("revisemos") || botText.includes("pedido") || botText.includes("total") || botText.includes("sesion va a durar") || botText.includes("resumen") || botText.includes("confirmado");
-                    const isConfirmation = botText.includes("agregue") || botText.includes("seleccionaste") || botText.includes("sume") || botText.includes("ya te sume") || botText.includes("que buena eleccion");
-                    
-                    if (botText.includes(normalizedTitle) && (isConfirmation || isRecap)) {
-                        if (!state.selectedServiceIds.includes(s.id)) state.selectedServiceIds.push(s.id);
-                    }
-                });
-                continue;
-            }
+            // Skip bot messages in processing loop (already handled context)
+            if (msg.role === 'assistant' || msg.role === 'bot') continue;
+
 
             if (msg.role === 'user') {
                 const isLastMessage = i === messages.length - 1;
@@ -400,7 +387,7 @@ export async function extractState(
                             }
                     }
                 }
-                if (currentBotAsked === 'cart_review') {
+                if (currentBotAsked === 'cart_review' || state.stage === 'cart_review') {
                     const isRemoval = normalizedContent.includes("quitar") || normalizedContent.includes("sacar") || normalizedContent.includes("eliminar") || normalizedContent.includes("borrar") || normalizedContent.includes("menos") || normalizedContent.includes("saca");
                     
                     if (isRemoval) {
