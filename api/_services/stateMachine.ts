@@ -641,9 +641,22 @@ export function generateResponse(
             case 'sub_service_selection': {
                 const cat = categories.find(c => c.id === state.currentCategoryId);
                 const subServices = services.filter(s => s.category_id === state.currentCategoryId);
+                
+                // Agrupamos servicios por "raíz" si tienen un guion o prefijo común (ej: "Nail Art")
                 const list = subServices.map(s => {
                     const cleanDur = s.duration.toString().replace(/min/gi, '').replace(/minutos/gi, '').trim();
-                    return `• *${s.title}* ($${s.price}) - ${cleanDur} min`;
+                    const title = s.title;
+                    
+                    // Lógica de identación: Si tiene guion o es Nail Art y hay un prefijo común
+                    const isSub = title.includes('-') || title.toLowerCase().includes('nail art');
+                    const displayTitle = isSub ? title : `*${title}*`;
+                    const item = `${displayTitle} ($${s.price}) - ${cleanDur} min`;
+                    
+                    if (isSub) {
+                        return `  - ${item}`;
+                    } else {
+                        return `• ${item}`;
+                    }
                 }).join('\n');
                 
                 const selectedCount = state.selectedServiceIds.length;
@@ -663,7 +676,12 @@ export function generateResponse(
             }
             case 'cart_review': {
                 const selectedServices = services.filter(s => state.selectedServiceIds.includes(s.id));
-                const list = selectedServices.map(s => `• *${s.title}* ($${s.price}) - ${s.duration.toString().replace(/min/g, '').trim()} min`).join('\n');
+                const list = selectedServices.map(s => {
+                    const cleanDur = s.duration.toString().replace(/min/g, '').trim();
+                    const isSub = s.title.includes('-') || s.title.toLowerCase().includes('nail art');
+                    const item = `*${s.title}* ($${s.price}) - ${cleanDur} min`;
+                    return isSub ? `  - ${item}` : `• ${item}`;
+                }).join('\n');
                 const totalPrice = selectedServices.reduce((a, b) => a + Number(b.price), 0);
                 const totalDur = selectedServices.reduce((a, b) => a + parseDuration(b.duration), 0);
                 const durText = formatDurationHuman(totalDur);

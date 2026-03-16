@@ -7,12 +7,14 @@ export async function streamKalonChat({
   onDelta,
   onDone,
   onError,
+  onStage,
   clientPhone,
 }: {
   messages: Msg[];
   onDelta: (deltaText: string) => void;
   onDone: () => void;
   onError: (error: string) => void;
+  onStage?: (stage: string) => void;
   clientPhone?: string;
 }) {
   try {
@@ -70,6 +72,7 @@ export async function streamKalonChat({
 
         try {
           const parsed = JSON.parse(jsonStr);
+          if (parsed.stage && onStage) onStage(parsed.stage);
           const content = parsed.choices?.[0]?.delta?.content as string | undefined;
           if (content) onDelta(content);
         } catch {
@@ -90,6 +93,7 @@ export async function streamKalonChat({
         if (jsonStr === "[DONE]") continue;
         try {
           const parsed = JSON.parse(jsonStr);
+          if (parsed.stage && onStage) onStage(parsed.stage);
           const content = parsed.choices?.[0]?.delta?.content as string | undefined;
           if (content) onDelta(content);
         } catch {

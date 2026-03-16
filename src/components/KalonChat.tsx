@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { MessageCircle, Send, AlertTriangle, Sparkles, Clock } from "lucide-react";
+import { MessageCircle, Send, AlertTriangle, Sparkles, Clock, Paperclip } from "lucide-react";
 import { streamKalonChat } from "@/lib/kalon-chat";
 import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
@@ -15,6 +15,7 @@ export default function KalonChat() {
   const [step, setStep] = useState<ChatStep>("identifying");
   const [phone, setPhone] = useState("");
   const [identifiedLead, setIdentifiedLead] = useState<any>(null);
+  const [currentStage, setCurrentStage] = useState<string>("initial");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -26,7 +27,6 @@ export default function KalonChat() {
   const inputRef = useRef<HTMLInputElement>(null);
   const initialized = useRef(false);
 
-  // 2. Chatbot Auto-focus: Only after user interacts or bot responds, NEVER on mount
   useEffect(() => {
     if (!isLoading && initialized.current) {
       inputRef.current?.focus();
@@ -34,7 +34,6 @@ export default function KalonChat() {
   }, [isLoading]);
 
   useEffect(() => {
-    // Auto-trigger greeting if empty
     if (messages.length === 0 && !isLoading) {
       triggerInitialGreeting();
     }
@@ -62,6 +61,7 @@ export default function KalonChat() {
       messages: [],
       clientPhone: phone || undefined,
       onDelta: (chunk) => upsertAssistant(chunk),
+      onStage: (s) => setCurrentStage(s),
       onDone: () => setIsLoading(false),
       onError: (err) => {
         setError(err);
@@ -94,7 +94,6 @@ export default function KalonChat() {
           role: "assistant", 
           content: "No encontré una cuenta con ese número, ¡pero no te preocupes! Te trataré como cliente nuevo. ¿En qué puedo ayudarte hoy? ✨" 
         }]);
-        // We don't trigger initial greeting here because we already sent one informative message
       }
     } catch (err) {
       setError("Error al validar el teléfono");
@@ -132,17 +131,35 @@ export default function KalonChat() {
 
     await streamKalonChat({
       messages: [...messages, userMsg],
-      clientPhone: phone || undefined,
+      clientPhone: phone || (identifiedLead?.phone) || undefined,
       onDelta: (chunk) => upsertAssistant(chunk),
+      onStage: (s) => setCurrentStage(s),
       onDone: () => {
         setIsLoading(false);
-        initialized.current = true; // Mark as initialized after first interaction
+        initialized.current = true;
       },
       onError: (err) => {
         setError(err);
         setIsLoading(false);
       },
     });
+  };
+
+  const handleFileUpload = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*,application/pdf';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        toast.info(`Subiendo comprobante: ${file.name}...`);
+        // Simmulamos envío de comprobante
+        setInput("He subido mi comprobante de pago");
+        // En una implementación real, aquí se subiría el archivo a S3/Supabase Storage
+        // y se enviaría la URL como mediaUrl al backend.
+      }
+    };
+    input.click();
   };
 
   return (
@@ -224,7 +241,7 @@ export default function KalonChat() {
             <div className="w-full max-w-xs space-y-3">
               <input 
                 type="tel"
-                placeholder="Ej: 3513899864"
+                placeholder="Ej: 3512345678"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 className="w-full bg-noir border border-white/10 rounded-2xl py-4 px-6 text-sm text-center outline-none focus:border-gold/50 transition-all font-sans"
@@ -268,11 +285,11 @@ export default function KalonChat() {
             <div
               className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed font-sans ${m.role === "user"
                 ? "bg-gold/15 border border-gold/20 text-cream rounded-tr-sm"
-                : "bg-cream/5 border border-cream/8 text-cream/70 rounded-tl-sm"
+                : `bg-cream/5 border border-cream/8 text-cream/70 rounded-tl-sm ${m.content.includes('\n*') || m.content.includes('\n-') ? 'chat-bubble-list-container' : ''}`
                 }`}
             >
               {m.role === "assistant" ? (
-                <div className="prose prose-sm prose-invert max-w-none prose-p:my-1 prose-headings:my-2">
+                <div className="prose prose-sm prose-invert max-w-none prose-p:my-1 prose-headings:my-2 chat-bubble-content">
                   <ReactMarkdown>{m.content}</ReactMarkdown>
                 </div>
               ) : (
@@ -306,6 +323,16 @@ export default function KalonChat() {
           onSubmit={handleSend}
           className="flex items-center gap-3 bg-cream/5 border border-cream/10 rounded-full p-1.5 focus-within:border-gold/30 transition-all duration-300"
         >
+          { (currentStage === 'ask_for_deposit' || currentStage === 'waiting_for_receipt') && (
+            <button
+              type="button"
+              onClick={handleFileUpload}
+              className="p-2 ml-1 text-gold hover:bg-gold/10 rounded-full transition-colors group"
+              title="Subir comprobante"
+            >
+              <Paperclip className="w-4 h-4 group-hover:rotate-12 transition-transform" />
+            </button>
+          )}
           <input
             className="flex-1 bg-transparent border-none text-cream text-sm px-4 py-1.5 focus:outline-none focus:ring-0 placeholder:text-cream/25 disabled:opacity-50 font-sans"
             ref={inputRef}
@@ -319,7 +346,7 @@ export default function KalonChat() {
             type="submit"
             aria-label="Enviar mensaje"
             disabled={isLoading || !input.trim()}
-            className="bg-gradient-to-r from-gold to-gold-light disabled:from-cream/10 disabled:to-cream/10 disabled:cursor-not-allowed text-noir p-2.5 rounded-full transition-all active:scale-95"
+            className="bg-gradient-to-r from-gold to-gold-light disabled:from-cream/10 disabled:to-cream/10 disabled:cursor-not-allowed text-noir p-2.5 rounded-full transition-all active:scale-95 mr-0.5"
           >
             <Send className="w-4 h-4" />
           </button>

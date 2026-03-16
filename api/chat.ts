@@ -230,7 +230,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const words = responseText.split(' ');
             for (let i = 0; i < words.length; i++) {
                 const chunk = (i === 0 ? '' : ' ') + words[i];
-                const data = JSON.stringify({ choices: [{ delta: { content: chunk } }] });
+                // Enviamos el stage en cada chunk para que el frontend sepa siempre el estado actual
+                const data = JSON.stringify({ 
+                    choices: [{ delta: { content: chunk } }],
+                    stage: state.stage 
+                });
                 res.write(`data: ${data}\n\n`);
                 await new Promise(r => setTimeout(r, 20 + Math.random() * 20));
             }
