@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { ChevronRight, Star } from "lucide-react";
 import ScrollReveal from "./ScrollReveal";
-import heroBg from "@/assets/nova-hero.png";
+import heroBg from "@/assets/centro kalon estetica.png";
 
 const HeroSection = () => {
   return (
