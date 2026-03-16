@@ -323,7 +323,7 @@ export default function KalonChat() {
           onSubmit={handleSend}
           className="flex items-center gap-3 bg-cream/5 border border-cream/10 rounded-full p-1.5 focus-within:border-gold/30 transition-all duration-300"
         >
-          { (currentStage === 'ask_for_deposit' || currentStage === 'waiting_for_receipt') && (
+          { (currentStage === 'payment_request' || currentStage === 'ask_for_deposit' || currentStage === 'waiting_for_receipt') && (
             <button
               type="button"
               onClick={handleFileUpload}
