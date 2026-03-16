@@ -10,7 +10,7 @@ export default function DashboardLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen bg-noir text-cream overflow-x-hidden">
+    <div className="flex h-screen bg-noir text-cream overflow-hidden">
       {/* Global Chat Modal */}
       <ChatModal 
         open={isChatModalOpen} 
@@ -24,9 +24,9 @@ export default function DashboardLayout() {
       <Sidebar isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
 
       {/* Main Content Area */}
-      <main className="flex-1 lg:ml-64 min-h-screen relative flex flex-col">
+      <main className="flex-1 lg:ml-64 relative flex flex-col h-full overflow-hidden">
         {/* Mobile Header */}
-        <div className="lg:hidden flex items-center justify-between px-6 py-4 border-b border-cream/5 bg-noir sticky top-0 z-[60]">
+        <div className="lg:hidden flex-none flex items-center justify-between px-6 py-4 border-b border-cream/5 bg-noir z-[60]">
            <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gold to-gold-light flex items-center justify-center">
                 <span className="text-noir font-serif font-bold text-sm">K</span>
@@ -50,7 +50,7 @@ export default function DashboardLayout() {
         </div>
 
         {/* Scrollable Page Content */}
-        <div className="relative z-10 flex-1 flex flex-col">
+        <div className="relative z-10 flex-1 overflow-y-auto custom-scrollbar">
           <Outlet />
         </div>
       </main>

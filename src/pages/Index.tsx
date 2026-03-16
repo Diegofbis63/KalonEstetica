@@ -29,6 +29,10 @@ const Index = () => {
     } else {
       document.body.style.overflow = "auto";
     }
+    
+    return () => {
+      document.body.style.overflow = "auto";
+    };
   }, [isMobileMenuOpen]);
 
   const scrollToTop = () => {

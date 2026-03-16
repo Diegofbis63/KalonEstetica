@@ -440,8 +440,8 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
   }
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-noir">
-      <div className="flex-1 overflow-y-auto custom-scrollbar px-8 py-10">
+    <div className="flex flex-col bg-noir">
+      <div className="px-4 md:px-8 py-6 md:py-10">
         <div className="max-w-[1600px] mx-auto space-y-12 pb-20">
           
           {currentTab === 'dashboard' && (

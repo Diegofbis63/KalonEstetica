@@ -337,8 +337,8 @@ export default function Incomes() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col animate-in fade-in duration-700 bg-noir/20">
-      <div className="max-w-7xl w-full px-4 md:px-6 py-8 md:py-12 space-y-8 md:space-y-12 mx-auto">
+    <div className="flex flex-col animate-in fade-in duration-700 bg-noir/20">
+      <div className="max-w-[1600px] w-full px-4 md:px-8 py-6 md:py-10 space-y-8 md:space-y-12 mx-auto">
         {/* Header & Filters */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
           <div>
