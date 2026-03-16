@@ -1,15 +1,20 @@
 import { useState, useRef, useEffect } from "react";
-import { MessageCircle, Send, AlertTriangle } from "lucide-react";
+import { MessageCircle, Send, AlertTriangle, Sparkles, Clock } from "lucide-react";
 import { streamKalonChat } from "@/lib/kalon-chat";
 import ReactMarkdown from "react-markdown";
+import { toast } from "sonner";
 
 type Msg = { role: "user" | "assistant"; content: string };
+type ChatStep = "identifying" | "phone_input" | "chatting";
 
 export default function KalonChat() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState<ChatStep>("identifying");
+  const [phone, setPhone] = useState("");
+  const [identifiedLead, setIdentifiedLead] = useState<any>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -55,6 +60,7 @@ export default function KalonChat() {
 
     await streamKalonChat({
       messages: [],
+      clientPhone: phone || undefined,
       onDelta: (chunk) => upsertAssistant(chunk),
       onDone: () => setIsLoading(false),
       onError: (err) => {
@@ -62,6 +68,40 @@ export default function KalonChat() {
         setIsLoading(false);
       },
     });
+  };
+
+  const checkLead = async () => {
+    if (!phone.trim()) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/leads/identify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone })
+      });
+      const data = await res.json();
+      if (data.found) {
+        setIdentifiedLead(data.lead);
+        setStep("chatting");
+        setMessages([{ 
+          role: "assistant", 
+          content: `¡Hola de nuevo, **${data.lead.client_name}**! Te recuperé tu sesión. ¿Seguimos donde dejamos? 😊` 
+        }]);
+      } else {
+        setStep("chatting");
+        setMessages([{ 
+          role: "assistant", 
+          content: "No encontré una cuenta con ese número, ¡pero no te preocupes! Te trataré como cliente nuevo. ¿En qué puedo ayudarte hoy? ✨" 
+        }]);
+        // We don't trigger initial greeting here because we already sent one informative message
+      }
+    } catch (err) {
+      setError("Error al validar el teléfono");
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSend = async (e?: React.FormEvent) => {
@@ -92,6 +132,7 @@ export default function KalonChat() {
 
     await streamKalonChat({
       messages: [...messages, userMsg],
+      clientPhone: phone || undefined,
       onDelta: (chunk) => upsertAssistant(chunk),
       onDone: () => {
         setIsLoading(false);
@@ -138,7 +179,74 @@ export default function KalonChat() {
         ref={scrollRef}
         className="flex-1 overflow-y-auto p-6 space-y-4"
       >
-        {messages.length === 0 && !isLoading && !error && (
+        {step === "identifying" && (
+          <div className="flex flex-col items-center justify-center h-full text-center space-y-6">
+            <div className="p-4 rounded-full border border-gold/15 bg-gold/5">
+              <Sparkles className="w-8 h-8 text-gold/60" />
+            </div>
+            <div className="space-y-2">
+              <h4 className="text-xl font-serif text-cream">¡Bienvenida a KÂLON!</h4>
+              <p className="text-xs text-cream/40 font-sans max-w-xs px-4">
+                Para brindarte una mejor experiencia, dinos si ya has reservado con nosotros antes.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 w-full max-w-xs">
+              <button 
+                onClick={() => {
+                  setStep("chatting");
+                  triggerInitialGreeting();
+                }}
+                className="w-full py-4 rounded-2xl bg-cream/5 border border-cream/10 text-cream text-xs font-bold uppercase tracking-widest hover:bg-cream/10 transition-all font-sans"
+              >
+                Soy cliente nuevo
+              </button>
+              <button 
+                onClick={() => setStep("phone_input")}
+                className="w-full py-4 rounded-2xl bg-gold text-noir text-xs font-bold uppercase tracking-widest hover:scale-[1.02] transition-all font-sans"
+              >
+                Ya tengo cuenta / Soy recurrente
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === "phone_input" && (
+          <div className="flex flex-col items-center justify-center h-full text-center space-y-6">
+             <div className="p-4 rounded-full border border-gold/15 bg-gold/5">
+              <Clock className="w-8 h-8 text-gold/60" />
+            </div>
+            <div className="space-y-2">
+              <h4 className="text-xl font-serif text-cream">Recuperar Sesión</h4>
+              <p className="text-xs text-cream/40 font-sans max-w-xs px-4">
+                Ingresa tu número de WhatsApp (con código de área) para recuperar tu historial y carrito.
+              </p>
+            </div>
+            <div className="w-full max-w-xs space-y-3">
+              <input 
+                type="tel"
+                placeholder="Ej: 3513899864"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="w-full bg-noir border border-white/10 rounded-2xl py-4 px-6 text-sm text-center outline-none focus:border-gold/50 transition-all font-sans"
+              />
+              <button 
+                disabled={isLoading || !phone.trim()}
+                onClick={checkLead}
+                className="w-full py-4 rounded-2xl bg-gold text-noir text-xs font-bold uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 font-sans"
+              >
+                {isLoading ? "Buscando..." : "Validar Teléfono"}
+              </button>
+              <button 
+                onClick={() => setStep("identifying")}
+                className="text-[10px] uppercase font-bold text-cream/20 hover:text-cream/50 transition-colors tracking-widest"
+              >
+                ← Volver atrás
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === "chatting" && messages.length === 0 && !isLoading && !error && (
           <div className="flex flex-col items-center justify-center h-full text-center space-y-4">
             <div className="p-4 rounded-full border border-gold/15 bg-gold/5">
               <MessageCircle className="w-8 h-8 text-gold/40" />
@@ -152,7 +260,7 @@ export default function KalonChat() {
           </div>
         )}
 
-        {messages.map((m, i) => (
+        {step === "chatting" && messages.map((m, i) => (
           <div
             key={i}
             className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}

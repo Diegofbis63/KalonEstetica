@@ -26,6 +26,20 @@ export async function getLeadByPhone(phone: string) {
     return results.length > 0 ? results[0] : null;
 }
 
+export async function findLeadByFlexiblePhone(phone: string) {
+    const normalized = phone.replace(/\D/g, '').slice(-10);
+    if (!normalized || normalized.length < 7) return null;
+    
+    console.log(`[db.ts] Searching lead by last 10 digits: ${normalized}`);
+    const results = await sql`
+        SELECT id, is_bot_enabled, client_name, contact_info, current_state, updated_at 
+        FROM leads 
+        WHERE regexp_replace(contact_info->>'phone', '\\D', '', 'g') LIKE ${'%' + normalized} 
+        LIMIT 1
+    `;
+    return results.length > 0 ? results[0] : null;
+}
+
 export async function getChatHistory(leadId: string) {
     console.log(`[db.ts] Fetching chat history for lead: ${leadId}`);
     return await sql`

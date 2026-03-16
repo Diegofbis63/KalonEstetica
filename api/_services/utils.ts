@@ -116,3 +116,36 @@ export function parseRelativeDate(input: string, referenceDate: Date): string | 
 export function formatForWhatsApp(text: string): string {
     return text.replace(/\*\*(.*?)\*\*/g, '*$1*').trim();
 }
+
+/**
+ * Normalización de teléfonos ultra-robusta.
+ * Elimina caracteres no numéricos y remueve prefijos comunes (54, 549, 0).
+ */
+export function normalizePhone(phone: string): string {
+    if (!phone) return "";
+    // Elimina todos los caracteres no numéricos
+    const numeric = phone.replace(/\D/g, '');
+    
+    // Remueve prefijos comunes si existen
+    let result = numeric;
+    if (result.startsWith('549')) result = result.substring(3);
+    else if (result.startsWith('54')) result = result.substring(2);
+    
+    // Remueve el 0 inicial si existe (ej: 0351 -> 351)
+    if (result.startsWith('0')) result = result.substring(1);
+    
+    return result;
+}
+
+/**
+ * Comparación flexible basada en los últimos 10 dígitos.
+ */
+export function comparePhones(p1: string, p2: string): boolean {
+    const n1 = normalizePhone(p1);
+    const n2 = normalizePhone(p2);
+    
+    const suffix1 = n1.slice(-10);
+    const suffix2 = n2.slice(-10);
+    
+    return suffix1 === suffix2 && suffix1.length >= 7;
+}

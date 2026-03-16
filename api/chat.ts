@@ -8,6 +8,7 @@ import {
     updateLeadName, 
     insertChatLog, 
     createLead, 
+    findLeadByFlexiblePhone,
     getAppointmentsForDate, 
     createAppointment, 
     markLeadAsConverted,
@@ -77,8 +78,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         let savedState = null;
         let lastUpdate = null;
 
-        if (userId) {
-            const lead = await getLeadByPhone(userId);
+        const identificationId = userId || body.clientPhone;
+
+        if (identificationId) {
+            const lead = userId ? await getLeadByPhone(userId) : await findLeadByFlexiblePhone(body.clientPhone);
             if (lead) {
                 leadId = lead.id;
                 isBotEnabled = lead.is_bot_enabled !== false;
@@ -108,8 +111,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
             await updateLeadState(leadId, state);
             await insertChatLog(leadId, 'user', incomingMessage, incomingMediaUrl, !!userId, body.mediaData);
-        } else if (userId || body.clientPhone) {
-            const phone = (userId || body.clientPhone || '').replace(/\D/g, '');
+        } else if (identificationId) {
+            const phone = identificationId.replace(/\D/g, '');
             const nameToSave = (state.clientName && state.clientName !== 'Cliente') ? state.clientName : 'Cliente';
             const newLead = await createLead(DEFAULT_ORG_ID, nameToSave, { phone: phone, source: userId ? 'whatsapp' : 'web' });
             leadId = newLead.id;

@@ -7,11 +7,13 @@ export async function streamKalonChat({
   onDelta,
   onDone,
   onError,
+  clientPhone,
 }: {
   messages: Msg[];
   onDelta: (deltaText: string) => void;
   onDone: () => void;
   onError: (error: string) => void;
+  clientPhone?: string;
 }) {
   try {
     const resp = await fetch(CHAT_URL, {
@@ -19,7 +21,7 @@ export async function streamKalonChat({
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ messages }),
+      body: JSON.stringify({ messages, clientPhone }),
     });
 
     if (!resp.ok) {
