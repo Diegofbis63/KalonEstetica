@@ -144,6 +144,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
 
   const { openChat } = useChat();
   const [dateFilter, setDateFilter] = useState<'all' | 'hoy' | 'tomorrow'>('all');
+  const [showCompleted, setShowCompleted] = useState(false);
 
   // Dialog states
   const [isNewAppointmentModalOpen, setIsNewAppointmentModalOpen] = useState(false);
@@ -342,25 +343,60 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
 
   const leads: Lead[] = useMemo(() => dashData?.leads || [], [dashData?.leads]);
   const appointments: Appointment[] = useMemo(() => dashData?.appointments || [], [dashData?.appointments]);
-  const timelineAppts: Appointment[] = useMemo(() => timelineData?.appointments || [], [timelineData?.appointments]);
+  const timelineAppts: Appointment[] = useMemo(() => {
+    const base = timelineData?.appointments || [];
+    if (!showCompleted) {
+      return base.filter(a => a.status !== 'REALIZADA' && a.status !== 'completed');
+    }
+    return base;
+  }, [timelineData?.appointments, showCompleted]);
+
+  const filteredLeads = useMemo(() => {
+    if (showCompleted) return leads;
+    // Hide qualified leads if not showing completed (UX optimization requested)
+    return leads.filter(l => l.status !== 'qualified');
+  }, [leads, showCompleted]);
 
   const filteredAppointments = useMemo(() => {
     const target = new Date();
-    const activeAppts = appointments.filter(a => a.status !== 'canceled');
+    let base = appointments.filter(a => a.status !== 'canceled');
+    
+    if (!showCompleted) {
+      base = base.filter(a => a.status !== 'REALIZADA' && a.status !== 'completed');
+    }
+
     if (dateFilter === 'tomorrow') {
       target.setDate(target.getDate() + 1);
-      return activeAppts.filter(a => new Date(a.date_time).toDateString() === target.toDateString());
+      return base.filter(a => new Date(a.date_time).toDateString() === target.toDateString());
     }
     if (dateFilter === 'hoy') {
-      return activeAppts.filter(a => new Date(a.date_time).toDateString() === target.toDateString());
+      return base.filter(a => new Date(a.date_time).toDateString() === target.toDateString());
     }
-    return activeAppts;
-  }, [appointments, dateFilter]);
+    return base;
+  }, [appointments, dateFilter, showCompleted]);
 
   const stats = [
-    { icon: Users, label: "Clientes Activos", value: leads.length, color: "text-gold", path: "/dashboard/clients" },
-    { icon: CalendarCheck, label: "Turnos", value: appointments.length, color: "text-amber-400", path: "/dashboard/appointments" },
-    { icon: TrendingUp, label: "Ingresos", value: `${leads.length > 0 ? Math.round((appointments.length / leads.length) * 100) : 0}%`, color: "text-emerald-400", path: "/dashboard/income" },
+    { 
+      icon: Users, 
+      label: "Clientes Activos", 
+      value: leads.filter(l => l.status !== 'qualified').length, 
+      color: "text-gold", 
+      path: "/dashboard/clients" 
+    },
+    { 
+      icon: CalendarCheck, 
+      label: "Turnos Pendientes", 
+      value: appointments.filter(a => a.status !== 'canceled' && a.status !== 'REALIZADA' && a.status !== 'completed').length, 
+      color: "text-amber-400", 
+      path: "/dashboard/appointments" 
+    },
+    { 
+      icon: TrendingUp, 
+      label: "Tasa de Intención", 
+      value: `${leads.length > 0 ? Math.round((leads.filter(l => l.intent_score > 70).length / leads.length) * 100) : 0}%`, 
+      color: "text-emerald-400", 
+      path: "/dashboard/income" 
+    },
   ];
 
   // Logic for Operation Center
@@ -425,9 +461,19 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                         <div className="w-1 h-6 bg-gold rounded-full shadow-[0_0_10px_rgba(194,154,91,0.5)]" />
                         <h3 className="text-xl font-serif font-bold tracking-tight">Agenda del Día</h3>
                       </div>
-                      <Badge variant="outline" className="border-gold/20 text-gold/60 uppercase text-[9px] tracking-widest px-3">
-                        {new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Argentina/Cordoba' })}
-                      </Badge>
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2 bg-noir-light/50 px-3 py-1.5 rounded-xl border border-white/5">
+                          <span className="text-[10px] uppercase font-bold tracking-widest text-cream/40">Mostrar Realizados</span>
+                          <Switch 
+                            checked={showCompleted} 
+                            onCheckedChange={setShowCompleted}
+                            className="scale-75 data-[state=checked]:bg-gold"
+                          />
+                        </div>
+                        <Badge variant="outline" className="border-gold/20 text-gold/60 uppercase text-[9px] tracking-widest px-3">
+                          {new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Argentina/Cordoba' })}
+                        </Badge>
+                      </div>
                    </div>
                    
                    <div className="relative pl-8 space-y-8 before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-px before:bg-gradient-to-b before:from-gold/40 before:via-gold/10 before:to-transparent">
@@ -724,7 +770,16 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                     <div className="w-1.5 h-6 bg-gold rounded-full" />
                     <h3 className="text-xl font-serif font-bold">Gestión de Citas Agendadas</h3>
                   </div>
-                  <div className="flex gap-1 bg-noir-light p-1 rounded-full border border-white/5">
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 bg-noir-light/50 px-4 py-2 rounded-2xl border border-white/5">
+                      <span className="text-[10px] uppercase font-bold tracking-widest text-cream/40">Mostrar Realizados</span>
+                      <Switch 
+                        checked={showCompleted} 
+                        onCheckedChange={setShowCompleted}
+                        className="scale-75 data-[state=checked]:bg-gold"
+                      />
+                    </div>
+                    <div className="flex gap-1 bg-noir-light p-1 rounded-full border border-white/5">
                     {['all', 'hoy', 'tomorrow'].map(f => (
                       <button 
                         key={f} 
@@ -735,6 +790,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                       </button>
                     ))}
                   </div>
+                </div>
                 </div>
 
                 <div className="rounded-2xl border border-cream/5 bg-noir-light/20 overflow-hidden shadow-2xl backdrop-blur-md">
@@ -1037,7 +1093,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {leads.map((l, i) => (
+                      {filteredLeads.map((l, i) => (
                         <TableRow key={l.id} className={`border-b border-cream/5 hover:bg-cream/[0.02] group transition-colors animate-in fade-in slide-in-from-bottom-2 ${!l.canManage ? 'opacity-40' : ''}`} style={{ animationDelay: `${i * 50}ms` }}>
                           <TableCell className="px-5 py-6">
                             <div className="font-serif font-bold text-cream text-lg tracking-tight leading-tight whitespace-nowrap">{l.canManage ? l.client_name : `Interesado - ${l.category_name}`}</div>
