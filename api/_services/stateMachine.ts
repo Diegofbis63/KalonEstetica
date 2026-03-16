@@ -430,68 +430,36 @@ export async function extractState(
                             state.selectedServiceIds = state.selectedServiceIds.filter(sid => !toRemove.includes(sid));
                             state.stage = state.selectedServiceIds.length > 0 ? 'cart_review' : 'parent_selection';
                         }
-                    } else if (intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("agregar") || normalizedContent.includes("sumar")) {
-                        // User wants to add something from the review stage
+                    } else {
+                        // Check for specific service additions BEFORE generic confirmation
                         const singularize = (w: string) => (w.endsWith('s') && w.length > 3 ? w.slice(0, -1) : w);
                         const inputWords = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 2).map(singularize);
                         
                         const foundSvcsToAdd = services.filter(s => {
                             const nt = normalizeText(s.title);
                             const sn = nt.split(/\s+/).map(singularize);
-                            
-                            // High priority: exact phrase or part of phrase in message
                             if (normalizedContent.includes(nt)) return true;
-                            
-                            // Low priority: key differentiating words
                             const keyWords = sn.filter(w => w.length > 3 && !["masaje", "limpieza", "pestaña", "uña"].some(g => w.includes(g)));
                             return keyWords.some(kw => inputWords.includes(kw));
                         });
+
+                        const isUserAskingToAdd = normalizedContent.includes("agregar") || normalizedContent.includes("sumar") || normalizedContent.includes("mas") || foundSvcsToAdd.length > 0;
+                        const isUserConfirming = normalizedContent.includes("correcto") || normalizedContent.includes("bien") || normalizedContent.includes("si") || normalizedContent.includes("adelante") || normalizedContent.includes("avancemos") || intent === 'afirmacion_o_agregar_carrito';
 
                         if (foundSvcsToAdd.length > 0) {
                             foundSvcsToAdd.forEach(fs => {
                                 if (!state.selectedServiceIds.includes(fs.id)) state.selectedServiceIds.push(fs.id);
                             });
-                            state.stage = 'cart_review'; // Stay here to show updated total
-                        } else {
-                            // Intention to add but no specific service found? Go back to categories
+                            state.stage = 'cart_review';
+                        } else if (isUserAskingToAdd) {
+                            // Intent to add but no specific service? Go to categories
                             state.stage = 'parent_selection';
                             state.currentCategoryId = null;
-                        }
-                    } else {
-                        const foundSvcsToAdd = services.filter(s => {
-                            const nt = normalizeText(s.title);
-                            if (normalizedContent.includes(nt)) return true;
-                            const inputParts = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 3);
-                            return inputParts.some(part => {
-                                const titleParts = nt.split(/\s+/);
-                                return titleParts.some(tp => tp.length > 3 && getSimilarity(part, tp) > 0.9);
-                            });
-                        });
-
-                        const foundCatIds = categories
-                            .filter(c => normalizedContent.includes(normalizeText(c.name)))
-                            .map(c => c.id);
-
-                        if (foundSvcsToAdd.length > 0 || foundCatIds.length > 0) {
-                            foundSvcsToAdd.forEach(fs => {
-                                if (!state.selectedServiceIds.includes(fs.id)) state.selectedServiceIds.push(fs.id);
-                            });
-                            foundCatIds.forEach(cid => {
-                                if (!state.pendingCategoryIds.includes(cid) && state.currentCategoryId !== cid) {
-                                    state.pendingCategoryIds.push(cid);
-                                }
-                            });
-                            
-                            if (state.pendingCategoryIds.length > 0 && foundSvcsToAdd.length === 0) {
-                                state.currentCategoryId = state.pendingCategoryIds.shift()!;
-                                state.stage = 'sub_service_selection';
-                            } else {
-                                state.stage = 'cart_review';
-                            }
-                        } else if (intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("si") || normalizedContent.includes("correcto") || normalizedContent.includes("bien") || normalizedContent.includes("adelante") || normalizedContent.includes("confirmar") || normalizedContent.includes("estamos")) {
-                             state.stage = 'name_collection';
-                        } else if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("modificar") || normalizedContent.includes("cambiar") || normalizedContent.includes("no")) {
-                             state.stage = 'parent_selection';
+                        } else if (isUserConfirming) {
+                            // User said "si" or "correcto" without mentioning a service
+                            state.stage = 'name_collection';
+                        } else if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("modificar") || normalizedContent.includes("no")) {
+                            state.stage = 'parent_selection';
                         }
                     }
                 }
