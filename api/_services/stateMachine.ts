@@ -308,63 +308,71 @@ export async function extractState(
                         // Identify category words to ignore them in service matching
                         const categoryWords = categories.map(c => normalizeText(c.name)).flatMap(n => n.split(/\s+/));
                         
-                        let potentialSvcs = services.filter(s => {
+                        const hasConjunction = /[\s,]+(y|e|con|[+])[\s,]+/.test(normalizedContent) || normalizedContent.includes(",");
+                        
+                        const scoredSvcs = services.map(s => {
                             const nt = normalizeText(s.title);
                             const currentCat = categories.find(c => c.id === state.currentCategoryId);
                             const currentCatName = currentCat ? normalizeText(currentCat.name) : '';
                             
-                            // Logic: Match if same category OR if user mentions the specific service title globally
-                            if (state.currentCategoryId && s.category_id !== state.currentCategoryId) {
-                                // Only allow global match if the full title is explicitly mentioned
-                                return normalizedContent.includes(nt);
-                            }
-                            
-                            // 1. EXACT PHRASE MATCH (but exclude if it's JUST the category name)
-                            if (normalizedContent === nt) return true;
-                            if (normalizedContent.includes(nt) && nt.length > currentCatName.length) return true;
-                            
-                            // 2. Exact word match for core identifying words (EXCLUDING category generic words)
+                            let score = 0;
+                            let matchesDifferentiating = false;
+
+                            // 1. Exact phrase match (Highest Priority)
+                            if (normalizedContent === nt) score += 100;
+                            else if (normalizedContent.includes(nt) && nt.length > currentCatName.length) score += 50;
+
+                            // 2. Word matching
                             const inputWords = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 3);
-                            // Words in the title that are NOT category names or generic "de", "con", etc.
                             const titleWords = nt.split(/\s+/).filter(w => 
                                 w.length >= 3 && 
                                 !categoryWords.includes(w) && 
                                 !["con", "sin", "para", "los", "las", "del"].includes(w)
                             );
-                            
+
                             if (titleWords.length === 0) {
-                                // If the title is mostly category words (e.g. "Pestañas"), we only match if user is explicit
-                                return normalizedContent === nt;
-                            }
-
-                            const matchesDifferentiatingWord = titleWords.some((tw: string) => 
-                                inputWords.includes(tw) || (tw.length > 4 && inputWords.some(iw => iw.includes(tw) || tw.includes(iw)))
-                            );
-
-                            if (matchesDifferentiatingWord) {
-                                // Double check: if user ONLY said words that are category names, ignore
-                                const hasDifferentiatingInput = inputWords.some(iw => !categoryWords.includes(iw));
-                                if (!hasDifferentiatingInput && normalizedContent !== nt) return false;
-
-                                if (normalizedContent.length > 5 || normalizedContent === nt || getSimilarity(normalizedContent, nt) > 0.7) return true;
-                            }
-
-                            return false;
-                        });
-                        // Refined Differentiation: If multiple services found, we only filter if they are subsets of each other
-                        if (potentialSvcs.length > 1) {
-                            // Only keep longer ones if one is a substring of another (e.g. "Semi" vs "Semi + Art")
-                            // unless both parts of the longer one are explicitly mentioned.
-                            potentialSvcs = potentialSvcs.filter(s1 => {
-                                const t1 = normalizeText(s1.title);
-                                return !potentialSvcs.some(s2 => {
-                                    if (s1.id === s2.id) return false;
-                                    const t2 = normalizeText(s2.title);
-                                    // If t1 is contained in t2, and normalizedContent ONLY contains the t1 part, s1 is better? 
-                                    // Actually, usually we want the most specific match.
-                                    return false; // For now, let's trust accumulation
+                                if (normalizedContent === nt) score += 10;
+                            } else {
+                                titleWords.forEach(tw => {
+                                    if (inputWords.includes(tw)) {
+                                        score += 10;
+                                        matchesDifferentiating = true;
+                                    } else if (tw.length > 4 && inputWords.some(iw => iw.includes(tw) || tw.includes(iw))) {
+                                        score += 5;
+                                        matchesDifferentiating = true;
+                                    }
                                 });
-                            });
+                            }
+
+                            // Global match check
+                            if (state.currentCategoryId && s.category_id !== state.currentCategoryId) {
+                                if (!normalizedContent.includes(nt)) score = 0; // Global must be exact-ish
+                            }
+
+                            return { service: s, score, matchesDifferentiating };
+                        }).filter(res => res.score > 0);
+
+                        let potentialSvcs: Service[] = [];
+                        if (scoredSvcs.length > 0) {
+                            // Find the max score
+                            const maxScore = Math.max(...scoredSvcs.map(s => s.score));
+                            
+                            if (hasConjunction) {
+                                // If conjunction, take all that have a decent score
+                                potentialSvcs = scoredSvcs.filter(s => s.score >= 5).map(s => s.service);
+                            } else {
+                                // No conjunction: 
+                                // Take only the best ones. If there are multiple with same max score, 
+                                // it might still be an ambiguous phrase.
+                                const bestOnes = scoredSvcs.filter(s => s.score === maxScore);
+                                if (bestOnes.length === 1) {
+                                    potentialSvcs = [bestOnes[0].service];
+                                } else {
+                                    // Ambiguity between top matches. If they match differentiating words, 
+                                    // we might have to be careful. For now, take the first to avoid double adding.
+                                    potentialSvcs = [bestOnes[0].service];
+                                }
+                            }
                         }
 
                         if (potentialSvcs.length > 0) {
