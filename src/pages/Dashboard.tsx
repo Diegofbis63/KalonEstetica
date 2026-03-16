@@ -103,6 +103,7 @@ interface Appointment {
     price: number | string;
     duration: string;
     category_name?: string;
+    category?: string;
   }>;
   total_price?: number;
   total_duration?: number;
@@ -509,27 +510,6 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                   </h4>
                                   {appt.canManage && (
                                     <>
-                                      {appt.phone && (
-                                        <button 
-                                          onClick={() => {
-                                            const leadObj: Lead = {
-                                              id: appt.lead_id!,
-                                              client_name: appt.client_name!,
-                                              contact_info: { phone: appt.phone },
-                                              status: appt.status,
-                                              intent_score: 100,
-                                              is_bot_enabled: appt.is_bot_enabled || false,
-                                              created_at: appt.created_at,
-                                              canManage: appt.canManage
-                                            };
-                                            openChat(leadObj);
-                                          }}
-                                          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-[10px] font-bold font-mono hover:bg-emerald-500/10 hover:border-emerald-500/40 transition-all group/wa whitespace-nowrap"
-                                        >
-                                          <MessageSquare className="w-3 h-3 group-hover/wa:scale-110 transition-transform" />
-                                          Chat WhatsApp
-                                        </button>
-                                      )}
                                       {appt.total_duration ? (
                                         <div className="inline-flex items-center gap-4 px-5 py-3 rounded-2xl bg-gold/10 border border-gold/30 shadow-[0_0_30px_rgba(194,154,91,0.15)] group/duration hover:bg-gold/15 transition-all">
                                           <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gold/20 border border-gold/20 flex-shrink-0">
@@ -802,9 +782,9 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14">Contacto</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 w-fit">Servicio</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center">Duración</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center">Estado</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center">Fecha / Hora</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center">Precio</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center">Estado</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-4 h-14 text-center">BOT</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-4 h-14 text-center">Wsp</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-right">Acciones</TableHead>
@@ -902,7 +882,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                 </Popover>
                               ) : (
                                 (a.service_type === 'Servicio' && a.selected_services && a.selected_services.length > 0)
-                                   ? Array.from(new Set(a.selected_services.map(s => s.category_name || (s as any).category || "Servicio"))).join(' + ')
+                                   ? Array.from(new Set(a.selected_services.map(s => s.category_name || s.category || "Servicio"))).join(' + ')
                                    : a.service_type
                               )}
                             </div>
@@ -925,6 +905,45 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                               })()}
                             </div>
                           </TableCell>
+                          <TableCell className="px-5 py-6 text-center">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button className="outline-none focus:outline-none focus-visible:outline-none">
+                                  <Badge 
+                                    variant="outline" 
+                                    className={`
+                                      text-[9px] font-black tracking-[0.15em] px-3 py-1 rounded-full border shadow-sm mx-auto cursor-pointer hover:brightness-125 transition-all
+                                      ${ (a.status === 'scheduled' || a.status === 'confirmed')
+                                        ? 'border-sky-500/30 bg-sky-500/5 text-sky-400' 
+                                        : (a.status === 'completed' || a.status === 'REALIZADA')
+                                        ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-400'
+                                        : a.status === 'canceled'
+                                        ? 'border-rose-500/30 bg-rose-500/5 text-rose-400'
+                                        : 'border-gold/30 bg-gold/5 text-gold'}
+                                    `}
+                                  >
+                                    { (a.status === 'scheduled' || a.status === 'confirmed') ? 'CONFIRMADA' : 
+                                      (a.status === 'completed' || a.status === 'REALIZADA') ? 'REALIZADA' : 
+                                      a.status === 'canceled' ? 'CANCELADA' : 'PENDIENTE'}
+                                  </Badge>
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="center" className="bg-noir-light border-white/10 text-cream/80 backdrop-blur-xl">
+                                <DropdownMenuItem className="focus:bg-gold/10 focus:text-gold cursor-pointer" onClick={() => updateAppointment.mutate({ id: a.id, status: 'pending' })}>
+                                  <Clock className="w-3.5 h-3.5 mr-2" /> Marcar como PENDIENTE
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="focus:bg-sky-500/10 focus:text-sky-400 cursor-pointer" onClick={() => updateAppointment.mutate({ id: a.id, status: 'confirmed' })}>
+                                  <CalendarCheck className="w-3.5 h-3.5 mr-2" /> Marcar como CONFIRMADA
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="focus:bg-emerald-500/10 focus:text-emerald-400 cursor-pointer" onClick={() => updateAppointment.mutate({ id: a.id, status: 'REALIZADA' })}>
+                                  <CheckCircle2 className="w-3.5 h-3.5 mr-2" /> Marcar como REALIZADA
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="focus:bg-rose/10 focus:text-rose cursor-pointer" onClick={() => updateAppointment.mutate({ id: a.id, status: 'canceled' })}>
+                                  <XCircle className="w-3.5 h-3.5 mr-2" /> Marcar como CANCELADA
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
                           <TableCell className="px-5 py-6 text-center font-sans">
                             <div className="text-sm font-medium text-cream/60 capitalize whitespace-nowrap">
                               {new Intl.DateTimeFormat('es-AR', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'America/Argentina/Cordoba' }).format(new Date(a.date_time))}
@@ -938,25 +957,6 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                             <div className="text-sm font-bold text-gold/90 whitespace-nowrap">
                               {a.total_price ? `$${Number(a.total_price || 0).toLocaleString('es-AR')}` : "-"}
                             </div>
-                          </TableCell>
-                          <TableCell className="px-5 py-6 text-center">
-                            <Badge 
-                              variant="outline" 
-                              className={`
-                                text-[9px] font-black tracking-[0.15em] px-3 py-1 rounded-full border shadow-sm mx-auto
-                                ${ (a.status === 'scheduled' || a.status === 'confirmed')
-                                  ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-400' 
-                                  : (a.status === 'completed' || a.status === 'REALIZADA')
-                                  ? 'border-sky-500/30 bg-sky-500/5 text-sky-400'
-                                  : a.status === 'canceled'
-                                  ? 'border-rose-500/30 bg-rose-500/5 text-rose-400'
-                                  : 'border-gold/30 bg-gold/5 text-gold'}
-                              `}
-                            >
-                              { (a.status === 'scheduled' || a.status === 'confirmed') ? 'CONFIRMADA' : 
-                                (a.status === 'completed' || a.status === 'REALIZADA') ? 'REALIZADA' : 
-                                a.status === 'canceled' ? 'CANCELADA' : 'PENDIENTE'}
-                            </Badge>
                           </TableCell>
                           <TableCell className="px-4 py-6 text-center">
                             <div className="flex items-center justify-center gap-2">
