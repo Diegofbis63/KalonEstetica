@@ -431,15 +431,17 @@ export async function extractState(
                             state.stage = state.selectedServiceIds.length > 0 ? 'cart_review' : 'parent_selection';
                         }
                     } else {
-                        // FORCE BRUTE: Normalize and check for confirmation FIRST
-                        const confirmationKeywords = ['si', 'correcto', 'perfecto', 'bien', 'dale', 'ok', 'listo', 'avanzar', 'genial', 'obvio', 'confirmo', 'avancemos', 'adelante', 'estamos'];
-                        const isUserConfirming = confirmationKeywords.some(kw => normalizedContent.includes(kw)) || intent === 'afirmacion_o_agregar_carrito';
+                        // --- 1. CORE CONFIRMATION LOGIC (PRIORITY #1) ---
+                        // Brute force normalization and checking for confirmation
+                        const confirmWords = ['si', 'correcto', 'perfecto', 'bien', 'dale', 'ok', 'listo', 'avanzar', 'genial', 'obvio', 'confirmo', 'avancemos', 'adelante', 'estamos'];
+                        const isUserConfirming = confirmWords.some(kw => normalizedContent.includes(kw)) || intent === 'afirmacion_o_agregar_carrito';
 
-                        // 1. Identify specific service additions
+                        // --- 2. SERVICE ADDITION LOGIC (PRIORITY #2) ---
                         const singularize = (w: string) => (w.endsWith('s') && w.length > 3 ? w.slice(0, -1) : w);
                         const inputWords = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 2).map(singularize);
                         
-                        const foundSvcsToAdd = services.filter(s => {
+                        // Look for services in the message
+                        const matchedSvcs = services.filter(s => {
                             const nt = normalizeText(s.title);
                             const sn = nt.split(/\s+/).map(singularize);
                             if (normalizedContent.includes(nt)) return true;
@@ -447,27 +449,32 @@ export async function extractState(
                             return keyWords.some(kw => inputWords.includes(kw));
                         });
 
-                        const isUserAskingToAdd = normalizedContent.includes("agregar") || normalizedContent.includes("sumar") || normalizedContent.includes("mas") || foundSvcsToAdd.length > 0;
+                        // Filter only for services NOT already in the cart to avoid false positives (like "esta" matching something)
+                        const newSvcsToAdd = matchedSvcs.filter(s => !state.selectedServiceIds.includes(s.id));
+                        const isUserAskingToAdd = normalizedContent.includes("agregar") || normalizedContent.includes("sumar") || normalizedContent.includes("mas") || newSvcsToAdd.length > 0;
 
-                        if (foundSvcsToAdd.length > 0) {
-                            foundSvcsToAdd.forEach(fs => {
+                        // --- 3. EXECUTION ORDER AND STATE TRANSITION ---
+                        if (isUserConfirming && newSvcsToAdd.length === 0) {
+                            // User is confirming and not providing a NEW service to add
+                            state.stage = 'name_collection';
+                            state.errorType = undefined;
+                        } else if (newSvcsToAdd.length > 0) {
+                            // User provided NEW services to add
+                            newSvcsToAdd.forEach(fs => {
                                 if (!state.selectedServiceIds.includes(fs.id)) state.selectedServiceIds.push(fs.id);
                             });
                             state.stage = 'cart_review';
                             state.errorType = undefined;
                         } else if (isUserAskingToAdd) {
+                            // User wants to add something but we couldn't match a new service, go to categories
                             state.stage = 'parent_selection';
                             state.currentCategoryId = null;
-                            state.errorType = undefined;
-                        } else if (isUserConfirming) {
-                            // High priority: if confirmed and not adding a specific service, go to names
-                            state.stage = 'name_collection';
                             state.errorType = undefined;
                         } else if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("modificar") || normalizedContent.includes("no")) {
                             state.stage = 'parent_selection';
                             state.errorType = undefined;
                         } else {
-                            // Fallback for unrecognized input in this state
+                            // Fallback for truly unrecognized input in this state
                             state.stage = 'cart_review';
                             state.errorType = 'unrecognized_cart_action';
                         }
