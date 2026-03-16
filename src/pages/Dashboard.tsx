@@ -354,9 +354,16 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
 
   const filteredLeads = useMemo(() => {
     if (showCompleted) return leads;
-    // Hide qualified leads if not showing completed (UX optimization requested)
-    return leads.filter(l => l.status !== 'qualified');
-  }, [leads, showCompleted]);
+    return leads.filter(l => {
+      if (l.status === 'qualified') return false;
+      const leadAppts = appointments.filter(a => a.lead_id === l.id);
+      if (leadAppts.length > 0) {
+        const allFinished = leadAppts.every(a => a.status === 'REALIZADA' || a.status === 'completed' || a.status === 'canceled');
+        if (allFinished) return false;
+      }
+      return true;
+    });
+  }, [leads, appointments, showCompleted]);
 
   const filteredAppointments = useMemo(() => {
     const target = new Date();
@@ -380,7 +387,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
     { 
       icon: Users, 
       label: "Clientes Activos", 
-      value: leads.filter(l => l.status !== 'qualified').length, 
+      value: filteredLeads.length, 
       color: "text-gold", 
       path: "/dashboard/clients" 
     },
@@ -412,7 +419,15 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
 
   const actionAlerts = useMemo(() => {
     const pendingAppts = appointments.filter(a => a.status === 'pending');
-    const hotLeads = leads.filter(l => l.intent_score > 80 && l.status !== 'qualified');
+    const hotLeads = leads.filter(l => {
+      if (l.intent_score <= 80 || l.status === 'qualified') return false;
+      const leadAppts = appointments.filter(a => a.lead_id === l.id);
+      if (leadAppts.length > 0) {
+        const allFinished = leadAppts.every(a => a.status === 'REALIZADA' || a.status === 'completed' || a.status === 'canceled');
+        if (allFinished) return false;
+      }
+      return true;
+    });
     return { pendingAppts, hotLeads };
   }, [appointments, leads]);
 
