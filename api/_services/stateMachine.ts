@@ -33,6 +33,7 @@ export interface ConvState {
     requestedAllOptions: boolean;
     lastIntent?: string;
     isBotEnabled: boolean;
+    errorType?: 'service_not_found' | 'category_not_found';
 }
 
 export interface Category {
@@ -104,6 +105,9 @@ export async function extractState(
         requestedAllOptions: false,
         isBotEnabled: initialState ? initialState.isBotEnabled : defaultIsBotEnabled
     };
+
+    // Clear previous errors
+    delete state.errorType;
 
     // If we have an initialState and NO reset, we only process the LATEST message.
     // If it's a fresh session OR a reset session, we process the latest message too (but we start from greeting).
@@ -302,21 +306,21 @@ export async function extractState(
                     if (!isOnlyNamingCategories) {
                         const inputParts = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 3);
                         let potentialSvcs = services.filter(s => {
+                            const nt = normalizeText(s.title);
                             // Logic: Match if same category OR if user mentions the specific service title globally
                             if (state.currentCategoryId && s.category_id !== state.currentCategoryId) {
                                 // Only allow global match if the full title is explicitly mentioned
-                                return normalizedContent.includes(normalizeText(s.title));
+                                return normalizedContent.includes(nt);
                             }
                             
-                            const nt = normalizeText(s.title);
-                            // 1. EXACT PHRASE MATCH
-                            if (normalizedContent.includes(nt)) return true;
+                            // 1. EXACT OR PARTIAL PHRASE MATCH
+                            if (normalizedContent.includes(nt) || nt.includes(normalizedContent)) return true;
                             
                             // 2. Exact word match for core identifying words
                             const inputWords = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 3);
                             const titleWords = nt.split(/\s+/).filter(w => w.length > 3);
                             
-                            const matchesCoreWord = titleWords.some(tw => inputWords.includes(tw));
+                            const matchesCoreWord = titleWords.some((tw: string) => inputWords.includes(tw));
                             if (matchesCoreWord) {
                                 // If it's a category name, ignore it as a service match (e.g. user said "cejas" to see the list)
                                 const isCategoryName = categories.some(cat => normalizeText(cat.name) === normalizedContent);
@@ -332,8 +336,8 @@ export async function extractState(
 
                         // Refined Differentiation: If multiple services found, we need to be EXTRA strict
                         if (potentialSvcs.length > 1) {
-                            // 1. Try to find an exact full-title match in the text
-                            const exactMatches = potentialSvcs.filter(s => normalizedContent.includes(normalizeText(s.title)));
+                            // 1. Try to find an exact full-title match OR a very strong partial in the text
+                            const exactMatches = potentialSvcs.filter(s => normalizedContent.includes(normalizeText(s.title)) || normalizeText(s.title).includes(normalizedContent));
                             if (exactMatches.length === 1) {
                                 potentialSvcs = exactMatches;
                             } else {
@@ -341,8 +345,8 @@ export async function extractState(
                                 potentialSvcs = potentialSvcs.filter(s => {
                                     const snt = normalizeText(s.title);
                                     // Split title into words and find words longer than 4 chars that are NOT "masaje", "limpieza", etc.
-                                    const uniqueWords = snt.split(/\s+/).filter(w => w.length > 4 && !["masaje", "limpieza", "facial", "tratamiento", "corporal"].includes(w));
-                                    return uniqueWords.some(uw => normalizedContent.includes(uw));
+                                    const uniqueWords = snt.split(/\s+/).filter((w: string) => w.length > 4 && !["masaje", "limpieza", "facial", "tratamiento", "corporal"].includes(w));
+                                    return uniqueWords.some((uw: string) => normalizedContent.includes(uw));
                                 });
                                 
                                 // 3. Final tie-breaker: similarity
@@ -377,27 +381,14 @@ export async function extractState(
                                 state.stage = 'cart_review';
                                 state.currentCategoryId = null;
                             }
-                        } else {
-                            // Affirmation or NEXT stage checking
-                            const isAffirmation = intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("si") || normalizedContent.includes("dale") || normalizedContent.includes("perfecto") || normalizedContent.includes("adelante") || normalizedContent.includes("asi esta bien") || normalizedContent.includes("listo");
-                            if (isAffirmation && state.selectedServiceIds.length > 0) {
-                                if (state.pendingCategoryIds.length > 0) {
-                                    state.currentCategoryId = state.pendingCategoryIds.shift()!;
-                                    state.stage = 'sub_service_selection';
-                                } else {
-                                    state.stage = 'cart_review';
-                                    state.currentCategoryId = null;
-                                }
-                            } else if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("ningun") || normalizedContent.includes("nada") || normalizedContent.includes("no gracias") || normalizedContent.includes("bastante")) {
-                                if (state.pendingCategoryIds.length > 0) {
-                                    state.currentCategoryId = state.pendingCategoryIds.shift()!;
-                                    state.stage = 'sub_service_selection';
-                                } else {
-                                    state.stage = state.selectedServiceIds.length > 0 ? 'cart_review' : 'parent_selection';
-                                    state.currentCategoryId = null;
+                             } else {
+                                // Clear error if navigated elsewhere, else set if ambiguous or not found
+                                const isAffirmation = intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("si") || normalizedContent.includes("dale") || normalizedContent.includes("perfecto") || normalizedContent.includes("adelante") || normalizedContent.includes("asi esta bien") || normalizedContent.includes("listo");
+                                const isNav = isAffirmation || intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("ningun") || normalizedContent.includes("nada") || normalizedContent.includes("no gracias") || normalizedContent.includes("bastante");
+                                if (!isNav && !categoriesRequestedInThisTurn) {
+                                    state.errorType = 'service_not_found';
                                 }
                             }
-                        }
                     }
                 }
                 if (currentBotAsked === 'cart_review') {
@@ -556,7 +547,7 @@ export async function extractState(
         // If the current stage is greeting but there are selected services and we were deep in a flow, 
         // it means we lost context. Let's recover the last logical stage.
         if (state.stage === 'greeting' && state.selectedServiceIds.length > 0) {
-            let lastKnownStage: any = null;
+            let lastKnownStage: ConvState['stage'] | null = null;
             // Scan backwards through messages to find the last bot question
             for (let k = messages.length - 1; k >= 0; k--) {
                const m = messages[k];
@@ -605,7 +596,7 @@ export function generateResponse(
     }
 
     const welcome = isFromWhatsApp 
-        ? (state.clientName ? `¡Hola ${state.clientName.split(' ')[0]}! Qué lindo saludarte de nuevo. ` : "¡Hola! Qué lindo saludarte. Bienvenida a *KÂLON Estética* ✨. ")
+        ? (state.clientName ? `¡Hola ${state.clientName.split(' ')[0]}! Qué lindo saludarte de nuevo. ` : "¡Hola! Qué lindo saludarte. ")
         : "";
     
     const isNew = state.selectedServiceIds.length === 0 && !state.currentCategoryId;
@@ -632,7 +623,9 @@ export function generateResponse(
                 const selectedCount = state.selectedServiceIds.length;
                 let prefix = "";
                 
-                if (selectedCount > 0) {
+                if (state.errorType === 'service_not_found') {
+                    prefix = `Perdón, no encontré ese tratamiento. 😕 ¿Podrías escribir el nombre (o una parte) tal como aparece en la lista para que pueda sumarlo?\n\nRevisemos de nuevo los servicios de *${cat?.name}*:\n\n`;
+                } else if (selectedCount > 0) {
                     prefix = `¡Qué buena elección! Ya te sumé lo anterior. 💖 Ahora contame, de *${cat?.name}*, ¿cuál te gustaría realizarte?\n\n`;
                 } else if (state.pendingCategoryIds.length > 0) {
                     prefix = `¡Perfecto! Vamos por partes. Primero contame de *${cat?.name}*, ¿cuál te gustaría? (Después vemos las otras categorías que pediste) 😊\n\n`;
