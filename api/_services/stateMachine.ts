@@ -35,10 +35,29 @@ export interface ConvState {
     isBotEnabled: boolean;
 }
 
+export interface Category {
+    id: string;
+    name: string;
+}
+
+export interface Service {
+    id: string;
+    category_id: string;
+    title: string;
+    price: number | string;
+    duration: string;
+    category_name?: string;
+}
+
+export interface Slot {
+    date: string;
+    time: string;
+}
+
 export async function extractState(
     messages: ChatMessage[], 
-    categories: any[], 
-    services: any[],
+    categories: Category[], 
+    services: Service[],
     defaultIsBotEnabled: boolean = true,
     initialName: string | null = null,
     initialPhone: string | null = null
@@ -120,8 +139,8 @@ export async function extractState(
                 services.forEach(s => {
                     const normalizedTitle = normalizeText(s.title);
                     // Captures services from confirmation messages, itemized lists, or totals
-                    const isRecap = botText.includes("revisemos") || botText.includes("pedido") || botText.includes("total") || botText.includes("sesion va a durar") || botText.includes("resumen");
-                    const isConfirmation = botText.includes("agregue") || botText.includes("seleccionaste") || botText.includes("sume") || botText.includes("ya te sume");
+                    const isRecap = botText.includes("revisemos") || botText.includes("pedido") || botText.includes("total") || botText.includes("sesion va a durar") || botText.includes("resumen") || botText.includes("confirmado");
+                    const isConfirmation = botText.includes("agregue") || botText.includes("seleccionaste") || botText.includes("sume") || botText.includes("ya te sume") || botText.includes("que buena eleccion");
                     
                     if (botText.includes(normalizedTitle) && (isConfirmation || isRecap)) {
                         if (!state.selectedServiceIds.includes(s.id)) state.selectedServiceIds.push(s.id);
@@ -288,24 +307,29 @@ export async function extractState(
                             if (exactMatches.length === 1) {
                                 potentialSvcs = exactMatches;
                             } else {
-                                // 2. Try identifying keywords (ruso, clasicas, etc.)
-                                const identifiers = ["ruso", "clasicas", "1x1", "keratina", "polygel", "kapping", "semi", "lifting", "volumen", "henna", "6d", "brow lamination", "laminado"];
-                                const foundIds = identifiers.filter(id => normalizedContent.includes(id));
-                                
-                                if (foundIds.length > 0) {
-                                    // If we have IDs, only keep svcs that match the most specific ID found
-                                    potentialSvcs = potentialSvcs.filter(s => {
-                                        const snt = normalizeText(s.title);
-                                        return foundIds.some(fid => snt.includes(fid));
-                                    });
-                                }
+                                // 2. Try identifying keywords (specific unique words for the service)
+                                potentialSvcs = potentialSvcs.filter(s => {
+                                    const snt = normalizeText(s.title);
+                                    // Split title into words and find words longer than 4 chars that are NOT "masaje", "limpieza", etc.
+                                    const uniqueWords = snt.split(/\s+/).filter(w => w.length > 4 && !["masaje", "limpieza", "facial", "tratamiento", "corporal"].includes(w));
+                                    return uniqueWords.some(uw => normalizedContent.includes(uw));
+                                });
                                 
                                 // 3. Final tie-breaker: similarity
-                                if (potentialSvcs.length > 1) {
-                                    const withSimilarity = potentialSvcs.map(s => ({ svc: s, sim: getSimilarity(normalizedContent, normalizeText(s.title)) }));
-                                    withSimilarity.sort((a, b) => b.sim - a.sim);
-                                    if (withSimilarity[0].sim > 0.9) potentialSvcs = [withSimilarity[0].svc];
-                                    else potentialSvcs = []; // Too ambiguous
+                                if (potentialSvcs.length > 1 || potentialSvcs.length === 0) {
+                                    // Recalculate if filtering was too aggressive or still ambiguous
+                                    const originalSvcs = services.filter(s => {
+                                         if (state.currentCategoryId && s.category_id !== state.currentCategoryId) return false;
+                                         return normalizedContent.includes(normalizeText(s.title));
+                                    });
+                                    if (originalSvcs.length === 1) {
+                                        potentialSvcs = originalSvcs;
+                                    } else {
+                                        const withSimilarity = (originalSvcs.length ? originalSvcs : services).map(s => ({ svc: s, sim: getSimilarity(normalizedContent, normalizeText(s.title)) }));
+                                        withSimilarity.sort((a, b) => b.sim - a.sim);
+                                        if (withSimilarity[0].sim > 0.85) potentialSvcs = [withSimilarity[0].svc];
+                                        else potentialSvcs = []; // Too ambiguous
+                                    }
                                 }
                             }
                         }
@@ -444,6 +468,9 @@ export async function extractState(
                     ) {
                         state.stage = 'payment_request';
                         console.log(`[stateMachine.ts] Turn ${i}: Transition to payment_request (Availability confirmed)`);
+                        // Ensure we carry over the pending date/time explicitly to avoid race conditions in re-parsing
+                        if (!state.requestedDate && state.pendingDate) state.requestedDate = state.pendingDate;
+                        if (!state.requestedTime && state.pendingTime) state.requestedTime = state.pendingTime;
                     }
                 }
                 if (currentBotAsked === 'payment' || state.stage === 'payment_request' || state.stage === 'waiting_for_receipt') {
@@ -478,7 +505,7 @@ export async function extractState(
             const isFinished = ['done', 'waiting_for_receipt', 'payment_request'].includes(state.stage);
             
             if (!isInteracting && !isFinished) {
-                if (!state.clientName) {
+                if (!state.clientName || state.clientName === 'Cliente') {
                     state.stage = 'name_collection';
                     console.log(`[stateMachine.ts] Progression: name_collection`);
                 } else if (!state.clientPhone || state.clientPhone === 'Cliente') {
@@ -533,9 +560,9 @@ export async function extractState(
 
 export function generateResponse(
     state: ConvState,
-    categories: any[],
-    services: any[],
-    availableSlots: any[],
+    categories: Category[],
+    services: Service[],
+    availableSlots: Slot[],
     isFromWhatsApp: boolean,
     hasMediaInLastMsg: boolean
 ): string {
