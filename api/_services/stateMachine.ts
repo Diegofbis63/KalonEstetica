@@ -738,10 +738,15 @@ export function generateResponse(
                 const durText = formatDurationHuman(totalDur);
                 const personalGreeting = state.clientName ? `¡Todo listo, *${state.clientName.split(' ')[0]}*! ✨ ` : "¡Excelente elección! ✨ ";
 
-                return `${personalGreeting}Tu sesión de *${serviceList}* durará aproximadamente *${durText}* y el valor total es de *$${totalPrice}*.\n\nPara confirmar definitivamente tu lugar el día *${formatDateHuman(state.pendingDate || '')}* a las *${state.pendingTime}hs*, necesitamos una seña del 50% (*$${deposit.toFixed(0)}*).\n\nTransferí al alias: *KALON.ESTETICA.OK* y enviame el comprobante por aquí. ¡Ya casi estamos! 📸`;
+                const webNote = !isFromWhatsApp ? "\n\nPodés subir el comprobante haciendo clic en el clip aquí abajo, o si te queda más cómodo, simplemente envíame la foto por WhatsApp. ¡Yo lo voy a recibir igual! 📸" : "";
+                const mainMsg = `${personalGreeting}Tu sesión de *${serviceList}* durará aproximadamente *${durText}* y el valor total es de *$${totalPrice}*.\n\nPara confirmar definitivamente tu lugar el día *${formatDateHuman(state.pendingDate || '')}* a las *${state.pendingTime}hs*, necesitamos una seña del 50% (*$${deposit.toFixed(0)}*).\n\nTransferí al alias: *KALON.ESTETICA.OK* y enviame el comprobante por aquí. ¡Ya casi estamos! 📸`;
+                
+                return `${mainMsg}${webNote}`;
             }
-            case 'waiting_for_receipt':
-                return "Quedo atenta a tu comprobante de transferencia para terminar de confirmar tu turno. ¡Cualquier duda decime! 😊";
+            case 'waiting_for_receipt': {
+                const note = !isFromWhatsApp ? " Recordá que podés subirlo con el clip de abajo o mandarlo por WhatsApp. 📸" : "";
+                return `Quedo atenta a tu comprobante de transferencia para terminar de confirmar tu turno.${note} ¡Cualquier duda decime! 😊`;
+            }
             default:
                 return "¡Hola! ¿En qué más puedo ayudarte hoy para que te sientas radiante? ✨";
         }

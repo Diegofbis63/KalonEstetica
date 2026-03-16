@@ -86,7 +86,7 @@ export default function KalonChat() {
         setStep("chatting");
         setMessages([{ 
           role: "assistant", 
-          content: `¡Hola de nuevo, **${data.lead.client_name}**! Te recuperé tu sesión. ¿Seguimos donde dejamos? 😊` 
+          content: `¡Te encontré, **${data.lead.client_name}**! Para tu comodidad, he vinculado esta charla con tu WhatsApp. Podés seguir por acá o por tu celular, ¡como prefieras! 😊` 
         }]);
       } else {
         setStep("chatting");
