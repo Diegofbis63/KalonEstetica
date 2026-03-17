@@ -33,6 +33,7 @@ export interface ConvState {
     requestedAllOptions: boolean;
     lastIntent?: string;
     isBotEnabled: boolean;
+    currentFlow?: 'none' | 'booking_funnel';
     errorType?: 'service_not_found' | 'category_not_found' | 'unrecognized_cart_action';
 }
 
@@ -193,9 +194,11 @@ export async function extractState(
 
     // ANTI-AMNESIA LOGIC: Conversational Rebuild
     // If we have an initialState and it's NOT a greeting, we only process the LATEST message (Performance).
-    // IF the state is lost (greeting/null) OR it's a reset, we process the FULL HISTORY to reconstruct context.
+    // IF the state is lost (greeting/null) OR it's a reset, we process the FULL HISTORY (User messages only) to reconstruct context.
     const isStateLost = (state.stage === 'greeting' && state.selectedServiceIds.length === 0);
-    const messagesToProcess = (isStateLost && messages.length > 1) ? messages : (messages.length > 0 ? [messages[messages.length - 1]] : []);
+    const messagesToProcess = (isStateLost && messages.length > 1) 
+        ? messages.filter(m => m.role === 'user') 
+        : (messages.length > 0 ? [messages[messages.length - 1]] : []);
     
     if (isStateLost && messages.length > 1) {
         console.log(`[stateMachine.ts] AMNESIA DETECTED. Reconstructing state from ${messages.length} messages...`);
@@ -299,9 +302,26 @@ export async function extractState(
                         state.pendingDate = null;
                         state.pendingTime = null;
                     }
-                    if (state.stage === 'availability_proposal' || ['name_collection', 'phone_collection'].includes(state.stage)) {
+                    if (state.selectedServiceIds.length > 0) {
                          state.stage = 'availability_proposal';
-                         console.log(`[stateMachine.ts] Requested date/time detected. Re-triggering availability_proposal.`);
+                         console.log(`[stateMachine.ts] Turn ${i}: Requested date/time detected. Re-triggering availability_proposal.`);
+                    }
+                }
+
+                // --- Global Service Detection ---
+                if (['greeting', 'parent_selection', 'sub_service_selection'].includes(state.stage)) {
+                    const matchedSvc = services.find(s => {
+                        const nt = normalizeText(s.title);
+                        const lc = normalizedContent.toLowerCase();
+                        return (nt.length > 3 && lc.includes(nt)) || (lc.length > 3 && nt.includes(lc));
+                    });
+                    if (matchedSvc) {
+                        if (!state.selectedServiceIds.includes(matchedSvc.id)) {
+                           state.selectedServiceIds.push(matchedSvc.id);
+                        }
+                        state.stage = 'cart_review';
+                        state.currentCategoryId = null;
+                        state.currentFlow = 'booking_funnel';
                     }
                 }
 
@@ -363,9 +383,13 @@ export async function extractState(
                                     const lowerN = normalizeText(cleanName);
                                     if (!services.some(s => normalizeText(s.title).includes(lowerN)) && !categories.some(c => normalizeText(c.name).includes(lowerN))) {
                                         state.clientName = cleanName;
-                                        if (!state.clientPhone) state.stage = 'phone_collection';
-                                        else if (!state.pendingDate) state.stage = 'availability_proposal';
-                                        else state.stage = 'payment_request';
+                                        if (!state.clientPhone) {
+                                            state.stage = 'phone_collection';
+                                        } else if (state.pendingDate && state.pendingTime) {
+                                            state.stage = 'payment_request';
+                                        } else {
+                                            state.stage = 'availability_proposal';
+                                        }
                                     }
                                 }
                             }
@@ -433,7 +457,7 @@ export async function extractState(
 
                             // Global match check
                             if (state.currentCategoryId && s.category_id !== state.currentCategoryId) {
-                                if (!normalizedContent.includes(nt) && score < 40) score = 0; // Global must be strong match
+                                if (score < 100 && !normalizedContent.includes(nt) && score < 40) score = 0; // Global must be strong match
                             }
 
                             return { service: s, score, matchesDifferentiating };
@@ -537,7 +561,7 @@ export async function extractState(
                             return keyWords.some(kw => inputWords.includes(kw));
                         });
 
-                        const newSvcsToAdd = matchedSvcs.filter(s => !state.selectedServiceIds.includes(s.id));
+                        const newSvcsToAdd = matchedSvcs;
 
                         // --- 3. EXECUTION ORDER AND STATE TRANSITION (STRICT PRIORITY) ---
                         const isExplicitAdd = normalizedContent.includes("agregar") || normalizedContent.includes("sumar") || normalizedContent.includes("mas") || intent === 'afirmacion_o_agregar_carrito';
@@ -599,8 +623,13 @@ export async function extractState(
                         normalizedContent.includes("esta bien") ||
                         (normalizedContent.includes("turno") && (normalizedContent.includes("ese") || normalizedContent.includes("esta")))
                     ) {
-                        state.stage = 'payment_request';
-                        console.log(`[stateMachine.ts] Turn ${i}: Transition to payment_request (Availability confirmed)`);
+                        if (state.clientName && state.clientName !== 'Cliente') {
+                            state.stage = 'payment_request';
+                            console.log(`[stateMachine.ts] Turn ${i}: Transition to payment_request (Availability confirmed)`);
+                        } else {
+                            state.stage = 'name_collection';
+                            console.log(`[stateMachine.ts] Turn ${i}: Slot confirmed but NAME MISSING. Routing to name_collection.`);
+                        }
                         if (!state.requestedDate && state.pendingDate) state.requestedDate = state.pendingDate;
                         if (!state.requestedTime && state.pendingTime) state.requestedTime = state.pendingTime;
                     }
@@ -630,22 +659,29 @@ export async function extractState(
 
         // Final stage progression check - DEFENSIVE MODE (DB FIRST)
         if (state.selectedServiceIds.length > 0 && state.pendingCategoryIds.length === 0 && !state.currentCategoryId) {
-            const isInteracting = ['parent_selection', 'sub_service_selection', 'cart_review', 'cart_confirmation', 'name_collection', 'phone_collection', 'availability_proposal'].includes(state.stage);
-            const isFinished = ['done', 'waiting_for_receipt', 'payment_request'].includes(state.stage);
-            
+            const isFinished = ['done', 'waiting_for_receipt', 'payment_request', 'cart_review', 'sub_service_selection'].includes(state.stage);
+            if (isFinished) return state;
+
             // Priority: If user JUST provided a date/time, LOCK the stage to availability_proposal
             const hasJustScheduled = !!(state.requestedDate || state.requestedTime);
+            if (hasJustScheduled) {
+                state.stage = 'availability_proposal';
+                console.log(`[stateMachine.ts] Stage Progression Override: Prioritizing Scheduling intent.`);
+                return state;
+            }
 
-            if (!isInteracting && !isFinished && !hasJustScheduled) {
-                if (!state.clientName || state.clientName === 'Cliente') {
-                    state.stage = 'name_collection';
-                } else if (!state.clientPhone || state.clientPhone === 'Cliente' || state.clientPhone === 'null') {
-                    state.stage = 'phone_collection';
-                } else if (!state.pendingDate || !state.pendingTime) {
-                    state.stage = 'availability_proposal';
-                } else {
-                    state.stage = 'payment_request';
-                }
+            // AUTO-PROGRESSION: Move to the first incomplete step
+            if (!state.clientName || state.clientName === 'Cliente') {
+                state.stage = 'name_collection';
+            } else if (!state.clientPhone || state.clientPhone === 'Cliente' || state.clientPhone === 'null') {
+                state.stage = 'phone_collection';
+            } else if (!state.pendingDate || !state.pendingTime) {
+                state.stage = 'availability_proposal';
+            } else {
+                // We have everything: Services, Name, Phone, and a Pending Slot
+                // If it was already in availability_proposal, it means the user just confirmed.
+                // If it was in some other stage (like cart_review), we assume they are ready for payment.
+                state.stage = 'payment_request';
             }
         }
         
