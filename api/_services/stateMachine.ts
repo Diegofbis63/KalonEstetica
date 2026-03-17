@@ -124,7 +124,7 @@ export async function extractState(
         return {
             clientName: oldState?.clientName || (initialName && initialName !== 'Cliente' ? initialName : null),
             clientPhone: oldState?.clientPhone || initialPhone || null,
-            selectedServiceIds: Array.isArray(oldState?.selectedServiceIds) ? [...new Set(oldState.selectedServiceIds as string[])] : [],
+            selectedServiceIds: Array.isArray(oldState?.selectedServiceIds) ? [...(oldState.selectedServiceIds as string[])] : [],
             currentCategoryId: typeof oldState?.currentCategoryId === 'string' ? oldState.currentCategoryId : null,
             pendingCategoryIds: Array.isArray(oldState?.pendingCategoryIds) ? oldState.pendingCategoryIds : [],
             stage: oldState?.stage || 'greeting',
@@ -460,7 +460,7 @@ export async function extractState(
 
                         if (potentialSvcs.length > 0) {
                             potentialSvcs.forEach(fs => {
-                                if (!state.selectedServiceIds.includes(fs.id)) state.selectedServiceIds.push(fs.id);
+                                state.selectedServiceIds.push(fs.id);
                             });
                             
                             // PROGRESSION: If we added services, check if there are more categories or go to review
@@ -549,7 +549,7 @@ export async function extractState(
                             state.errorType = undefined;
                         } else if (newSvcsToAdd.length > 0) {
                             newSvcsToAdd.forEach(fs => {
-                                if (!state.selectedServiceIds.includes(fs.id)) state.selectedServiceIds.push(fs.id);
+                                state.selectedServiceIds.push(fs.id);
                             });
                             state.stage = 'cart_review';
                             state.errorType = undefined;
@@ -674,6 +674,13 @@ export async function extractState(
             state.stage = 'availability_proposal';
             console.log(`[stateMachine.ts] Emergency Fallback: payment_request -> availability_proposal`);
         }
+
+        // MANDATORY NAME ENFORCEMENT: Never go to payment without a name.
+        if (['payment_request', 'waiting_for_receipt'].includes(state.stage) && (!state.clientName || state.clientName === 'Cliente')) {
+            console.log(`[stateMachine.ts] Name Limbo Protection: Forcing name_collection before payment.`);
+            state.stage = 'name_collection';
+        }
+
         if (currentBotAsked) state.lastIntent = currentBotAsked;
     } catch (error) {
         console.error("[stateMachine.ts] CRITICAL ERROR in extractState:", error);
@@ -758,7 +765,7 @@ export function generateResponse(
                 return `${prefix}${list}\n\nSolo escribí el nombre del tratamiento y lo agrego a tu plan.`;
             }
             case 'cart_review': {
-                const selectedServices = services.filter(s => state.selectedServiceIds.includes(s.id));
+                const selectedServices = state.selectedServiceIds.map(id => services.find(s => s.id === id)).filter(Boolean) as Service[];
                 const list = selectedServices.map(s => {
                     const cleanDur = s.duration.toString().replace(/min/g, '').trim();
                     const isSub = s.title.includes('-') || s.title.toLowerCase().includes('nail art');
@@ -785,6 +792,10 @@ export function generateResponse(
                 const totalPrice = selectedServices.reduce((acc, s) => acc + Math.round(Number(s.price)), 0);
                 const totalDur = selectedServices.reduce((acc, s) => acc + parseDuration(s.duration), 0);
                 const durText = formatDurationHuman(totalDur);
+
+                if (state.pendingDate && state.pendingTime) {
+                    return `¡Perfecto! Ya reservé el lugar para vos. 😍 Para ultimar los detalles y guardarlo definitivamente a tu nombre, ¿cómo es tu nombre completo? 😊`;
+                }
                 
                 return `¡Perfecto! Todo confirmado. ✨ Entonces, el total es de *$${totalPrice}* por una sesión de *${durText}*.\n\nPara ir agendándote, ¿cómo es tu nombre completo? 😊`;
             }
@@ -797,7 +808,7 @@ export function generateResponse(
             }
             case 'availability_proposal': {
                 if (availableSlots.length > 0) {
-                    const selectedSvc = services.filter(s => state.selectedServiceIds.includes(s.id));
+                    const selectedSvc = state.selectedServiceIds.map(id => services.find(s => s.id === id)).filter(Boolean) as Service[];
                     const totalDur = selectedSvc.reduce((acc, s) => acc + parseDuration(s.duration), 0);
                     const durText = formatDurationHuman(totalDur);
                     const serviceList = selectedSvc.map(s => s.title).join(' + ');
@@ -805,18 +816,24 @@ export function generateResponse(
                     if (availableSlots.length === 1) {
                         const slot = availableSlots[0];
                         const greeting = state.clientName ? `${state.clientName.split(' ')[0]}, ¡qué alegría! ✨ ` : "¡Excelentes noticias! ✨ ";
-                        const adjustmentNote = isTimeAdjusted ? "Como cerramos a las 20hs y tu sesión es larga, te busqué el horario más cercano disponible: " : "";
+                        
+                        const adjustmentNote = isTimeAdjusted 
+                            ? (state.requestedDate && slot.date !== state.requestedDate 
+                                ? `No tengo disponibilidad para el ${formatDateHuman(state.requestedDate)}, pero busqué el hueco más próximo disponible: ` 
+                                : "Como tu sesión es larga y cerramos a las 20hs, te busqué el horario más cercano disponible en el día: ") 
+                            : "";
+
                         return `${greeting}${adjustmentNote}Tengo disponibilidad para tu sesión de *${serviceList}* (Duración: *${durText}*) el día *${formatDateHuman(slot.date)}* a las *${slot.time}hs*. 🗓️\n\n¿Te queda bien este horario o preferís que busquemos otro?`;
                     } else {
                         const options = availableSlots.map(s => `• *${formatDateHuman(s.date)}* a las *${s.time}hs*`).join('\n');
-                        const adjustmentNote = isTimeAdjusted ? "Como cerramos a las 20hs y tu sesión es larga, estas son las opciones que más se acercan a lo que buscabas:\n\n" : "";
+                        let adjustmentNote = isTimeAdjusted ? "No encontré exactamente lo que buscabas, pero aquí tenés las mejores alternativas cercanas:\n\n" : "";
                         return `¡Claro que sí! 😊 ${adjustmentNote}Para que elijas con tranquilidad, aquí tenés las opciones más cercanas para tu sesión de *${serviceList}*:\n\n${options}\n\n¿Cuál de estos horarios te resulta más cómodo?`;
                     }
                 }
                 return "Uy, parece que tengo la agenda completa para esa duración esta semana. 🗓️ ¿Te gustaría que busquemos un lugar para la semana que viene así te aseguro un espacio para vos? 😊";
             }
             case 'payment_request': {
-                const selectedSvc = services.filter(s => state.selectedServiceIds.includes(s.id));
+                const selectedSvc = state.selectedServiceIds.map(id => services.find(s => s.id === id)).filter(Boolean) as Service[];
                 const totalPrice = selectedSvc.reduce((acc, s) => acc + Math.round(Number(s.price)), 0);
                 const totalDur = selectedSvc.reduce((acc, s) => acc + parseDuration(s.duration), 0);
                 const serviceList = selectedSvc.map(s => s.title).join(' + ');

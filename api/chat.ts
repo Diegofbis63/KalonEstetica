@@ -208,10 +208,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 }
             }
             if (foundSlots.length > 0) {
-                const todayStr = new Date().toISOString().split('T')[0];
-                if (state.requestedTime && foundSlots[0].date === todayStr && foundSlots[0].time !== state.requestedTime) {
-                    timeWasAdjusted = true;
-                }
+                // Determine if we adjusted from user's explicit request
+                const reqD = state.requestedDate;
+                const reqT = state.requestedTime;
+                
+                if (reqD && foundSlots[0].date !== reqD) timeWasAdjusted = true;
+                if (reqT && foundSlots[0].time !== reqT) timeWasAdjusted = true;
+                
+                // Fallback for default "tomorrow" search if the only slot found is at a different time than requested
+                if (reqT && foundSlots[0].time !== reqT) timeWasAdjusted = true;
+
                 state.pendingDate = foundSlots[0].date;
                 state.pendingTime = foundSlots[0].time;
             }
