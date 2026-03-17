@@ -119,9 +119,28 @@ export async function extractState(
 
     console.log(`[stateMachine.ts] Extracting state. InitialName: ${initialName}, InitialPhone: ${initialPhone}, HasInitialState: ${!!initialState}, Reset: ${resetCause || 'no'}`);
     
-    const state: ConvState = (initialState && !resetCause) ? { ...initialState } : {
-        clientName: initialState?.clientName || (initialName && initialName !== 'Cliente' ? initialName : null),
-        clientPhone: initialState?.clientPhone || initialPhone || null,
+    // --- 0. STATE MIGRATION & SANITY CHECK ---
+    const migrateState = (oldState: any): ConvState => {
+        return {
+            clientName: oldState?.clientName || (initialName && initialName !== 'Cliente' ? initialName : null),
+            clientPhone: oldState?.clientPhone || initialPhone || null,
+            selectedServiceIds: Array.isArray(oldState?.selectedServiceIds) ? oldState.selectedServiceIds : [],
+            currentCategoryId: typeof oldState?.currentCategoryId === 'string' ? oldState.currentCategoryId : null,
+            pendingCategoryIds: Array.isArray(oldState?.pendingCategoryIds) ? oldState.pendingCategoryIds : [],
+            stage: oldState?.stage || 'greeting',
+            pendingDate: oldState?.pendingDate || null,
+            pendingTime: oldState?.pendingTime || null,
+            requestedDate: oldState?.requestedDate || null,
+            requestedTime: oldState?.requestedTime || null,
+            rejectedDates: Array.isArray(oldState?.rejectedDates) ? oldState.rejectedDates : [],
+            requestedAllOptions: !!oldState?.requestedAllOptions,
+            isBotEnabled: oldState?.isBotEnabled !== false && defaultIsBotEnabled
+        };
+    };
+
+    const state: ConvState = (initialState && !resetCause) ? migrateState(initialState) : {
+        clientName: initialName && initialName !== 'Cliente' ? initialName : null,
+        clientPhone: initialPhone || null,
         selectedServiceIds: [],
         currentCategoryId: null,
         pendingCategoryIds: [],
@@ -132,11 +151,45 @@ export async function extractState(
         requestedTime: null,
         rejectedDates: [],
         requestedAllOptions: false,
-        isBotEnabled: initialState ? initialState.isBotEnabled : defaultIsBotEnabled
+        isBotEnabled: defaultIsBotEnabled
     };
 
     // Clear previous errors
     delete state.errorType;
+
+    // --- 1. SPECIAL CASE: USER WANTS TO START OVER ---
+    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+    const lastNormalized = lastUserMsg ? normalizeText(lastUserMsg.content || "") : "";
+    if (lastNormalized === 'hola' || lastNormalized === 'empezar' || lastNormalized === 'inicio' || lastNormalized === 'chau') {
+        if (state.stage === 'waiting_for_receipt' || state.stage === 'done' || state.stage === 'greeting' || state.stage === 'cart_review') {
+            console.log("[stateMachine.ts] User requested reset from terminal or early state.");
+            state.stage = 'greeting';
+            state.selectedServiceIds = [];
+            state.pendingCategoryIds = [];
+            state.currentCategoryId = null;
+        }
+    }
+
+    // --- 2. ANTI-AMNESIA (History Backtracking) ---
+    // Only run if the state is very fresh or missing context but has services
+    if (state.stage === 'greeting' && state.selectedServiceIds.length > 0 && messages.length > 2) {
+        let lastKnownStage: ConvState['stage'] | null = null;
+        for (let k = messages.length - 1; k >= 0; k--) {
+            const m = messages[k];
+            if (m.role === 'assistant' || m.role === 'bot') {
+                const t = normalizeText(m.content);
+                if (t.includes("necesitamos una sena") || t.includes("alias") || t.includes("comprobante")) { lastKnownStage = 'payment_request'; break; }
+                if (t.includes("confirmar el turno") || t.includes("disponibilidad") || t.includes("te queda bien")) { lastKnownStage = 'availability_proposal'; break; }
+                if (t.includes("tu nombre") || t.includes("nombre completo")) { lastKnownStage = 'name_collection'; break; }
+                if (t.includes("tu carrito") || t.includes("revisemos tu pedido")) { lastKnownStage = 'cart_review'; break; }
+                if (t.includes("elige una categoria") || t.includes("nuestras categorias")) { lastKnownStage = 'parent_selection'; break; }
+            }
+        }
+        if (lastKnownStage) {
+            state.stage = lastKnownStage;
+            console.log(`[stateMachine.ts] BACKTRACKING: Recovered ${lastKnownStage} from history.`);
+        }
+    }
 
     // ANTI-AMNESIA LOGIC: Conversational Rebuild
     // If we have an initialState and it's NOT a greeting, we only process the LATEST message (Performance).
@@ -301,13 +354,13 @@ export async function extractState(
                             if ((!isBlockedCommand && !isServiceSelectionTurn) || hasIntro) {
                                 const cleanName = extractName(msg.content);
                                 if (cleanName && cleanName.length > 2 && !notNames.includes(normalizeText(cleanName))) {
-                                    state.clientName = cleanName;
-                                    console.log(`[stateMachine.ts] Turn ${i}: Detected name: ${state.clientName}`);
-                                    
-                                    // --- Loop Prevention: Advance stage if we just got the name ---
-                                    if (!state.clientPhone) state.stage = 'phone_collection';
-                                    else if (!state.pendingDate) state.stage = 'availability_proposal';
-                                    else state.stage = 'payment_request';
+                                    const lowerN = normalizeText(cleanName);
+                                    if (!services.some(s => normalizeText(s.title).includes(lowerN)) && !categories.some(c => normalizeText(c.name).includes(lowerN))) {
+                                        state.clientName = cleanName;
+                                        if (!state.clientPhone) state.stage = 'phone_collection';
+                                        else if (!state.pendingDate) state.stage = 'availability_proposal';
+                                        else state.stage = 'payment_request';
+                                    }
                                 }
                             }
                         }
@@ -545,15 +598,13 @@ export async function extractState(
                 }
 
                 if (currentBotAsked === 'payment' || state.stage === 'payment_request' || state.stage === 'waiting_for_receipt') {
+                    // Lock stage to payment until success or manual reset
+                    state.stage = 'payment_request'; 
                     const isConfirmationText = normalizedContent.includes("pago") || normalizedContent.includes("comprobante") || normalizedContent.includes("listo") || normalizedContent.includes("enviado") || normalizedContent.includes("aca esta") || normalizedContent.includes("te mando") || normalizedContent.includes("ya esta");
                     if (hasMedia || isConfirmationText) {
                         state.stage = 'waiting_for_receipt';
                         console.log(`[stateMachine.ts] Turn ${i}: Detected receipt/confirmation. Transitioning stage definitively to waiting_for_receipt.`);
                     }
-                }
-
-                if (hasMedia && state.pendingDate && state.pendingTime && state.selectedServiceIds.length > 0) {
-                     state.stage = 'waiting_for_receipt';
                 }
             }
         }
@@ -568,7 +619,7 @@ export async function extractState(
             }
         }
 
-        // Final stage progression check - DEFENSIVE MODE
+        // Final stage progression check - DEFENSIVE MODE (DB FIRST)
         if (state.selectedServiceIds.length > 0 && state.pendingCategoryIds.length === 0 && !state.currentCategoryId) {
             const isInteracting = ['parent_selection', 'sub_service_selection', 'cart_review', 'cart_confirmation', 'name_collection', 'phone_collection', 'availability_proposal'].includes(state.stage);
             const isFinished = ['done', 'waiting_for_receipt', 'payment_request'].includes(state.stage);
@@ -579,16 +630,12 @@ export async function extractState(
             if (!isInteracting && !isFinished && !hasJustScheduled) {
                 if (!state.clientName || state.clientName === 'Cliente') {
                     state.stage = 'name_collection';
-                    console.log(`[stateMachine.ts] Progression: name_collection`);
-                } else if (!state.clientPhone || state.clientPhone === 'Cliente') {
+                } else if (!state.clientPhone || state.clientPhone === 'Cliente' || state.clientPhone === 'null') {
                     state.stage = 'phone_collection';
-                    console.log(`[stateMachine.ts] Progression: phone_collection`);
                 } else if (!state.pendingDate || !state.pendingTime) {
                     state.stage = 'availability_proposal';
-                    console.log(`[stateMachine.ts] Progression: availability_proposal`);
                 } else {
                     state.stage = 'payment_request';
-                    console.log(`[stateMachine.ts] Progression: payment_request (Failsafe)`);
                 }
             }
         }
@@ -600,10 +647,11 @@ export async function extractState(
                const m = messages[k];
                if (m.role === 'assistant' || m.role === 'bot') {
                    const t = normalizeText(m.content);
-                   if (t.includes("necesitamos una seña") || t.includes("alias") || t.includes("comprobante")) { lastKnownStage = 'payment_request'; break; }
+                   if (t.includes("necesitamos una sena") || t.includes("alias") || t.includes("comprobante")) { lastKnownStage = 'payment_request'; break; }
                    if (t.includes("confirmar el turno") || t.includes("disponibilidad") || t.includes("te queda bien")) { lastKnownStage = 'availability_proposal'; break; }
                    if (t.includes("tu nombre") || t.includes("nombre completo")) { lastKnownStage = 'name_collection'; break; }
                    if (t.includes("tu carrito") || t.includes("revisemos tu pedido")) { lastKnownStage = 'cart_review'; break; }
+                   if (t.includes("elige una categoria") || t.includes("nuestras categorias")) { lastKnownStage = 'parent_selection'; break; }
                }
             }
             if (lastKnownStage) {
@@ -757,14 +805,14 @@ export function generateResponse(
             }
             case 'payment_request': {
                 const selectedSvc = services.filter(s => state.selectedServiceIds.includes(s.id));
-                const totalPrice = selectedSvc.reduce((a, b) => a + Number(b.price), 0);
-                const totalDur = selectedSvc.reduce((a, b) => a + parseDuration(b.duration), 0);
+                const totalPrice = selectedSvc.reduce((acc, s) => acc + Math.round(Number(s.price)), 0);
+                const totalDur = selectedSvc.reduce((acc, s) => acc + parseDuration(s.duration), 0);
                 const serviceList = selectedSvc.map(s => s.title).join(' + ');
                 const deposit = totalPrice * 0.5;
                 const durText = formatDurationHuman(totalDur);
                 const personalGreeting = state.clientName ? `¡Todo listo, *${state.clientName.split(' ')[0]}*! ✨ ` : "¡Excelente elección! ✨ ";
 
-                const webNote = !isFromWhatsApp ? "\n\nPodés subir el comprobante haciendo clic en el clip aquí abajo, o si te queda más cómodo, simplemente envíame la foto por WhatsApp. ¡Yo lo voy a recibir igual! 📸" : "";
+                const webNote = !isFromWhatsApp ? "\n\nPodés subir el comprobante haciendo clic en el clip aquí abajo, o si te queda más cómodo, simplemente envíame la foto por WhatsApp. ¡ Yo lo voy a recibir igual! 📸" : "";
                 const mainMsg = `${personalGreeting}Tu sesión de *${serviceList}* durará aproximadamente *${durText}* y el valor total es de *$${totalPrice}*.\n\nPara confirmar definitivamente tu lugar el día *${formatDateHuman(state.pendingDate || '')}* a las *${state.pendingTime}hs*, necesitamos una seña del 50% (*$${deposit.toFixed(0)}*).\n\nTransferí al alias: *KALON.ESTETICA.OK* y enviame el comprobante por aquí. ¡Ya casi estamos! 📸`;
                 
                 return `${mainMsg}${webNote}`;

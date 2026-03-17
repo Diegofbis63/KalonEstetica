@@ -12,7 +12,8 @@ import {
     getAppointmentsForDate, 
     createAppointment, 
     markLeadAsConverted,
-    updateLeadState
+    updateLeadState,
+    sql
 } from './_services/db.js';
 import { 
     parseDuration, 
@@ -70,7 +71,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             getActiveServices()
         ]);
         
-        // 4. IDENTIFY LEAD (Optimized for Web & WhatsApp)
+        // 4. IDENTIFY LEAD (Unified DB Persistence)
         let leadId = null;
         let isBotEnabled = true;
         let leadName = null;
@@ -78,66 +79,65 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         let savedState = null;
         let lastUpdate = null;
 
-        // Identification ID is either a Phone (WhatsApp) or a UUID string (Web)
-        const identificationId = userId || (body.clientPhone?.length > 5 ? body.clientPhone : null);
+        const identificationId = userId || (body.identificationId || body.userId || (body.clientPhone?.length > 5 ? body.clientPhone : null));
 
         if (identificationId) {
-            // First attempt: Search by phone (normalized last digits)
-            const normalizedPhone = identificationId.replace(/\D/g, '');
+            const idStr = identificationId.toString();
+            const normalizedPhone = idStr.replace(/\D/g, '');
             let lead = normalizedPhone.length >= 8 ? await findLeadByFlexiblePhone(normalizedPhone) : null;
             
-            // Second attempt: Search by UUID (Web ID) if phone search failed
-            if (!lead && identificationId.length > 20) {
-                 const results = await sql`SELECT id, is_bot_enabled, client_name, contact_info, current_state, updated_at FROM leads WHERE contact_info->>'phone' = ${identificationId} OR contact_info->>'uuid' = ${identificationId} LIMIT 1`;
-                 if (results.length > 0) lead = results[0];
+            if (!lead) {
+                const results = await sql`
+                    SELECT id, is_bot_enabled, client_name, contact_info, current_state, updated_at 
+                    FROM leads 
+                    WHERE contact_info->>'uuid' = ${idStr} 
+                       OR contact_info->>'phone' = ${idStr}
+                    LIMIT 1
+                `;
+                if (results.length > 0) lead = results[0];
             }
 
             if (lead) {
                 leadId = lead.id;
                 isBotEnabled = lead.is_bot_enabled !== false;
                 leadName = lead.client_name;
-                leadPhone = typeof lead.contact_info === 'string' ? JSON.parse(lead.contact_info).phone : lead.contact_info?.phone;
+                const contact = typeof lead.contact_info === 'string' ? JSON.parse(lead.contact_info) : lead.contact_info;
+                leadPhone = contact?.phone;
                 savedState = lead.current_state;
                 lastUpdate = lead.updated_at;
             }
         }
 
-        // 5. BUILD CONVERSATION CONTEXT
-        let messages = body.messages || [];
-        // If message is missing history but we have a lead, fetch history from DB to enable Anti-Amnesia
-        if (leadId && messages.length <= 1) {
-            const history = await getChatHistory(leadId);
-            if (history.length > 0) {
-                messages = [...history, { role: 'user', content: incomingMessage, media_url: incomingMediaUrl }];
-            }
+        // 5. ENSURE LEAD PERSISTENCE (Create if fresh session)
+        if (!leadId && identificationId) {
+            const idStr = identificationId.toString();
+            const isPhone = /^\d+$/.test(idStr) && idStr.length < 15;
+            const contactInfo = isPhone 
+                ? { phone: idStr, source: userId ? 'whatsapp' : 'web' }
+                : { uuid: idStr, source: 'web' };
+
+            const newLead = await createLead(DEFAULT_ORG_ID, 'Cliente', contactInfo);
+            leadId = newLead.id;
         }
-        
-        // Single user message case (Fallback)
+
+        // 6. BUILD CONVERSATION CONTEXT
+        const messages = body.messages || [];
         if (!messages.length && incomingMessage) {
             messages.push({ role: 'user', content: incomingMessage, media_url: incomingMediaUrl });
         }
-
-        // 6. EXTRACT STATE
+        
+        // 7. EXTRACT STATE (DB State is King)
         const state = await extractState(messages, categories, services, isBotEnabled, leadName, leadPhone, savedState, lastUpdate);
 
-        // 7. PERSISTENCE & UPDATES
+        // 8. UPDATE & EVOLVE LEAD
         if (leadId) {
-            if (state.clientName && state.clientName !== 'Cliente') { 
+            if (state.clientName && state.clientName !== 'Cliente' && state.clientName !== leadName) { 
                 await updateLeadName(leadId, state.clientName);
             }
-            await updateLeadState(leadId, state);
-            await insertChatLog(leadId, 'user', incomingMessage, incomingMediaUrl, !!userId, body.mediaData);
-        } else if (identificationId) {
-            // Create a new Lead immediately to prevent amnesia in the next message
-            const isPhone = /^\d+$/.test(identificationId) && identificationId.length < 15;
-            const nameToSave = (state.clientName && state.clientName !== 'Cliente') ? state.clientName : 'Cliente';
-            
-            const contactInfo = isPhone 
-                ? { phone: identificationId, source: userId ? 'whatsapp' : 'web' }
-                : { uuid: identificationId, source: 'web' };
+            if (state.clientPhone && !leadPhone) {
+                 await sql`UPDATE leads SET contact_info = contact_info || ${JSON.stringify({ phone: state.clientPhone })}, updated_at = NOW() WHERE id = ${leadId}`;
+            }
 
-            const newLead = await createLead(DEFAULT_ORG_ID, nameToSave, contactInfo);
-            leadId = newLead.id;
             await updateLeadState(leadId, state);
             await insertChatLog(leadId, 'user', incomingMessage, incomingMediaUrl, !!userId, body.mediaData);
         }
