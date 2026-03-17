@@ -12,6 +12,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/AuthContext";
 import { toast } from "sonner";
 import { useChat } from "@/context/ChatContext";
+import { maskPhone } from "@/lib/utils";
 import ServicesManagement from "@/components/dashboard/ServicesManagement";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -499,7 +500,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                           <div 
                             key={appt.id} 
                             className={`relative p-4 sm:p-5 rounded-2xl border transition-all animate-in fade-in slide-in-from-left-4 ${
-                              appt.canManage 
+                              (appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') 
                                 ? 'bg-gold/5 border-gold/20 shadow-[0_0_20px_rgba(194,154,91,0.05)]' 
                                 : 'bg-white/[0.02] border-white/5 opacity-80'
                             }`}
@@ -507,24 +508,35 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                           >
                             {/* Dot indicator */}
                             <div className={`absolute -left-[25px] sm:-left-[27px] top-6 sm:top-1/2 sm:-translate-y-1/2 w-4 h-4 rounded-full border-2 ${
-                              appt.canManage ? 'bg-gold border-noir' : 'bg-noir-light border-white/10'
+                              (appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? 'bg-gold border-noir' : 'bg-noir-light border-white/10'
                             }`} />
 
                             <div className="flex flex-col gap-4">
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-3 mb-2">
-                                    <Clock className={`w-3.5 h-3.5 ${appt.canManage ? 'text-gold' : 'text-cream/20'}`} />
-                                    <span className={`text-sm font-bold font-sans ${appt.canManage ? 'text-gold' : 'text-cream/40'}`}>
+                                    <Clock className={`w-3.5 h-3.5 ${(appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? 'text-gold' : 'text-cream/20'}`} />
+                                    <span className={`text-sm font-bold font-sans ${(appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? 'text-gold' : 'text-cream/40'}`}>
                                       {new Date(appt.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Cordoba' })}hs
                                     </span>
                                   </div>
                                   
-                                  <h4 className={`text-lg sm:text-xl font-serif font-bold mb-3 ${appt.canManage ? 'text-cream' : 'text-cream/30'}`}>
-                                    {appt.canManage ? appt.client_name : `Ocupado — ${appt.category_name}`}
+                                  <h4 className={`text-lg sm:text-xl font-serif font-bold mb-3 ${(appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? 'text-cream' : 'text-cream/30'}`}>
+                                    {(appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? appt.client_name : `Ocupado — ${appt.category_name}`}
                                   </h4>
 
-                                  {appt.canManage && (
+                                  <div className="flex flex-wrap items-center gap-3 mb-3">
+                                    <div className="flex items-center gap-2 group/phone">
+                                      <div className="w-7 h-7 rounded-full bg-cream/5 border border-white/5 flex items-center justify-center text-cream/40 group-hover/phone:border-gold/20 group-hover/phone:text-gold transition-all">
+                                        <Phone className="w-3 h-3" />
+                                      </div>
+                                      <span className={`text-xs font-sans font-medium select-none ${(appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? 'text-cream/80' : 'text-cream/20'}`}>
+                                        {maskPhone(appt.phone, authUser?.role)}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {(appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') && (
                                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                                       {appt.total_duration ? (
                                         <div className="inline-flex items-center gap-4 px-4 py-2 sm:px-5 sm:py-3 rounded-2xl bg-gold/10 border border-gold/30 shadow-[0_0_30px_rgba(194,154,91,0.15)] group/duration hover:bg-gold/15 transition-all">
@@ -545,11 +557,15 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
 
                                       <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
-                                          <button className="outline-none focus:outline-none focus-visible:outline-none w-full sm:w-auto">
+                                          <button 
+                                            disabled={authUser?.role === 'staff'}
+                                            className="outline-none focus:outline-none focus-visible:outline-none w-full sm:w-auto"
+                                          >
                                             <Badge 
                                               variant="outline" 
                                               className={`
-                                                text-[10px] font-black tracking-[0.2em] px-4 py-2 rounded-xl border shadow-lg cursor-pointer hover:brightness-125 transition-all uppercase h-[56px] sm:h-[64px] flex flex-col justify-center items-center gap-1 min-w-full sm:min-w-[120px]
+                                                text-[10px] font-black tracking-[0.2em] px-4 py-2 rounded-xl border shadow-lg transition-all uppercase h-[56px] sm:h-[64px] flex flex-col justify-center items-center gap-1 min-w-full sm:min-w-[120px]
+                                                ${authUser?.role !== 'staff' ? 'cursor-pointer hover:brightness-125' : 'cursor-default'}
                                                 ${ (appt.status === 'scheduled' || appt.status === 'confirmed')
                                                   ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' 
                                                   : (appt.status === 'completed' || appt.status === 'REALIZADA')
@@ -566,26 +582,28 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                             </Badge>
                                           </button>
                                         </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="center" className="bg-noir-light border-white/10 text-cream/80 backdrop-blur-xl">
-                                          <DropdownMenuItem className="focus:bg-gold/10 focus:text-gold cursor-pointer" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'pending' })}>
-                                            <Clock className="w-3.5 h-3.5 mr-2" /> Marcar como PENDIENTE
-                                          </DropdownMenuItem>
-                                          <DropdownMenuItem className="focus:bg-emerald-500/10 focus:text-emerald-400 cursor-pointer" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'confirmed' })}>
-                                            <CalendarCheck className="w-3.5 h-3.5 mr-2" /> Marcar como CONFIRMADA
-                                          </DropdownMenuItem>
-                                          <DropdownMenuItem className="focus:bg-sky-500/10 focus:text-sky-400 cursor-pointer" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'REALIZADA' })}>
-                                            <CheckCircle2 className="w-3.5 h-3.5 mr-2" /> Marcar como REALIZADA
-                                          </DropdownMenuItem>
-                                          <DropdownMenuItem className="focus:bg-rose/10 focus:text-rose cursor-pointer" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'canceled' })}>
-                                            <XCircle className="w-3.5 h-3.5 mr-2" /> Marcar como CANCELADA
-                                          </DropdownMenuItem>
-                                        </DropdownMenuContent>
+                                        {authUser?.role !== 'staff' && (
+                                          <DropdownMenuContent align="center" className="bg-noir-light border-white/10 text-cream/80 backdrop-blur-xl">
+                                            <DropdownMenuItem className="focus:bg-gold/10 focus:text-gold cursor-pointer" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'pending' })}>
+                                              <Clock className="w-3.5 h-3.5 mr-2" /> Marcar como PENDIENTE
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem className="focus:bg-emerald-500/10 focus:text-emerald-400 cursor-pointer" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'confirmed' })}>
+                                              <CalendarCheck className="w-3.5 h-3.5 mr-2" /> Marcar como CONFIRMADA
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem className="focus:bg-sky-500/10 focus:text-sky-400 cursor-pointer" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'REALIZADA' })}>
+                                              <CheckCircle2 className="w-3.5 h-3.5 mr-2" /> Marcar como REALIZADA
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem className="focus:bg-rose/10 focus:text-rose cursor-pointer" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'canceled' })}>
+                                              <XCircle className="w-3.5 h-3.5 mr-2" /> Marcar como CANCELADA
+                                            </DropdownMenuItem>
+                                          </DropdownMenuContent>
+                                        )}
                                       </DropdownMenu>
                                     </div>
                                   )}
                                 </div>
                                 
-                                {appt.canManage && (
+                                { (appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') && (
                                   <div className="flex sm:flex-col items-center gap-2">
                                     <button 
                                       onClick={() => { 
@@ -601,34 +619,36 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                         };
                                         openChat(leadObj);
                                       }}
-                                      disabled={!appt.lead_id || !appt.canManage}
+                                      disabled={!appt.lead_id || (!appt.canManage && authUser?.role !== 'staff' && authUser?.role !== 'admin')}
                                       className={`p-3 sm:p-4 rounded-xl bg-white/5 border border-white/10 transition-all flex items-center justify-center group/btn hover:text-gold hover:border-gold/30 flex-1 sm:flex-none ${
-                                        appt.canManage && appt.lead_id ? '' : 'opacity-20 cursor-not-allowed'
+                                        (appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') && appt.lead_id ? '' : 'opacity-20 cursor-not-allowed'
                                       }`}
                                     >
                                       <MessageSquare className="w-4 h-4 sm:w-5 h-5 group-hover/btn:scale-110 transition-transform" />
                                     </button>
-                                    <button 
-                                      onClick={() => {
-                                        setSelectedAppointmentForEdit(appt);
-                                        const d = new Date(appt.date_time);
-                                        setFormDate(d.toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Cordoba' }));
-                                        setFormTime(d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Cordoba' }));
-                                        setFormService(appt.service_type);
-                                        setFormClientName(appt.client_name || "");
-                                        setFormPhone(appt.phone || "");
-                                        setSelectedServices(appt.selected_services || []);
-                                        setIsEditAppointmentModalOpen(true);
-                                      }}
-                                      className="p-3 sm:p-4 rounded-xl bg-gold text-noir hover:scale-110 active:scale-95 transition-all shadow-lg shadow-gold/10 flex-1 sm:flex-none"
-                                    >
-                                      <Edit className="w-4 h-4 sm:w-5 h-5" />
-                                    </button>
+                                    {authUser?.role !== 'staff' && (
+                                      <button 
+                                        onClick={() => {
+                                          setSelectedAppointmentForEdit(appt);
+                                          const d = new Date(appt.date_time);
+                                          setFormDate(d.toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Cordoba' }));
+                                          setFormTime(d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Cordoba' }));
+                                          setFormService(appt.service_type);
+                                          setFormClientName(appt.client_name || "");
+                                          setFormPhone(appt.phone || "");
+                                          setSelectedServices(appt.selected_services || []);
+                                          setIsEditAppointmentModalOpen(true);
+                                        }}
+                                        className="p-3 sm:p-4 rounded-xl bg-gold text-noir hover:scale-110 active:scale-95 transition-all shadow-lg shadow-gold/10 flex-1 sm:flex-none"
+                                      >
+                                        <Edit className="w-4 h-4 sm:w-5 h-5" />
+                                      </button>
+                                    )}
                                   </div>
                                 )}
                               </div>
 
-                              {appt.canManage && (
+                              { (appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') && (
                                 <div className="pt-2">
                                   <Popover>
                                     <PopoverTrigger asChild>
@@ -844,20 +864,20 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                     </TableHeader>
                     <TableBody>
                       {filteredAppointments.map((a, i) => (
-                        <TableRow key={a.id} className={`border-b border-cream/5 hover:bg-cream/[0.02] transition-colors group animate-in fade-in slide-in-from-bottom-2 ${!a.canManage ? 'opacity-40 grayscale-[0.5]' : ''}`} style={{ animationDelay: `${i * 50}ms` }}>
-                          <TableCell className="px-5 py-6">
-                            <div className="font-serif font-bold text-lg text-cream tracking-tight whitespace-nowrap">
-                              {a.canManage ? a.client_name : `Ocupado - ${a.category_name}`}
-                            </div>
-                          </TableCell>
-                          <TableCell className="px-5 py-6">
-                            {a.canManage && a.phone && (
-                              <button 
-                                onClick={() => {
-                                  const leadObj: Lead = {
-                                    id: a.lead_id!,
-                                    client_name: a.client_name!,
-                                    contact_info: { phone: a.phone },
+                         <TableRow key={a.id} className={`border-b border-cream/5 hover:bg-cream/[0.02] transition-colors group animate-in fade-in slide-in-from-bottom-2 ${!(a.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? 'opacity-40 grayscale-[0.5]' : ''}`} style={{ animationDelay: `${i * 50}ms` }}>
+                           <TableCell className="px-5 py-6">
+                             <div className="font-serif font-bold text-lg text-cream tracking-tight whitespace-nowrap">
+                               {(a.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? a.client_name : `Ocupado - ${a.category_name}`}
+                             </div>
+                           </TableCell>
+                           <TableCell className="px-5 py-6">
+                             {(a.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') && a.phone && (
+                               <button 
+                                 onClick={() => {
+                                   const leadObj: Lead = {
+                                     id: a.lead_id!,
+                                     client_name: a.client_name!,
+                                     contact_info: { phone: a.phone },
                                     status: a.status,
                                     intent_score: 100,
                                     is_bot_enabled: a.is_bot_enabled || false,
@@ -868,11 +888,13 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                 }}
                                 className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-xs font-bold font-mono hover:bg-emerald-500/10 hover:border-emerald-500/40 transition-all group/wa whitespace-nowrap"
                               >
-                                <Phone className="w-3 h-3 group-hover/wa:scale-110 transition-transform" />
-                                {a.phone}
-                              </button>
-                            )}
-                          </TableCell>
+                                 <Phone className="w-3 h-3 group-hover/wa:scale-110 transition-transform" />
+                                 <span className={authUser?.role !== 'admin' ? 'select-none' : ''}>
+                                   {maskPhone(a.phone, authUser?.role)}
+                                 </span>
+                               </button>
+                             )}
+                           </TableCell>
                           <TableCell className="px-5 py-6">
                             <div className="flex items-center gap-2 text-base font-serif text-cream/80 group-hover:text-cream transition-colors whitespace-nowrap w-fit">
                               <div className={`w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(194,154,91,0.4)] ${a.canManage ? 'bg-gold' : 'bg-white/10'}`} />
@@ -1012,12 +1034,12 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                           </TableCell>
                           <TableCell className="px-4 py-6 text-center">
                             <div className="flex items-center justify-center gap-2">
-                                <Switch 
-                                    checked={a.is_bot_enabled} 
-                                    onCheckedChange={(val) => toggleBotMutation.mutate({ leadId: a.lead_id!, isBotEnabled: val })}
-                                    className="data-[state=checked]:bg-gold scale-75"
-                                    disabled={!a.lead_id}
-                                />
+                                 <Switch 
+                                     checked={a.is_bot_enabled} 
+                                     onCheckedChange={(val) => toggleBotMutation.mutate({ leadId: a.lead_id!, isBotEnabled: val })}
+                                     className="data-[state=checked]:bg-gold scale-75"
+                                     disabled={!a.lead_id || authUser?.role === 'staff'}
+                                 />
                                 <span className={`text-[8px] font-black tracking-widest ${a.is_bot_enabled ? 'text-emerald-400' : 'text-cream/20'}`}>
                                     {a.is_bot_enabled ? 'BOT ON' : 'BOT OFF'}
                                 </span>
@@ -1038,29 +1060,29 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                     };
                                     openChat(leadObj);
                                   }}
-                                  disabled={!a.lead_id || !a.canManage}
-                                  className={`px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 transition-all mx-auto flex items-center justify-center gap-2 group/btn ${
-                                    a.canManage && a.lead_id ? 'text-cream/40 hover:text-gold hover:border-gold/30' : 'opacity-20 cursor-not-allowed'
-                                  }`}
+                                   disabled={!a.lead_id || (!(a.canManage || authUser?.role === 'staff' || authUser?.role === 'admin'))}
+                                   className={`px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 transition-all mx-auto flex items-center justify-center gap-2 group/btn ${
+                                     (a.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') && a.lead_id ? 'text-cream/40 hover:text-gold hover:border-gold/30' : 'opacity-20 cursor-not-allowed'
+                                   }`}
                                 >
                                   <MessageSquare className="w-4 h-4" /> Wsp
                                 </button>
                           </TableCell>
-                          <TableCell className="px-5 py-6 text-right">
-                            {a.canManage && (
-                              <div className="flex justify-end gap-2">
-                                <button 
-                                  onClick={() => {
-                                    setSelectedAppointmentForEdit(a);
-                                    const d = new Date(a.date_time);
-                                    setFormDate(d.toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Cordoba' }));
-                                    setFormTime(d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Cordoba' }));
-                                    setFormService(a.service_type);
-                                    setFormClientName(a.client_name || "");
-                                    setFormPhone(a.phone || "");
-                                    setSelectedServices(a.selected_services || []);
-                                    setIsEditAppointmentModalOpen(true);
-                                  }} 
+                           <TableCell className="px-5 py-6 text-right">
+                             {(a.canManage || authUser?.role === 'admin') && authUser?.role !== 'staff' && (
+                               <div className="flex justify-end gap-2">
+                                 <button 
+                                   onClick={() => {
+                                     setSelectedAppointmentForEdit(a);
+                                     const d = new Date(a.date_time);
+                                     setFormDate(d.toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Cordoba' }));
+                                     setFormTime(d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Cordoba' }));
+                                     setFormService(a.service_type);
+                                     setFormClientName(a.client_name || "");
+                                     setFormPhone(a.phone || "");
+                                     setSelectedServices(a.selected_services || []);
+                                     setIsEditAppointmentModalOpen(true);
+                                   }} 
                                   className="p-2 rounded-lg bg-cream/5 text-cream/40 hover:text-gold hover:bg-gold/10 transition-all border border-transparent hover:border-gold/20"
                                 >
                                   <Edit className="w-4 h-4" />
@@ -1146,10 +1168,10 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                     </TableHeader>
                     <TableBody>
                       {filteredLeads.map((l, i) => (
-                        <TableRow key={l.id} className={`border-b border-cream/5 hover:bg-cream/[0.02] group transition-colors animate-in fade-in slide-in-from-bottom-2 ${!l.canManage ? 'opacity-40' : ''}`} style={{ animationDelay: `${i * 50}ms` }}>
-                          <TableCell className="px-5 py-6">
-                            <div className="font-serif font-bold text-cream text-lg tracking-tight leading-tight whitespace-nowrap">{l.canManage ? l.client_name : `Interesado - ${l.category_name}`}</div>
-                          </TableCell>
+                         <TableRow key={l.id} className={`border-b border-cream/5 hover:bg-cream/[0.02] group transition-colors animate-in fade-in slide-in-from-bottom-2 ${!(l.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? 'opacity-40' : ''}`} style={{ animationDelay: `${i * 50}ms` }}>
+                           <TableCell className="px-5 py-6">
+                             <div className="font-serif font-bold text-cream text-lg tracking-tight leading-tight whitespace-nowrap">{(l.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? l.client_name : `Interesado - ${l.category_name}`}</div>
+                           </TableCell>
                           <TableCell className="px-5 py-6">
                             {l.phone && (
                               <button 
@@ -1168,11 +1190,13 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                 }}
                                 className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-xs font-bold font-mono hover:bg-emerald-500/10 hover:border-emerald-500/40 transition-all group/wa whitespace-nowrap"
                               >
-                                <Phone className="w-3 h-3 group-hover/wa:scale-110 transition-transform" />
-                                {l.phone}
-                              </button>
-                            )}
-                          </TableCell>
+                                 <Phone className="w-3 h-3 group-hover/wa:scale-110 transition-transform" />
+                                 <span className={authUser?.role !== 'admin' ? 'select-none' : ''}>
+                                   {maskPhone(l.phone, authUser?.role)}
+                                 </span>
+                               </button>
+                             )}
+                           </TableCell>
                           <TableCell className="px-5 py-6 text-center">
                             <div className="flex items-center justify-center gap-2">
                                 <span className="text-sm font-bold text-emerald-400">{l.intent_score}%</span>
@@ -1183,11 +1207,12 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                           </TableCell>
                           <TableCell className="px-5 py-6 text-center">
                             <div className="flex items-center justify-center gap-2">
-                                <Switch 
-                                    checked={l.is_bot_enabled} 
-                                    onCheckedChange={(val) => toggleBotMutation.mutate({ leadId: l.id, isBotEnabled: val })}
-                                    className="data-[state=checked]:bg-gold scale-75"
-                                />
+                                 <Switch 
+                                     checked={l.is_bot_enabled} 
+                                     onCheckedChange={(val) => toggleBotMutation.mutate({ leadId: l.id, isBotEnabled: val })}
+                                     className="data-[state=checked]:bg-gold scale-75"
+                                     disabled={authUser?.role === 'staff'}
+                                 />
                                 <span className={`text-[8px] font-black tracking-widest ${l.is_bot_enabled ? 'text-emerald-400' : 'text-cream/20'}`}>
                                     {l.is_bot_enabled ? 'BOT ON' : 'BOT OFF'}
                                 </span>

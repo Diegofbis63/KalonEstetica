@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useAuth } from '@/components/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Plus, 
@@ -69,11 +70,13 @@ interface Service {
 const SortableCategoryItem = ({ 
   category, 
   isActive, 
-  onClick 
+  onClick,
+  isReadOnly = false
 }: { 
   category: Category; 
   isActive: boolean; 
   onClick: () => void;
+  isReadOnly?: boolean;
 }) => {
   const {
     attributes,
@@ -82,7 +85,7 @@ const SortableCategoryItem = ({
     transform,
     transition,
     isDragging
-  } = useSortable({ id: category.id });
+  } = useSortable({ id: category.id, disabled: isReadOnly });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -101,9 +104,11 @@ const SortableCategoryItem = ({
       } ${isDragging ? 'opacity-50' : ''}`}
       onClick={onClick}
     >
-      <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-1 hover:text-gold transition-colors">
-        <GripVertical className="w-4 h-4 opacity-40 group-hover:opacity-100" />
-      </div>
+      {!isReadOnly && (
+        <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-1 hover:text-gold transition-colors">
+          <GripVertical className="w-4 h-4 opacity-40 group-hover:opacity-100" />
+        </div>
+      )}
       <span className="flex-grow font-serif font-bold text-sm truncate">{category.name}</span>
       <ChevronRight className={`w-4 h-4 transition-transform ${isActive ? 'translate-x-1 opacity-100' : 'opacity-0 group-hover:opacity-40'}`} />
     </div>
@@ -113,11 +118,13 @@ const SortableCategoryItem = ({
 const SortableServiceItem = ({ 
   service, 
   onEdit, 
-  onDelete 
+  onDelete,
+  isReadOnly = false
 }: { 
   service: Service; 
   onEdit: () => void; 
   onDelete: () => void;
+  isReadOnly?: boolean;
 }) => {
   const {
     attributes,
@@ -126,7 +133,7 @@ const SortableServiceItem = ({
     transform,
     transition,
     isDragging
-  } = useSortable({ id: service.id });
+  } = useSortable({ id: service.id, disabled: isReadOnly });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -142,9 +149,11 @@ const SortableServiceItem = ({
         isDragging ? 'opacity-50' : ''
       }`}
     >
-      <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-1 text-cream/20 hover:text-gold transition-colors">
-        <GripVertical className="w-5 h-5" />
-      </div>
+      {!isReadOnly && (
+        <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-1 text-cream/20 hover:text-gold transition-colors">
+          <GripVertical className="w-5 h-5" />
+        </div>
+      )}
       
       <div className="flex-grow">
         <h4 className="text-cream font-serif font-bold group-hover:text-gold transition-colors">{service.title}</h4>
@@ -154,20 +163,22 @@ const SortableServiceItem = ({
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <button 
-          onClick={onEdit}
-          className="p-2 rounded-lg bg-cream/5 text-cream/40 hover:text-gold hover:bg-gold/10 transition-all"
-        >
-          <Edit className="w-4 h-4" />
-        </button>
-        <button 
-          onClick={onDelete}
-          className="p-2 rounded-lg bg-rose/5 text-cream/40 hover:text-rose hover:bg-rose/10 transition-all"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
-      </div>
+      {!isReadOnly && (
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={onEdit}
+            className="p-2 rounded-lg bg-cream/5 text-cream/40 hover:text-gold hover:bg-gold/10 transition-all"
+          >
+            <Edit className="w-4 h-4" />
+          </button>
+          <button 
+            onClick={onDelete}
+            className="p-2 rounded-lg bg-rose/5 text-cream/40 hover:text-rose hover:bg-rose/10 transition-all"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 };
@@ -175,6 +186,8 @@ const SortableServiceItem = ({
 // --- Main Component ---
 
 export default function ServicesManagement() {
+  const { user } = useAuth();
+  const isReadOnly = user?.role === 'staff';
   const queryClient = useQueryClient();
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -331,12 +344,14 @@ export default function ServicesManagement() {
       <div className="w-full lg:w-72 flex flex-col gap-6">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-sans uppercase tracking-[0.2em] text-cream/40 font-bold">Categorías</h3>
-          <button 
-            onClick={() => { setEditingCategory({}); setIsCategoryModalOpen(true); }}
-            className="p-1.5 rounded-lg bg-gold/10 text-gold hover:bg-gold hover:text-noir transition-all"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
+          {!isReadOnly && (
+            <button 
+              onClick={() => { setEditingCategory({}); setIsCategoryModalOpen(true); }}
+              className="p-1.5 rounded-lg bg-gold/10 text-gold hover:bg-gold hover:text-noir transition-all"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         {catsLoading ? (
@@ -358,6 +373,7 @@ export default function ServicesManagement() {
                     category={cat} 
                     isActive={activeCategoryId === cat.id}
                     onClick={() => setActiveCategoryId(cat.id)}
+                    isReadOnly={isReadOnly}
                   />
                 ))}
               </div>
@@ -382,23 +398,27 @@ export default function ServicesManagement() {
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-cream/10"><ImageIcon className="w-8 h-8" /></div>
                     )}
-                    <button 
-                        onClick={() => { setEditingCategory(activeCategory); setIsCategoryModalOpen(true); }}
-                        className="absolute inset-0 bg-noir/40 backdrop-blur-sm opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 text-xs font-bold text-gold transition-all"
-                    >
-                        <Edit className="w-4 h-4" /> Editar Imagen
-                    </button>
+                    {!isReadOnly && (
+                      <button 
+                          onClick={() => { setEditingCategory(activeCategory); setIsCategoryModalOpen(true); }}
+                          className="absolute inset-0 bg-noir/40 backdrop-blur-sm opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 text-xs font-bold text-gold transition-all"
+                      >
+                          <Edit className="w-4 h-4" /> Editar Imagen
+                      </button>
+                    )}
                   </div>
 
                   <div className="flex-grow">
                      <div className="flex items-center justify-between mb-4">
                         <h2 className="text-3xl font-serif font-bold text-cream group-hover:text-gold transition-colors">{activeCategory.name}</h2>
-                        <button 
-                            onClick={() => { setEditingCategory(activeCategory); setIsCategoryModalOpen(true); }}
-                            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cream/5 text-cream/60 hover:text-gold hover:bg-gold/10 border border-transparent hover:border-gold/20 transition-all text-xs font-bold uppercase tracking-widest"
-                        >
-                            <Edit className="w-3.5 h-3.5" /> Editar Categoría
-                        </button>
+                        {!isReadOnly && (
+                          <button 
+                              onClick={() => { setEditingCategory(activeCategory); setIsCategoryModalOpen(true); }}
+                              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cream/5 text-cream/60 hover:text-gold hover:bg-gold/10 border border-transparent hover:border-gold/20 transition-all text-xs font-bold uppercase tracking-widest"
+                          >
+                              <Edit className="w-3.5 h-3.5" /> Editar Categoría
+                          </button>
+                        )}
                      </div>
                      <p className="text-sm text-cream/40 font-sans leading-relaxed italic max-w-2xl">
                         {activeCategory.description || "Sin descripción establecida."}
@@ -414,12 +434,14 @@ export default function ServicesManagement() {
                         <div className="w-1.5 h-6 bg-gold rounded-full" />
                         <h3 className="text-lg font-serif font-bold text-cream tracking-tight">Tratamientos en {activeCategory.name}</h3>
                     </div>
-                    <button 
-                        onClick={() => { setEditingService({ active: true }); setIsServiceModalOpen(true); }}
-                        className="flex items-center gap-2 px-6 py-2.5 rounded-full bg-gold text-noir text-xs font-bold uppercase tracking-widest hover:shadow-lg hover:shadow-gold/10 hover:-translate-y-0.5 transition-all"
-                    >
-                        <Plus className="w-4 h-4" /> Agregar Tratamiento
-                    </button>
+                    {!isReadOnly && (
+                      <button 
+                          onClick={() => { setEditingService({ active: true }); setIsServiceModalOpen(true); }}
+                          className="flex items-center gap-2 px-6 py-2.5 rounded-full bg-gold text-noir text-xs font-bold uppercase tracking-widest hover:shadow-lg hover:shadow-gold/10 hover:-translate-y-0.5 transition-all"
+                      >
+                          <Plus className="w-4 h-4" /> Agregar Tratamiento
+                      </button>
+                    )}
                 </div>
 
                 {servsLoading ? (
@@ -439,6 +461,7 @@ export default function ServicesManagement() {
                                     <SortableServiceItem 
                                         key={svc.id} 
                                         service={svc}
+                                        isReadOnly={isReadOnly}
                                         onEdit={() => { setEditingService(svc); setIsServiceModalOpen(true); }}
                                         onDelete={() => {
                                             if (confirm("¿Estás seguro de eliminar este tratamiento?")) {

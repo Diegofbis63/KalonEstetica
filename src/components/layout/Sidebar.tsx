@@ -24,9 +24,13 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
     { icon: Calendar, label: "Citas", path: "/dashboard/appointments" },
     { icon: Users, label: "Clientes", path: "/dashboard/clients" },
-    { icon: TrendingUp, label: "Ingresos", path: "/dashboard/income" },
+    ...(user?.role === 'admin' ? [
+      { icon: TrendingUp, label: "Ingresos", path: "/dashboard/income" }
+    ] : []),
     { icon: Sparkles, label: "Servicios", path: "/dashboard/services" },
-    { icon: Settings, label: "Configuración", path: "/dashboard/settings" },
+    ...(user?.role === 'admin' ? [
+      { icon: Settings, label: "Configuración", path: "/dashboard/settings" }
+    ] : []),
   ];
 
   return (

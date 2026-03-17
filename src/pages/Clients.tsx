@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { useAuth } from "@/components/AuthContext";
+import { maskPhone } from "@/lib/utils";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Users, 
@@ -117,6 +119,7 @@ interface ClientUpdateData {
 }
 
 export default function Clients() {
+  const { user: authUser } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'new' | 'recurrent' | 'vip'>('all');
@@ -361,7 +364,9 @@ export default function Clients() {
                         className="flex items-center gap-2 text-sm text-cream/60 hover:text-emerald-400 transition-colors"
                       >
                         <Phone className="w-3.5 h-3.5" />
-                        {client.phone}
+                        <span className={authUser?.role !== 'admin' ? 'select-none' : ''}>
+                          {maskPhone(client.phone, authUser?.role)}
+                        </span>
                       </button>
                       {client.email && (
                         <div className="flex items-center gap-2 text-[11px] text-cream/30">
@@ -374,6 +379,7 @@ export default function Clients() {
                   <TableCell className="py-5 text-center">
                     <div className="flex flex-col items-center justify-center gap-1.5">
                       <Switch 
+                        disabled={authUser?.role === 'staff'}
                         checked={client.is_bot_enabled} 
                         onCheckedChange={(val) => toggleBotMutation.mutate({ leadId: client.id, isBotEnabled: val })}
                         className="data-[state=checked]:bg-gold scale-75"
@@ -430,14 +436,16 @@ export default function Clients() {
                                     </div>
                                   </div>
                                 </div>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => setIsEditing(!isEditing)}
-                                  className={`rounded-xl border ${isEditing ? 'border-rose/20 text-rose bg-rose/5' : 'border-white/5 text-cream/40 hover:text-gold hover:bg-gold/10 hover:border-gold/20'}`}
-                                >
-                                  {isEditing ? <X className="w-4 h-4" /> : <Edit className="w-4 h-4" />}
-                                </Button>
+                                {authUser?.role === 'admin' && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setIsEditing(!isEditing)}
+                                    className={`rounded-xl border ${isEditing ? 'border-rose/20 text-rose bg-rose/5' : 'border-white/5 text-cream/40 hover:text-gold hover:bg-gold/10 hover:border-gold/20'}`}
+                                  >
+                                    {isEditing ? <X className="w-4 h-4" /> : <Edit className="w-4 h-4" />}
+                                  </Button>
+                                )}
                               </div>
                             </SheetHeader>
 
@@ -566,7 +574,9 @@ export default function Clients() {
                                     }}
                                   >
                                     <Phone className="w-4 h-4 mr-2" />
-                                    Contactar vía WhatsApp
+                                    <span className={authUser?.role !== 'admin' ? 'select-none' : ''}>
+                                      WhatsApp: {maskPhone(selectedClient.phone, authUser?.role)}
+                                    </span>
                                   </Button>
                                 </div>
                               </div>
