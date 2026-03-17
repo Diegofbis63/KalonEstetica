@@ -278,11 +278,18 @@ export async function extractState(
                     const hasIntro = normalizedContent.includes("mi nombre es") || normalizedContent.includes("soy ");
                     
                     if (isNamePrompt || hasIntro) {
-                        if (msg.content.length > 2 && msg.content.length < 40) {
-                            const notNames = ["si", "no", "hola", "chau", "nada", "turno", "bien", "dale", "otro", "extensiones", "pestañas", "uñas", "cejas", "lifting", "facial", "masaje"];
-                            const containsServiceWord = notNames.some(word => normalizedContent.includes(word));
+                        if (msg.content && msg.content.length > 2 && msg.content.length < 40) {
+                            const catWords = categories.map(c => normalizeText(c.name)).flatMap(n => n.split(/\s+/));
+                            const svcWords = services.map(s => normalizeText(s.title)).flatMap(n => n.split(/\s+/));
+                            const notNames = [
+                                "si", "no", "hola", "chau", "nada", "turno", "bien", "dale", "otro", "adelante", "perfecto", "listo", "agregar", "sacar", "quitar", "sumar",
+                                "extensiones", "pestañas", "uñas", "cejas", "lifting", "facial", "masaje", "depilacion", "corporal", "manicuria", "pedicuria", "esmalte",
+                                ...catWords, ...svcWords
+                            ];
+                            const containsServiceWord = notNames.some(word => word.length > 3 && normalizedContent.includes(word));
+                            const isServiceSelectionTurn = catsInFoundOrder.length > 0;
                             
-                            if (!containsServiceWord || hasIntro) {
+                            if ((!containsServiceWord && !isServiceSelectionTurn) || hasIntro) {
                                 state.clientName = extractName(msg.content);
                                 console.log(`[stateMachine.ts] Detected name: ${state.clientName}`);
                                 // --- Loop Prevention: Advance stage if we just got the name ---
@@ -295,6 +302,7 @@ export async function extractState(
                         }
                     }
                 }
+
                 if (currentBotAsked === 'phone' && !state.clientPhone) {
                     if (intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("este mismo") || normalizedContent.includes("si")) {
                         state.clientPhone = 'CONFIRMED_CURRENT';
@@ -407,6 +415,7 @@ export async function extractState(
                         }
                     }
                 }
+
                 if (currentBotAsked === 'cart_review' || state.stage === 'cart_review') {
                     const isRemoval = normalizedContent.includes("quitar") || normalizedContent.includes("sacar") || normalizedContent.includes("eliminar") || normalizedContent.includes("borrar") || normalizedContent.includes("menos") || normalizedContent.includes("saca");
                     
@@ -439,7 +448,6 @@ export async function extractState(
                         }
                     } else {
                         // --- 1. CORE CONFIRMATION LOGIC (PRIORITY #1) ---
-                        // Brute force normalization and checking for confirmation
                         const confirmWords = ['si', 'correcto', 'perfecto', 'bien', 'dale', 'ok', 'listo', 'avanzar', 'genial', 'obvio', 'confirmo', 'avancemos', 'adelante', 'estamos'];
                         const isUserConfirming = confirmWords.some(kw => normalizedContent.includes(kw)) || intent === 'afirmacion_o_agregar_carrito';
 
@@ -447,7 +455,6 @@ export async function extractState(
                         const singularize = (w: string) => (w.endsWith('s') && w.length > 3 ? w.slice(0, -1) : w);
                         const inputWords = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 2).map(singularize);
                         
-                        // Look for services in the message
                         const matchedSvcs = services.filter(s => {
                             const nt = normalizeText(s.title);
                             const sn = nt.split(/\s+/).map(singularize);
@@ -456,37 +463,34 @@ export async function extractState(
                             return keyWords.some(kw => inputWords.includes(kw));
                         });
 
-                        // Filter only for services NOT already in the cart to avoid false positives (like "esta" matching something)
                         const newSvcsToAdd = matchedSvcs.filter(s => !state.selectedServiceIds.includes(s.id));
-                        const isUserAskingToAdd = normalizedContent.includes("agregar") || normalizedContent.includes("sumar") || normalizedContent.includes("mas") || newSvcsToAdd.length > 0;
 
                         // --- 3. EXECUTION ORDER AND STATE TRANSITION ---
-                        if (isUserConfirming && newSvcsToAdd.length === 0) {
-                            // User is confirming and not providing a NEW service to add
-                            state.stage = 'name_collection';
+                        const isExplicitAdd = normalizedContent.includes("agregar") || normalizedContent.includes("sumar") || normalizedContent.includes("mas");
+
+                        if (isExplicitAdd) {
+                            state.stage = 'parent_selection';
+                            state.currentCategoryId = null;
                             state.errorType = undefined;
                         } else if (newSvcsToAdd.length > 0) {
-                            // User provided NEW services to add
                             newSvcsToAdd.forEach(fs => {
                                 if (!state.selectedServiceIds.includes(fs.id)) state.selectedServiceIds.push(fs.id);
                             });
                             state.stage = 'cart_review';
                             state.errorType = undefined;
-                        } else if (isUserAskingToAdd) {
-                            // User wants to add something but we couldn't match a new service, go to categories
-                            state.stage = 'parent_selection';
-                            state.currentCategoryId = null;
+                        } else if (isUserConfirming) {
+                            state.stage = 'name_collection';
                             state.errorType = undefined;
                         } else if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("modificar") || normalizedContent.includes("no")) {
                             state.stage = 'parent_selection';
                             state.errorType = undefined;
                         } else {
-                            // Fallback for truly unrecognized input in this state
                             state.stage = 'cart_review';
                             state.errorType = 'unrecognized_cart_action';
                         }
                     }
                 }
+
                 if (currentBotAsked === 'cart_confirmation') {
                     if (intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("si") || normalizedContent.includes("mas") || normalizedContent.includes("agregar")) {
                         state.stage = 'parent_selection';
@@ -494,6 +498,7 @@ export async function extractState(
                         state.stage = 'name_collection';
                     }
                 }
+
                 if (currentBotAsked === 'availability') {
                     if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("otro") || normalizedContent.includes("no puedo") || normalizedContent.includes("que mas hay")) {
                         if (state.pendingDate) state.rejectedDates.push(`${state.pendingDate} ${state.pendingTime}`);
@@ -518,21 +523,19 @@ export async function extractState(
                     ) {
                         state.stage = 'payment_request';
                         console.log(`[stateMachine.ts] Turn ${i}: Transition to payment_request (Availability confirmed)`);
-                        // Ensure we carry over the pending date/time explicitly to avoid race conditions in re-parsing
                         if (!state.requestedDate && state.pendingDate) state.requestedDate = state.pendingDate;
                         if (!state.requestedTime && state.pendingTime) state.requestedTime = state.pendingTime;
                     }
                 }
+
                 if (currentBotAsked === 'payment' || state.stage === 'payment_request' || state.stage === 'waiting_for_receipt') {
                     const isConfirmationText = normalizedContent.includes("pago") || normalizedContent.includes("comprobante") || normalizedContent.includes("listo") || normalizedContent.includes("enviado") || normalizedContent.includes("aca esta") || normalizedContent.includes("te mando") || normalizedContent.includes("ya esta");
-                    // STICKY MEDIA TRAP: If they send media during THIS stage, WE MUST transition to waiting_for_receipt
                     if (hasMedia || isConfirmationText) {
                         state.stage = 'waiting_for_receipt';
                         console.log(`[stateMachine.ts] Turn ${i}: Detected receipt/confirmation. Transitioning stage definitively to waiting_for_receipt.`);
                     }
                 }
 
-                // EMERGENCY MEDIA TRAP: If they send media and we have a pending date/time, assume it's a receipt
                 if (hasMedia && state.pendingDate && state.pendingTime && state.selectedServiceIds.length > 0) {
                      state.stage = 'waiting_for_receipt';
                 }
@@ -559,7 +562,6 @@ export async function extractState(
                     state.stage = 'name_collection';
                     console.log(`[stateMachine.ts] Progression: name_collection`);
                 } else if (!state.clientPhone || state.clientPhone === 'Cliente') {
-                    // Safety: if we have name but no confirmable phone, ask for it
                     state.stage = 'phone_collection';
                     console.log(`[stateMachine.ts] Progression: phone_collection`);
                 } else if (!state.pendingDate || !state.pendingTime) {
@@ -573,11 +575,8 @@ export async function extractState(
         }
         
         // --- Continuity Recovery Logic (The "Anti-Amnesia" Filter) ---
-        // If the current stage is greeting but there are selected services and we were deep in a flow, 
-        // it means we lost context. Let's recover the last logical stage.
         if (state.stage === 'greeting' && state.selectedServiceIds.length > 0) {
             let lastKnownStage: ConvState['stage'] | null = null;
-            // Scan backwards through messages to find the last bot question
             for (let k = messages.length - 1; k >= 0; k--) {
                const m = messages[k];
                if (m.role === 'assistant' || m.role === 'bot') {
