@@ -155,10 +155,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const selectedSvcObjs = services.filter(s => state.selectedServiceIds.includes(s.id));
             const totalDur = selectedSvcObjs.reduce((a, b) => a + parseDuration(b.duration), 0);
             
-            const baseDate = state.requestedDate ? new Date(state.requestedDate + "T12:00:00Z") : new Date();
+            // CORRECT TIME FOR ARGENTINA (GMT-3)
+            const nowArg = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Argentina/Cordoba"}));
+            const baseDate = state.requestedDate ? new Date(state.requestedDate + "T12:00:00Z") : nowArg;
+            
             if (!state.requestedDate) {
-                baseDate.setDate(new Date().getDate() + 1);
+                baseDate.setDate(baseDate.getDate() + 1);
             }
+            const isTargetToday = baseDate.toISOString().split('T')[0] === nowArg.toISOString().split('T')[0];
 
             const limit = state.requestedAllOptions ? 3 : 1;
 
@@ -179,9 +183,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 });
 
                 let startSearch = 9 * 60;
+                const isSearchingToday = dateStr === nowArg.toISOString().split('T')[0];
+
+                if (isSearchingToday) {
+                    const currentMinutes = nowArg.getHours() * 60 + nowArg.getMinutes() + 30; // 30min buffer
+                    startSearch = Math.max(9 * 60, currentMinutes);
+                }
+
                 if (state.requestedTime && d === 0) {
                     const [rh, rm] = state.requestedTime.split(':').map(Number);
-                    startSearch = Math.max(9 * 60, rh * 60 + rm);
+                    startSearch = Math.max(startSearch, rh * 60 + rm);
                 }
 
                 for (let totalMin = startSearch; totalMin <= 20 * 60 - totalDur; totalMin += 30) {

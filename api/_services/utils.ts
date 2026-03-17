@@ -86,6 +86,10 @@ export function parseDuration(durationStr: string): number {
     return match ? parseInt(match[1], 10) : 60;
 }
 
+export function getLocalISODate(date: Date): string {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Cordoba' }).format(date);
+}
+
 export function parseRelativeDate(input: string, referenceDate: Date): string | null {
     const days: Record<string, number> = {
         "lunes": 1, "martes": 2, "miercoles": 3, "jueves": 4, "viernes": 5, "sabado": 6, "domingo": 0
@@ -99,15 +103,15 @@ export function parseRelativeDate(input: string, referenceDate: Date): string | 
             let diff = val - currentDay;
             if (diff <= 0) diff += 7;
             result.setDate(result.getDate() + diff);
-            return result.toISOString().split('T')[0];
+            return getLocalISODate(result);
         }
     }
     
-    if (tokens.includes("hoy")) return referenceDate.toISOString().split('T')[0];
+    if (tokens.includes("hoy")) return getLocalISODate(referenceDate);
     if (tokens.includes("manana")) {
         const d = new Date(referenceDate);
         d.setDate(d.getDate() + 1);
-        return d.toISOString().split('T')[0];
+        return getLocalISODate(d);
     }
     
     return null;

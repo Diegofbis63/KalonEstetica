@@ -67,7 +67,8 @@ export async function extractState(
     lastUpdatedAt: string | Date | null = null
 ): Promise<ConvState> {
     const TWELVE_HOURS = 12 * 60 * 60 * 1000;
-    const now = new Date();
+    // CORRET TIME FOR ARGENTINA (GMT-3)
+    const now = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Argentina/Cordoba"}));
     let resetCause: string | null = null;
     
     if (initialState) {
@@ -205,7 +206,7 @@ export async function extractState(
     }
 
     try {
-        const today = new Date(); 
+        const today = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Argentina/Cordoba"}));
         today.setHours(0,0,0,0);
 
         if (messagesToProcess.length === 0) return state;
