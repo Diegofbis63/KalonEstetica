@@ -138,10 +138,15 @@ export async function extractState(
     // Clear previous errors
     delete state.errorType;
 
-    // If we have an initialState and NO reset, we only process the LATEST message.
-    // If it's a fresh session OR a reset session, we process the latest message too (but we start from greeting).
-    // Note: We only process the LAST message to avoid re-triggering old intents.
-    const messagesToProcess = messages.length > 0 ? [messages[messages.length - 1]] : [];
+    // ANTI-AMNESIA LOGIC: Conversational Rebuild
+    // If we have an initialState and it's NOT a greeting, we only process the LATEST message (Performance).
+    // IF the state is lost (greeting/null) OR it's a reset, we process the FULL HISTORY to reconstruct context.
+    const isStateLost = (state.stage === 'greeting' && state.selectedServiceIds.length === 0);
+    const messagesToProcess = (isStateLost && messages.length > 1) ? messages : (messages.length > 0 ? [messages[messages.length - 1]] : []);
+    
+    if (isStateLost && messages.length > 1) {
+        console.log(`[stateMachine.ts] AMNESIA DETECTED. Reconstructing state from ${messages.length} messages...`);
+    }
 
     try {
         const today = new Date(); 
@@ -366,12 +371,8 @@ export async function extractState(
                                 potentialSvcs = scoredSvcs.filter(s => s.score >= 5).map(s => s.service);
                             } else {
                                 // No conjunction: Filter candidates by family
-                                // A family is basically the same category.
-                                // If services are from DIFFERENT categories, we keep them both even without conjunction
-                                // if they have strong matches.
                                 potentialSvcs = scoredSvcs.filter(s => {
                                     if (s.score === maxScore) return true;
-                                    // If it's a DIFFERENT category than the one with maxScore, and score is high enough, keep it
                                     const bestSvc = scoredSvcs.find(x => x.score === maxScore)!;
                                     if (s.service.category_id !== bestSvc.service.category_id && s.score >= 10) return true;
                                     return false;
@@ -392,14 +393,18 @@ export async function extractState(
                                 state.stage = 'cart_review';
                                 state.currentCategoryId = null;
                             }
-                             } else {
-                                // Clear error if navigated elsewhere, else set if ambiguous or not found
-                                const isAffirmation = intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("si") || normalizedContent.includes("dale") || normalizedContent.includes("perfecto") || normalizedContent.includes("adelante") || normalizedContent.includes("asi esta bien") || normalizedContent.includes("listo");
-                                const isNav = isAffirmation || intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("ningun") || normalizedContent.includes("nada") || normalizedContent.includes("no gracias") || normalizedContent.includes("bastante");
-                                if (!isNav && !categoriesRequestedInThisTurn) {
-                                    state.errorType = 'service_not_found';
-                                }
+                            // DOBLE SALTO PROTECTION: If we just finished selection for this turn, we STOP here.
+                            // We don't want the next 'cart_review' block to process the SAME message again.
+                            console.log(`[stateMachine.ts] Turn ${i}: Finished sub_service_selection. Breaking loop to prevent double jump.`);
+                            continue; 
+                        } else {
+                            // Clear error if navigated elsewhere, else set if ambiguous or not found
+                            const isAffirmation = intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("si") || normalizedContent.includes("dale") || normalizedContent.includes("perfecto") || normalizedContent.includes("adelante") || normalizedContent.includes("asi esta bien") || normalizedContent.includes("listo");
+                            const isNav = isAffirmation || intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("ningun") || normalizedContent.includes("nada") || normalizedContent.includes("no gracias") || normalizedContent.includes("bastante");
+                            if (!isNav && !categoriesRequestedInThisTurn) {
+                                state.errorType = 'service_not_found';
                             }
+                        }
                     }
                 }
                 if (currentBotAsked === 'cart_review' || state.stage === 'cart_review') {

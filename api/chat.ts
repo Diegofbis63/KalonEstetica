@@ -70,7 +70,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             getActiveServices()
         ]);
         
-        // 4. IDENTIFY LEAD
+        // 4. IDENTIFY LEAD (Optimized for Web & WhatsApp)
         let leadId = null;
         let isBotEnabled = true;
         let leadName = null;
@@ -78,10 +78,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         let savedState = null;
         let lastUpdate = null;
 
-        const identificationId = userId || body.clientPhone;
+        // Identification ID is either a Phone (WhatsApp) or a UUID string (Web)
+        const identificationId = userId || (body.clientPhone?.length > 5 ? body.clientPhone : null);
 
         if (identificationId) {
-            const lead = userId ? await getLeadByPhone(userId) : await findLeadByFlexiblePhone(body.clientPhone);
+            // First attempt: Search by phone (normalized last digits)
+            const normalizedPhone = identificationId.replace(/\D/g, '');
+            let lead = normalizedPhone.length >= 8 ? await findLeadByFlexiblePhone(normalizedPhone) : null;
+            
+            // Second attempt: Search by UUID (Web ID) if phone search failed
+            if (!lead && identificationId.length > 20) {
+                 const results = await sql`SELECT id, is_bot_enabled, client_name, contact_info, current_state, updated_at FROM leads WHERE contact_info->>'phone' = ${identificationId} OR contact_info->>'uuid' = ${identificationId} LIMIT 1`;
+                 if (results.length > 0) lead = results[0];
+            }
+
             if (lead) {
                 leadId = lead.id;
                 isBotEnabled = lead.is_bot_enabled !== false;
@@ -94,10 +104,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         // 5. BUILD CONVERSATION CONTEXT
         let messages = body.messages || [];
-        if (userId && !messages.length && incomingMessage) {
-            if (leadId) {
-                messages = await getChatHistory(leadId);
+        // If message is missing history but we have a lead, fetch history from DB to enable Anti-Amnesia
+        if (leadId && messages.length <= 1) {
+            const history = await getChatHistory(leadId);
+            if (history.length > 0) {
+                messages = [...history, { role: 'user', content: incomingMessage, media_url: incomingMediaUrl }];
             }
+        }
+        
+        // Single user message case (Fallback)
+        if (!messages.length && incomingMessage) {
             messages.push({ role: 'user', content: incomingMessage, media_url: incomingMediaUrl });
         }
 
@@ -112,9 +128,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             await updateLeadState(leadId, state);
             await insertChatLog(leadId, 'user', incomingMessage, incomingMediaUrl, !!userId, body.mediaData);
         } else if (identificationId) {
-            const phone = identificationId.replace(/\D/g, '');
+            // Create a new Lead immediately to prevent amnesia in the next message
+            const isPhone = /^\d+$/.test(identificationId) && identificationId.length < 15;
             const nameToSave = (state.clientName && state.clientName !== 'Cliente') ? state.clientName : 'Cliente';
-            const newLead = await createLead(DEFAULT_ORG_ID, nameToSave, { phone: phone, source: userId ? 'whatsapp' : 'web' });
+            
+            const contactInfo = isPhone 
+                ? { phone: identificationId, source: userId ? 'whatsapp' : 'web' }
+                : { uuid: identificationId, source: 'web' };
+
+            const newLead = await createLead(DEFAULT_ORG_ID, nameToSave, contactInfo);
             leadId = newLead.id;
             await updateLeadState(leadId, state);
             await insertChatLog(leadId, 'user', incomingMessage, incomingMediaUrl, !!userId, body.mediaData);
