@@ -278,22 +278,31 @@ export async function extractState(
                     const hasIntro = normalizedContent.includes("mi nombre es") || normalizedContent.includes("soy ");
                     
                     if (isNamePrompt || hasIntro) {
-                        if (msg.content && msg.content.length > 2 && msg.content.length < 40) {
+                        if (msg.content && msg.content.length > 2 && msg.content.length < 50) {
                             const catWords = categories.map(c => normalizeText(c.name)).flatMap(n => n.split(/\s+/));
                             const svcWords = services.map(s => normalizeText(s.title)).flatMap(n => n.split(/\s+/));
-                            const notNames = [
-                                "si", "no", "hola", "chau", "nada", "turno", "bien", "dale", "otro", "adelante", "perfecto", "listo", "agregar", "sacar", "quitar", "sumar",
-                                "extensiones", "pestañas", "uñas", "cejas", "lifting", "facial", "masaje", "depilacion", "corporal", "manicuria", "pedicuria", "esmalte",
-                                ...catWords, ...svcWords
-                            ];
-                            const containsServiceWord = notNames.some(word => word.length > 3 && normalizedContent.includes(word));
-                            const isServiceSelectionTurn = catsInFoundOrder.length > 0;
                             
-                            if ((!containsServiceWord && !isServiceSelectionTurn) || hasIntro) {
-                                state.clientName = extractName(msg.content);
-                                console.log(`[stateMachine.ts] Detected name: ${state.clientName}`);
-                                // --- Loop Prevention: Advance stage if we just got the name ---
-                                if (state.clientName && state.clientName.length > 2) {
+                            const confirmWords = ['si', 'correcto', 'perfecto', 'bien', 'dale', 'ok', 'listo', 'avanzar', 'genial', 'obvio', 'confirmo', 'avancemos', 'adelante', 'estamos', 'esta bien', 'asi esta bien', 'confirmar', 'buenisimo', 'excelente', 'de 10', 'de diez', 'bueno', 'bueno dale', 'es correcto'];
+                            const notNames = [
+                                "si", "no", "hola", "chau", "nada", "turno", "bien", "dale", "otro", "adelante", "perfecto", "listo", "agregar", "sacar", "quitar", "sumar", "mas", "menos",
+                                "extensiones", "pestañas", "uñas", "cejas", "lifting", "facial", "masaje", "depilacion", "corporal", "manicuria", "pedicuria", "esmalte",
+                                ...confirmWords, ...catWords, ...svcWords
+                            ];
+                            
+                            const isServiceSelectionTurn = catsInFoundOrder.length > 0;
+                            const isBlockedCommand = notNames.some(word => 
+                                normalizedContent === word || 
+                                normalizedContent.startsWith(word + " ") || 
+                                (word.length > 3 && normalizedContent.includes(word))
+                            );
+
+                            if ((!isBlockedCommand && !isServiceSelectionTurn) || hasIntro) {
+                                const cleanName = extractName(msg.content);
+                                if (cleanName && cleanName.length > 2 && !notNames.includes(normalizeText(cleanName))) {
+                                    state.clientName = cleanName;
+                                    console.log(`[stateMachine.ts] Turn ${i}: Detected name: ${state.clientName}`);
+                                    
+                                    // --- Loop Prevention: Advance stage if we just got the name ---
                                     if (!state.clientPhone) state.stage = 'phone_collection';
                                     else if (!state.pendingDate) state.stage = 'availability_proposal';
                                     else state.stage = 'payment_request';
@@ -448,9 +457,12 @@ export async function extractState(
                         }
                     } else {
                         // --- 1. CORE CONFIRMATION LOGIC (STRICT) ---
-                        // Only confirm if user explicitly says YES/OK. "Agregar" is handled separately.
-                        const confirmWords = ['si', 'correcto', 'perfecto', 'bien', 'dale', 'ok', 'listo', 'avanzar', 'genial', 'confirmo', 'avancemos', 'adelante', 'estamos', 'esta bien', 'asi esta bien', 'confirmar'];
-                        const isUserConfirming = confirmWords.some(kw => normalizedContent === kw || normalizedContent.startsWith(kw + " ") || normalizedContent.endsWith(" " + kw));
+                        const confirmWords = ['si', 'correcto', 'perfecto', 'bien', 'dale', 'ok', 'listo', 'avanzar', 'genial', 'obvio', 'confirmo', 'avancemos', 'adelante', 'estamos', 'esta bien', 'asi esta bien', 'confirmar', 'buenisimo', 'excelente', 'de 10', 'de diez', 'bueno', 'bueno dale', 'es correcto'];
+                        const isUserConfirming = confirmWords.some(kw => 
+                            normalizedContent === kw || 
+                            normalizedContent.startsWith(kw + " ") || 
+                            normalizedContent.endsWith(" " + kw)
+                        ) || intent === 'afirmacion_o_agregar_carrito';
 
                         // --- 2. SERVICE ADDITION LOGIC ---
                         const singularize = (w: string) => (w.endsWith('s') && w.length > 3 ? w.slice(0, -1) : w);
@@ -687,11 +699,12 @@ export function generateResponse(
                 const list = selectedServices.map(s => {
                     const cleanDur = s.duration.toString().replace(/min/g, '').trim();
                     const isSub = s.title.includes('-') || s.title.toLowerCase().includes('nail art');
-                    const item = `*${s.title}* ($${s.price}) - ${cleanDur} min`;
-                    return isSub ? `  - ${item}` : `• ${item}`;
+                    const item = `• *${s.title}* (@price) - ${cleanDur} min`.replace('@price', `$${Math.round(Number(s.price))}`);
+                    return isSub ? `  - ${item}` : item;
                 }).join('\n');
-                const totalPrice = selectedServices.reduce((a, b) => a + Number(b.price), 0);
-                const totalDur = selectedServices.reduce((a, b) => a + parseDuration(b.duration), 0);
+                
+                const totalPrice = selectedServices.reduce((acc, s) => acc + Math.round(Number(s.price)), 0);
+                const totalDur = selectedServices.reduce((acc, s) => acc + parseDuration(s.duration), 0);
                 const durText = formatDurationHuman(totalDur);
 
                 if (state.errorType === 'unrecognized_cart_action') {
@@ -706,8 +719,8 @@ export function generateResponse(
             }
             case 'name_collection': {
                 const selectedServices = services.filter(s => state.selectedServiceIds.includes(s.id));
-                const totalPrice = selectedServices.reduce((a, b) => a + Number(b.price), 0);
-                const totalDur = selectedServices.reduce((a, b) => a + parseDuration(b.duration), 0);
+                const totalPrice = selectedServices.reduce((acc, s) => acc + Math.round(Number(s.price)), 0);
+                const totalDur = selectedServices.reduce((acc, s) => acc + parseDuration(s.duration), 0);
                 const durText = formatDurationHuman(totalDur);
                 
                 return `¡Perfecto! Todo confirmado. ✨ Entonces, el total es de *$${totalPrice}* por una sesión de *${durText}*.\n\nPara ir agendándote, ¿cómo es tu nombre completo? 😊`;
@@ -722,7 +735,7 @@ export function generateResponse(
             case 'availability_proposal': {
                 if (availableSlots.length > 0) {
                     const selectedSvc = services.filter(s => state.selectedServiceIds.includes(s.id));
-                    const totalDur = selectedSvc.reduce((a, b) => a + parseDuration(b.duration), 0);
+                    const totalDur = selectedSvc.reduce((acc, s) => acc + parseDuration(s.duration), 0);
                     const durText = formatDurationHuman(totalDur);
                     const serviceList = selectedSvc.map(s => s.title).join(' + ');
                     
