@@ -404,7 +404,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
       label: "Tasa de Intención", 
       value: `${leads.length > 0 ? Math.round((leads.filter(l => l.intent_score > 70).length / leads.length) * 100) : 0}%`, 
       color: "text-emerald-400", 
-      path: "/dashboard/income" 
+      path: authUser?.role === 'admin' ? "/dashboard/income" : null 
     },
   ];
 
