@@ -149,6 +149,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         // 8. AVAILABILITY SEARCH
         const foundSlots: any[] = [];
+        let timeWasAdjusted = false;
         if (state.stage === 'availability_proposal' && state.selectedServiceIds.length > 0) {
             console.log("[chat.ts] Calculating availability slots...");
             const selectedSvcObjs = services.filter(s => state.selectedServiceIds.includes(s.id));
@@ -207,6 +208,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 }
             }
             if (foundSlots.length > 0) {
+                const todayStr = new Date().toISOString().split('T')[0];
+                if (state.requestedTime && foundSlots[0].date === todayStr && foundSlots[0].time !== state.requestedTime) {
+                    timeWasAdjusted = true;
+                }
                 state.pendingDate = foundSlots[0].date;
                 state.pendingTime = foundSlots[0].time;
             }
@@ -218,7 +223,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 console.log("[chat.ts] Media received, confirming appointment...");
                 const selectedSvcObjs = services.filter(s => state.selectedServiceIds.includes(s.id));
                 const catNames = Array.from(new Set(selectedSvcObjs.map(s => s.category_name || "Servicio"))).join(' + ');
-                const totalPrice = selectedSvcObjs.reduce((a, b) => a + Number(b.price), 0);
+                const totalPrice = selectedSvcObjs.reduce((a, b) => a + Math.round(Number(b.price)), 0);
                 const totalDur = selectedSvcObjs.reduce((a, b) => a + parseDuration(b.duration), 0);
                 const dateTime = `${state.pendingDate}T${state.pendingTime}:00-03:00`;
                 
@@ -230,7 +235,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // 10. GENERATE RESPONSE
-        const responseText = generateResponse(state, categories, services, foundSlots, !!userId, !!(incomingMediaUrl || body.mediaData));
+        const responseText = generateResponse(state, categories, services, foundSlots, !!userId, !!(incomingMediaUrl || body.mediaData), timeWasAdjusted);
         
         if (leadId) {
             await updateLeadState(leadId, state);

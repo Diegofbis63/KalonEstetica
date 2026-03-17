@@ -124,7 +124,7 @@ export async function extractState(
         return {
             clientName: oldState?.clientName || (initialName && initialName !== 'Cliente' ? initialName : null),
             clientPhone: oldState?.clientPhone || initialPhone || null,
-            selectedServiceIds: Array.isArray(oldState?.selectedServiceIds) ? oldState.selectedServiceIds : [],
+            selectedServiceIds: Array.isArray(oldState?.selectedServiceIds) ? [...new Set(oldState.selectedServiceIds as string[])] : [],
             currentCategoryId: typeof oldState?.currentCategoryId === 'string' ? oldState.currentCategoryId : null,
             pendingCategoryIds: Array.isArray(oldState?.pendingCategoryIds) ? oldState.pendingCategoryIds : [],
             stage: oldState?.stage || 'greeting',
@@ -132,7 +132,7 @@ export async function extractState(
             pendingTime: oldState?.pendingTime || null,
             requestedDate: oldState?.requestedDate || null,
             requestedTime: oldState?.requestedTime || null,
-            rejectedDates: Array.isArray(oldState?.rejectedDates) ? oldState.rejectedDates : [],
+            rejectedDates: Array.isArray(oldState?.rejectedDates) ? [...new Set(oldState.rejectedDates as string[])] : [],
             requestedAllOptions: !!oldState?.requestedAllOptions,
             isBotEnabled: oldState?.isBotEnabled !== false && defaultIsBotEnabled
         };
@@ -268,47 +268,53 @@ export async function extractState(
                 // Global intent handling - STICKY FLOW PROTECTION
                 if (intent === 'saludo' || intent === 'pedir_turno_general' || intent === 'listar_servicios') {
                     const hasSelectedServices = state.selectedServiceIds.length > 0;
-                    const isAlreadyBooking = ['phone_collection', 'availability_proposal', 'payment_request', 'waiting_for_receipt'].includes(state.stage);
+                    const isAlreadyBooking = ['name_collection', 'phone_collection', 'availability_proposal', 'payment_request', 'waiting_for_receipt', 'done'].includes(state.stage);
 
-                    // If we have services OR a date, we are NO LONGER in the greeting phase
-                    if (state.stage === 'greeting' && !hasSelectedServices) {
-                        state.stage = 'parent_selection';
-                    } else if (isAlreadyBooking || hasSelectedServices) {
-                        console.log(`[stateMachine.ts] Turn ${i}: Protecting booking flow (Stage: ${state.stage}) from reset by intent ${intent}`);
-                        // Don't reset stage. If it was category selection, maybe move to parent_selection if they really want lists
+                    if (isAlreadyBooking || hasSelectedServices || state.stage === 'cart_review') {
+                        // Protected flow: Don't allow hello/general intents to reset the booking
+                        console.log(`[stateMachine.ts] Turn ${i}: Stickiness protection active (Stage: ${state.stage})`);
+                        
                         if (intent === 'listar_servicios' && state.stage === 'sub_service_selection') {
                             state.stage = 'parent_selection';
                         }
-                    } else if (state.stage === 'sub_service_selection') {
-                         // Keep it there or move if requested
-                    } else {
-                         state.stage = 'parent_selection';
+                    } else if (state.stage === 'greeting' || !hasSelectedServices) {
+                        state.stage = 'parent_selection';
                     }
                 }
 
                 // --- Relative Date & Time Detection ---
                 const relDate = parseRelativeDate(msg.content, today);
                 const timeMatch = msg.content.match(/(\d{1,2})(:|\s?hs?|y\s)(\d{2})?/i);
-                
                 if (relDate || timeMatch) {
-                    if (relDate) state.requestedDate = relDate;
+                    if (relDate) {
+                        state.requestedDate = relDate;
+                        state.pendingDate = null;
+                        state.pendingTime = null;
+                    }
                     if (timeMatch) {
                         let h = parseInt(timeMatch[1]);
                         const m = timeMatch[3] ? parseInt(timeMatch[3]) : 0;
                         if (h < 9) h += 12;
                         state.requestedTime = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+                        state.pendingDate = null;
+                        state.pendingTime = null;
                     }
-                    state.pendingDate = null;
-                    state.pendingTime = null;
-                    state.stage = 'availability_proposal';
-                    console.log(`[stateMachine.ts] Transition to availability_proposal due to date detection`);
+                    if (state.stage === 'availability_proposal' || ['name_collection', 'phone_collection'].includes(state.stage)) {
+                         state.stage = 'availability_proposal';
+                         console.log(`[stateMachine.ts] Requested date/time detected. Re-triggering availability_proposal.`);
+                    }
                 }
 
                 // --- Multi-Category Detection ---
-                const catsInFoundOrder = categories
-                    .filter(c => normalizedContent.includes(normalizeText(c.name)))
-                    .map(c => ({ id: c.id, name: c.name, pos: normalizedContent.indexOf(normalizeText(c.name)) }))
-                    .sort((a, b) => a.pos - b.pos);
+                const isAlreadyBooking = ['name_collection', 'phone_collection', 'availability_proposal', 'payment_request', 'waiting_for_receipt', 'done'].includes(state.stage);
+                const hasExplicitCategoryIntent = intent === 'listar_servicios' || intent === 'saludo';
+                
+                const catsInFoundOrder = (!isAlreadyBooking || hasExplicitCategoryIntent) 
+                    ? categories
+                        .filter(c => normalizedContent.includes(normalizeText(c.name)))
+                        .map(c => ({ id: c.id, name: c.name, pos: normalizedContent.indexOf(normalizeText(c.name)) }))
+                        .sort((a, b) => a.pos - b.pos)
+                    : [];
                 
                 let categoriesRequestedInThisTurn = false;
                 catsInFoundOrder.forEach(c => {
@@ -588,6 +594,9 @@ export async function extractState(
                         normalizedContent.includes("esta perfecto") || 
                         normalizedContent.includes("perrrfecto") || 
                         normalizedContent.includes("confirmar") ||
+                        normalizedContent.includes("me queda bien") ||
+                        normalizedContent.includes("me va bien") ||
+                        normalizedContent.includes("esta bien") ||
                         (normalizedContent.includes("turno") && (normalizedContent.includes("ese") || normalizedContent.includes("esta")))
                     ) {
                         state.stage = 'payment_request';
@@ -681,7 +690,8 @@ export function generateResponse(
     services: Service[],
     availableSlots: Slot[],
     isFromWhatsApp: boolean,
-    hasMediaInLastMsg: boolean
+    hasMediaInLastMsg: boolean,
+    isTimeAdjusted?: boolean
 ): string {
     console.log(`[stateMachine.ts] Generating response for stage: ${state.stage}. hasMediaInLastMsg: ${hasMediaInLastMsg}`);
     
@@ -795,10 +805,12 @@ export function generateResponse(
                     if (availableSlots.length === 1) {
                         const slot = availableSlots[0];
                         const greeting = state.clientName ? `${state.clientName.split(' ')[0]}, ¡qué alegría! ✨ ` : "¡Excelentes noticias! ✨ ";
-                        return `${greeting}Tengo disponibilidad para tu sesión de *${serviceList}* (Duración: *${durText}*) el día *${formatDateHuman(slot.date)}* a las *${slot.time}hs*. 🗓️\n\n¿Te queda bien este horario o preferís que busquemos otro?`;
+                        const adjustmentNote = isTimeAdjusted ? "Como cerramos a las 20hs y tu sesión es larga, te busqué el horario más cercano disponible: " : "";
+                        return `${greeting}${adjustmentNote}Tengo disponibilidad para tu sesión de *${serviceList}* (Duración: *${durText}*) el día *${formatDateHuman(slot.date)}* a las *${slot.time}hs*. 🗓️\n\n¿Te queda bien este horario o preferís que busquemos otro?`;
                     } else {
                         const options = availableSlots.map(s => `• *${formatDateHuman(s.date)}* a las *${s.time}hs*`).join('\n');
-                        return `¡Claro que sí! 😊 Para que elijas con tranquilidad, aquí tenés las opciones más cercanas para tu sesión de *${serviceList}*:\n\n${options}\n\n¿Cuál de estos horarios te resulta más cómodo?`;
+                        const adjustmentNote = isTimeAdjusted ? "Como cerramos a las 20hs y tu sesión es larga, estas son las opciones que más se acercan a lo que buscabas:\n\n" : "";
+                        return `¡Claro que sí! 😊 ${adjustmentNote}Para que elijas con tranquilidad, aquí tenés las opciones más cercanas para tu sesión de *${serviceList}*:\n\n${options}\n\n¿Cuál de estos horarios te resulta más cómodo?`;
                     }
                 }
                 return "Uy, parece que tengo la agenda completa para esa duración esta semana. 🗓️ ¿Te gustaría que busquemos un lugar para la semana que viene así te aseguro un espacio para vos? 😊";
