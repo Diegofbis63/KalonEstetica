@@ -211,32 +211,26 @@ export async function extractState(
 
         if (messagesToProcess.length === 0) return state;
 
-        let currentBotAsked: string | null = null;
         const nlp = await getNlpManager();
 
-        // 1. Scan history for bot context (What did the bot just ask?)
-        const lastBotMsg = [...messages].reverse().find(m => m.role === 'assistant' || m.role === 'bot');
-        if (lastBotMsg) {
-            const botText = normalizeText(lastBotMsg.content);
-            if (botText.includes("elige una categoria") || botText.includes("nuestras categorias")) currentBotAsked = 'category';
-            else if (botText.includes("servicios de") || botText.includes("tratamientos de") || botText.includes("estos son los tratamientos")) currentBotAsked = 'sub_service';
-            else if (botText.includes("revisemos tu pedido") || botText.includes("tu carrito") || botText.includes("listado de todos")) currentBotAsked = 'cart_review';
-            else if (botText.includes("agregar algo mas") || botText.includes("avanzamos con el turno")) currentBotAsked = 'cart_confirmation';
-            else if (botText.includes("tu nombre") || botText.includes("nombre completo") || botText.includes("con quien tengo")) currentBotAsked = 'name';
-            else if (botText.includes("whatsapp") || botText.includes("este mismo numero") || botText.includes("numero de cel")) currentBotAsked = 'phone';
-            else if (
+        const getBotAskedIntent = (botText: string): string | null => {
+            if (botText.includes("elige una categoria") || botText.includes("nuestras categorias")) return 'category';
+            if (botText.includes("servicios de") || botText.includes("tratamientos de") || botText.includes("estos son los tratamientos")) return 'sub_service';
+            if (botText.includes("revisemos tu pedido") || botText.includes("tu carrito") || botText.includes("listado de todos")) return 'cart_review';
+            if (botText.includes("agregar algo mas") || botText.includes("avanzamos con el turno")) return 'cart_confirmation';
+            if (botText.includes("tu nombre") || botText.includes("nombre completo") || botText.includes("con quien tengo")) return 'name';
+            if (botText.includes("whatsapp") || botText.includes("este mismo numero") || botText.includes("numero de cel")) return 'phone';
+            if (
                 botText.includes("proximo horario") || botText.includes("disponibilidad") || botText.includes("te queda bien") || 
                 botText.includes("busquemos otro") || botText.includes("horario me queda") || botText.includes("te sirve este horario") || 
                 botText.includes("podemos agendar") || botText.includes("para el dia") || botText.includes("buenas noticias") || 
                 botText.includes("elegir tranquila") || botText.includes("opciones mas cercanas")
-            ) {
-                currentBotAsked = 'availability';
-            }
-            else if (botText.includes("necesitamos una seña") || botText.includes("transferi al alias") || botText.includes("comprobante por aca") || botText.includes("senar") || botText.includes("pago de la reserva")) {
-                currentBotAsked = 'payment';
-                state.stage = 'payment_request';
-            }
-        }
+            ) return 'availability';
+            if (botText.includes("necesitamos una seña") || botText.includes("transferi al alias") || botText.includes("comprobante por aca") || botText.includes("senar") || botText.includes("pago de la reserva")) return 'payment';
+            return null;
+        };
+
+        let currentBotAsked: string | null = null;
 
         for (let i = 0; i < messagesToProcess.length; i++) {
             const msg = messagesToProcess[i];
@@ -246,6 +240,18 @@ export async function extractState(
             // Skip bot messages in processing loop (already handled context)
             if (msg.role === 'assistant' || msg.role === 'bot') continue;
 
+            if (isStateLost && messages.length > 1) {
+                // Find the bot message that happened directly before THIS user message
+                const msgIndex = messages.indexOf(msg);
+                const prevBotMsg = [...messages].slice(0, msgIndex).reverse().find(m => m.role === 'assistant' || m.role === 'bot');
+                if (prevBotMsg) {
+                    currentBotAsked = getBotAskedIntent(normalizeText(prevBotMsg.content));
+                }
+            } else {
+                // Normal flow: check the absolute last bot message
+                const lastBotMsg = [...messages].reverse().find(m => m.role === 'assistant' || m.role === 'bot');
+                if (lastBotMsg) currentBotAsked = getBotAskedIntent(normalizeText(lastBotMsg.content));
+            }
 
             if (msg.role === 'user') {
                 const isLastMessage = i === messages.length - 1;
@@ -309,8 +315,10 @@ export async function extractState(
                     }
                 }
 
-                // --- Global Service Detection ---
-                if (['greeting', 'parent_selection', 'sub_service_selection'].includes(state.stage)) {
+                // --- Global Service Detection (Priority: Anti-Inversion) ---
+                const isRemoval = normalizedContent.includes("quitar") || normalizedContent.includes("quita ") || normalizedContent.includes("quita") || normalizedContent.includes("sacar") || normalizedContent.includes("eliminar") || normalizedContent.includes("elimina") || normalizedContent.includes("borrar") || normalizedContent.includes("borra") || normalizedContent.includes("menos") || normalizedContent.includes("saca") || intent === 'negacion_o_cerrar_carrito';
+                
+                if (!isRemoval && ['greeting', 'parent_selection', 'sub_service_selection'].includes(state.stage)) {
                     const matchedSvc = services.find(s => {
                         const nt = normalizeText(s.title);
                         const lc = normalizedContent.toLowerCase();
@@ -323,6 +331,8 @@ export async function extractState(
                         state.stage = 'cart_review';
                         state.currentCategoryId = null;
                         state.currentFlow = 'booking_funnel';
+                        console.log(`[stateMachine.ts] Turn ${i}: Intercepted Global Service Mention: ${matchedSvc.title}`);
+                        continue;
                     }
                 }
 
@@ -413,7 +423,7 @@ export async function extractState(
                     const isNewCategoryRequest = catsInFoundOrder.some(c => !state.selectedServiceIds.some(sid => services.find(s => s.id === sid)?.category_id === c.id) && state.currentCategoryId !== c.id);
                     const isOnlyNamingCategories = isNewCategoryRequest && normalizedContent.length < (catsInFoundOrder.reduce((acc, c) => acc + c.name.length, 0) + 12);
 
-                    if (!isOnlyNamingCategories) {
+                    if (!isOnlyNamingCategories && !isRemoval) {
                         const singularize = (w: string) => (w.endsWith('s') && w.length > 3 ? w.slice(0, -1) : w);
                         const inputWords = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 3);
                         const singularInputWords = inputWords.map(singularize);
@@ -512,7 +522,7 @@ export async function extractState(
                 }
 
                 if (currentBotAsked === 'cart_review' || state.stage === 'cart_review') {
-                    const isRemoval = normalizedContent.includes("quitar") || normalizedContent.includes("sacar") || normalizedContent.includes("eliminar") || normalizedContent.includes("borrar") || normalizedContent.includes("menos") || normalizedContent.includes("saca");
+                    const isRemoval = ['quitar', 'quita ', 'quita', 'sacar', 'eliminar', 'elimina', 'borrar', 'borra', 'menos', 'saca'].some(w => normalizedContent.includes(w));
                     
                     if (isRemoval) {
                         const singularize = (w: string) => (w.endsWith('s') && w.length > 3 ? w.slice(0, -1) : w);
@@ -538,7 +548,24 @@ export async function extractState(
                         });
                         
                         if (toRemove.length > 0) {
-                            state.selectedServiceIds = state.selectedServiceIds.filter(sid => !toRemove.includes(sid));
+                            // Enhanced logic to handle "remove 1" or specific counts
+                            const countMatch = normalizedContent.match(/(\d+)\s*(vez|veces|x|unidad|unidades)?/);
+                            const countToRemove = countMatch ? parseInt(countMatch[1]) : 0;
+
+                            if (countToRemove > 0) {
+                                // Remove specific number of occurrences
+                                let removed = 0;
+                                state.selectedServiceIds = state.selectedServiceIds.filter(sid => {
+                                    if (toRemove.includes(sid) && removed < countToRemove) {
+                                        removed++;
+                                        return false;
+                                    }
+                                    return true;
+                                });
+                            } else {
+                                // Standard: Remove all instances found in this turn matching the identification
+                                state.selectedServiceIds = state.selectedServiceIds.filter(sid => !toRemove.includes(sid));
+                            }
                             state.stage = state.selectedServiceIds.length > 0 ? 'cart_review' : 'parent_selection';
                         }
                     } else {
@@ -553,26 +580,33 @@ export async function extractState(
                         // --- 2. SERVICE ADDITION LOGIC ---
                         const singularize = (w: string) => (w.endsWith('s') && w.length > 3 ? w.slice(0, -1) : w);
                         const inputWords = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 2).map(singularize);
-                        
-                        const matchedSvcs = services.filter(s => {
+                                           const matchedSvcs = services.filter(s => {
                             const nt = normalizeText(s.title);
                             const sn = nt.split(/\s+/).map(singularize);
                             if (normalizedContent.includes(nt)) return true;
+                            // Strict keyword matching for additions
                             const keyWords = sn.filter(w => w.length > 3 && !["masaje", "limpieza", "pestaña", "uña"].some(g => w.includes(g)));
-                            return keyWords.some(kw => inputWords.includes(kw));
+                            return keyWords.length > 0 && keyWords.every(kw => inputWords.includes(kw));
                         });
 
-                        const newSvcsToAdd = matchedSvcs;
+                        const newSvcsToAdd = !isRemoval ? matchedSvcs : [];
 
                         // --- 3. EXECUTION ORDER AND STATE TRANSITION (STRICT PRIORITY) ---
+                        const removalWords = ["quitar", "sacar", "eliminar", "borrar", "menos", "quita", "saca", "elimina", "borra"];
+                        const isRemovalIntent = removalWords.some(w => normalizedContent.includes(w) || normalizedContent.startsWith(w));
+
                         const isExplicitAdd = normalizedContent.includes("agregar") || normalizedContent.includes("sumar") || normalizedContent.includes("mas") || intent === 'afirmacion_o_agregar_carrito';
 
-                        if (isExplicitAdd && newSvcsToAdd.length === 0) {
+                        if (isRemovalIntent && state.selectedServiceIds.length > 0) {
+                            state.stage = 'parent_selection';
+                            state.currentCategoryId = null;
+                            state.errorType = undefined;
+                        } else if (isExplicitAdd && newSvcsToAdd.length === 0) {
                             // If they say "agregar" but don't specify a service, go to categories
                             state.stage = 'parent_selection';
                             state.currentCategoryId = null;
                             state.errorType = undefined;
-                        } else if (newSvcsToAdd.length > 0) {
+                        } else if (newSvcsToAdd.length > 0 && !isRemoval) {
                             newSvcsToAdd.forEach(fs => {
                                 state.selectedServiceIds.push(fs.id);
                             });
@@ -598,7 +632,9 @@ export async function extractState(
                         state.stage = 'name_collection';
                     }
                 }
-
+                
+                console.log(`[stateMachine] End of turn ${i}: Input='${msg.content}', stage='${state.stage}', cart=[${state.selectedServiceIds.join(',')}]`);
+                
                 if (currentBotAsked === 'availability') {
                     if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("otro") || normalizedContent.includes("no puedo") || normalizedContent.includes("que mas hay")) {
                         if (state.pendingDate) state.rejectedDates.push(`${state.pendingDate} ${state.pendingTime}`);

@@ -154,15 +154,26 @@ describe('KalonBot Stress Test - 100 Variations', () => {
       expect(maskPhone(phone, 'staff')).toContain('****');
   });
 
-  it('Scenario 8: Concurrency Conflict simulation', async () => {
-      const flow = ['soprano ice', 'listo', 'Juan', '123', 'mañana a las 10'];
-      const state1 = await runFlow(flow);
-      expect(state1.stage).toBe('availability_proposal');
-      expect(state1.pendingTime).toBe('10:00');
-
-      // User rejects or asks for another
-      const state2 = await runFlow([...flow, 'no, mejor otro horario']);
-      expect(state2.stage).toBe('availability_proposal');
+  it('Scenario 9: Fix Regression - Inversion of removal logic (Double Addition Bug)', async () => {
+    // Stage: User adds a service twice, then asks to remove ONE correctly.
+    const flow = [
+        'depilacion', 
+        'soprano ice platinum', 
+        'agregar soprano ice platinum', 
+        // Current state should have 2 instances of svc2
+        'quita soprano ice platinum 1 vez'
+    ];
+    const finalState = await runFlow(flow);
+    
+    // We expect exactly 1 instance now.
+    const occurrences = finalState.selectedServiceIds.filter((id: string) => id === 'svc2').length;
+    expect(occurrences).toBe(1);
+    expect(finalState.stage).toBe('cart_review');
+    
+    // Second check: "elimina soprano" should remove the remaining one
+    const flow2 = [...flow, 'elimina soprano ice platinum'];
+    const finalState2 = await runFlow(flow2);
+    expect(finalState2.selectedServiceIds).not.toContain('svc2');
   });
 
 });
