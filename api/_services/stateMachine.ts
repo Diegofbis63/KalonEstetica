@@ -273,11 +273,13 @@ export async function extractState(
                     state.stage = 'sub_service_selection';
                 }
 
-                if (!state.clientName) {
+                if (!state.clientName || state.clientName === 'Cliente') {
                     const isNamePrompt = currentBotAsked === 'name' || state.stage === 'name_collection';
                     const hasIntro = normalizedContent.includes("mi nombre es") || normalizedContent.includes("soy ");
+                    // SEAL: If we are in scheduling flow, don't try to capture name unless explicitly asked
+                    const isSchedulingIntent = (relDate || timeMatch) && state.stage === 'availability_proposal';
                     
-                    if (isNamePrompt || hasIntro) {
+                    if ((isNamePrompt || hasIntro) && !isSchedulingIntent) {
                         if (msg.content && msg.content.length > 2 && msg.content.length < 50) {
                             const catWords = categories.map(c => normalizeText(c.name)).flatMap(n => n.split(/\s+/));
                             const svcWords = services.map(s => normalizeText(s.title)).flatMap(n => n.split(/\s+/));
@@ -312,7 +314,7 @@ export async function extractState(
                     }
                 }
 
-                if (currentBotAsked === 'phone' && !state.clientPhone) {
+                if (currentBotAsked === 'phone' && (!state.clientPhone || state.clientPhone === 'Cliente')) {
                     if (intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("este mismo") || normalizedContent.includes("si")) {
                         state.clientPhone = 'CONFIRMED_CURRENT';
                     } else {
@@ -568,10 +570,13 @@ export async function extractState(
 
         // Final stage progression check - DEFENSIVE MODE
         if (state.selectedServiceIds.length > 0 && state.pendingCategoryIds.length === 0 && !state.currentCategoryId) {
-            const isInteracting = ['parent_selection', 'sub_service_selection', 'cart_review', 'cart_confirmation'].includes(state.stage);
+            const isInteracting = ['parent_selection', 'sub_service_selection', 'cart_review', 'cart_confirmation', 'name_collection', 'phone_collection', 'availability_proposal'].includes(state.stage);
             const isFinished = ['done', 'waiting_for_receipt', 'payment_request'].includes(state.stage);
             
-            if (!isInteracting && !isFinished) {
+            // Priority: If user JUST provided a date/time, LOCK the stage to availability_proposal
+            const hasJustScheduled = !!(state.requestedDate || state.requestedTime);
+
+            if (!isInteracting && !isFinished && !hasJustScheduled) {
                 if (!state.clientName || state.clientName === 'Cliente') {
                     state.stage = 'name_collection';
                     console.log(`[stateMachine.ts] Progression: name_collection`);
