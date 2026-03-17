@@ -447,11 +447,12 @@ export async function extractState(
                             state.stage = state.selectedServiceIds.length > 0 ? 'cart_review' : 'parent_selection';
                         }
                     } else {
-                        // --- 1. CORE CONFIRMATION LOGIC (PRIORITY #1) ---
-                        const confirmWords = ['si', 'correcto', 'perfecto', 'bien', 'dale', 'ok', 'listo', 'avanzar', 'genial', 'obvio', 'confirmo', 'avancemos', 'adelante', 'estamos'];
-                        const isUserConfirming = confirmWords.some(kw => normalizedContent.includes(kw)) || intent === 'afirmacion_o_agregar_carrito';
+                        // --- 1. CORE CONFIRMATION LOGIC (STRICT) ---
+                        // Only confirm if user explicitly says YES/OK. "Agregar" is handled separately.
+                        const confirmWords = ['si', 'correcto', 'perfecto', 'bien', 'dale', 'ok', 'listo', 'avanzar', 'genial', 'confirmo', 'avancemos', 'adelante', 'estamos', 'esta bien', 'asi esta bien', 'confirmar'];
+                        const isUserConfirming = confirmWords.some(kw => normalizedContent === kw || normalizedContent.startsWith(kw + " ") || normalizedContent.endsWith(" " + kw));
 
-                        // --- 2. SERVICE ADDITION LOGIC (PRIORITY #2) ---
+                        // --- 2. SERVICE ADDITION LOGIC ---
                         const singularize = (w: string) => (w.endsWith('s') && w.length > 3 ? w.slice(0, -1) : w);
                         const inputWords = normalizedContent.split(/[\s,y+]+/).filter(p => p.length >= 2).map(singularize);
                         
@@ -465,10 +466,11 @@ export async function extractState(
 
                         const newSvcsToAdd = matchedSvcs.filter(s => !state.selectedServiceIds.includes(s.id));
 
-                        // --- 3. EXECUTION ORDER AND STATE TRANSITION ---
-                        const isExplicitAdd = normalizedContent.includes("agregar") || normalizedContent.includes("sumar") || normalizedContent.includes("mas");
+                        // --- 3. EXECUTION ORDER AND STATE TRANSITION (STRICT PRIORITY) ---
+                        const isExplicitAdd = normalizedContent.includes("agregar") || normalizedContent.includes("sumar") || normalizedContent.includes("mas") || intent === 'afirmacion_o_agregar_carrito';
 
-                        if (isExplicitAdd) {
+                        if (isExplicitAdd && newSvcsToAdd.length === 0) {
+                            // If they say "agregar" but don't specify a service, go to categories
                             state.stage = 'parent_selection';
                             state.currentCategoryId = null;
                             state.errorType = undefined;
@@ -554,7 +556,7 @@ export async function extractState(
 
         // Final stage progression check - DEFENSIVE MODE
         if (state.selectedServiceIds.length > 0 && state.pendingCategoryIds.length === 0 && !state.currentCategoryId) {
-            const isInteracting = ['sub_service_selection', 'cart_review', 'cart_confirmation'].includes(state.stage);
+            const isInteracting = ['parent_selection', 'sub_service_selection', 'cart_review', 'cart_confirmation'].includes(state.stage);
             const isFinished = ['done', 'waiting_for_receipt', 'payment_request'].includes(state.stage);
             
             if (!isInteracting && !isFinished) {
