@@ -61,7 +61,7 @@ export async function insertChatLog(leadId: string, role: string, content: strin
                      VALUES (${leadId}, ${role}, ${content}, ${mediaUrl}, ${mediaData || null}, ${sentToWhatsapp})`;
 }
 
-export async function createLead(orgId: string, name: string, contactInfo: { phone: string, source: string }) {
+export async function createLead(orgId: string, name: string, contactInfo: any) {
     console.log(`[db.ts] Creating a new lead for: ${name}`);
     const results = await sql`INSERT INTO leads (organization_id, client_name, contact_info, status, intent_score) 
                               VALUES (${orgId}, ${name}, ${JSON.stringify(contactInfo)}, 'qualified', 70) 
