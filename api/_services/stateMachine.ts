@@ -34,7 +34,7 @@ export interface ConvState {
     lastIntent?: string;
     isBotEnabled: boolean;
     currentFlow?: 'none' | 'booking_funnel';
-    errorType?: 'service_not_found' | 'category_not_found' | 'unrecognized_cart_action';
+    errorType?: 'service_not_found' | 'category_not_found' | 'unrecognized_cart_action' | 'ask_what_to_remove' | 'ask_what_to_modify' | 'ask_what_to_add';
 }
 
 export interface Category {
@@ -99,8 +99,9 @@ export async function extractState(
             // Check for "Reset triggers" (intents for new booking or category names)
             const isNewBookingIntent = ['saludo', 'pedir_turno_general', 'listar_servicios'].includes(intent);
             const mentionsCategory = categories.some(c => normalizedText.includes(normalizeText(c.name)));
+            const wantsRebookEarly = normalizedText.includes('otro turno') || normalizedText.includes('agendar para') || normalizedText.includes('sacar otro') || normalizedText.includes('nuevo turno');
 
-            if (isNewBookingIntent || mentionsCategory) {
+            if (isNewBookingIntent || mentionsCategory || wantsRebookEarly) {
                 resetCause = 'new_request';
             } else if (isCourtesy) {
                 // SHIELD: Stay in 'done' and flag it to generate a brief response
@@ -159,16 +160,24 @@ export async function extractState(
     // Clear previous errors
     delete state.errorType;
 
-    // --- 1. SPECIAL CASE: USER WANTS TO START OVER ---
+    // --- 1. SPECIAL CASE: RE-BOOKING OR START OVER ---
     const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
     const lastNormalized = lastUserMsg ? normalizeText(lastUserMsg.content || "") : "";
-    if (lastNormalized === 'hola' || lastNormalized === 'empezar' || lastNormalized === 'inicio' || lastNormalized === 'chau') {
+    const wantsRebook = lastNormalized.includes('otro turno') || lastNormalized.includes('agendar para') || lastNormalized.includes('sacar otro') || lastNormalized.includes('nuevo turno');
+    const wantsReset = lastNormalized === 'hola' || lastNormalized === 'empezar' || lastNormalized === 'inicio' || lastNormalized === 'chau' || wantsRebook;
+    
+    if (wantsReset) {
         if (state.stage === 'waiting_for_receipt' || state.stage === 'done' || state.stage === 'greeting' || state.stage === 'cart_review') {
-            console.log("[stateMachine.ts] User requested reset from terminal or early state.");
+            console.log("[stateMachine.ts] User requested reset or re-booking from terminal or early state.");
             state.stage = 'greeting';
             state.selectedServiceIds = [];
             state.pendingCategoryIds = [];
             state.currentCategoryId = null;
+            state.pendingDate = null;
+            state.pendingTime = null;
+            state.requestedDate = null;
+            state.requestedTime = null;
+            // Note: clientName and clientPhone are structurally preserved by the state map.
         }
     }
 
@@ -194,9 +203,8 @@ export async function extractState(
     }
 
     // ANTI-AMNESIA LOGIC: Conversational Rebuild
-    // If we have an initialState and it's NOT a greeting, we only process the LATEST message (Performance).
-    // IF the state is lost (greeting/null) OR it's a reset, we process the FULL HISTORY (User messages only) to reconstruct context.
-    const isStateLost = (state.stage === 'greeting' && state.selectedServiceIds.length === 0);
+    // IF the state is lost (greeting/null) AND it's not a deliberate reset, we process the FULL HISTORY (User messages only) to reconstruct context.
+    const isStateLost = (state.stage === 'greeting' && state.selectedServiceIds.length === 0 && !wantsReset);
     const messagesToProcess = (isStateLost && messages.length > 1) 
         ? messages.filter(m => m.role === 'user') 
         : (messages.length > 0 ? [messages[messages.length - 1]] : []);
@@ -316,26 +324,34 @@ export async function extractState(
                 }
 
                 // --- Global Service Detection (Priority: Anti-Inversion) ---
-                const isRemoval = normalizedContent.includes("quitar") || normalizedContent.includes("quita ") || normalizedContent.includes("quita") || normalizedContent.includes("sacar") || normalizedContent.includes("eliminar") || normalizedContent.includes("elimina") || normalizedContent.includes("borrar") || normalizedContent.includes("borra") || normalizedContent.includes("menos") || normalizedContent.includes("saca") || intent === 'negacion_o_cerrar_carrito';
+                const isRemoval = ["quitar", "sacar", "eliminar", "borrar", "menos", "quita", "saca", "elimina", "borra"].some(w => normalizedContent.includes(w)) || intent === 'negacion_o_cerrar_carrito';
                 
                 if (!isRemoval && ['greeting', 'parent_selection', 'sub_service_selection'].includes(state.stage)) {
                     const matchedSvc = services.find(s => {
                         const nt = normalizeText(s.title);
-                        const lc = normalizedContent.toLowerCase();
-                        return (nt.length > 3 && lc.includes(nt)) || (lc.length > 3 && nt.includes(lc));
+                        const lc = normalizedContent;
+                        // Avoid implicit matches like "uñas" triggering "uñas esculpidas". Must explicitly mention the service title.
+                        // Or a substantial part of it (>6 chars)
+                        const isGeneric = ['unas', 'cejas', 'masaje', 'masajes', 'depilacion', 'lifting', 'perfilado'].includes(lc);
+                        if (isGeneric) return false;
+                        
+                        return (nt.length > 4 && lc.includes(nt)) || (lc.length > 6 && nt.includes(lc));
                     });
+                    
                     if (matchedSvc) {
-                        if (!state.selectedServiceIds.includes(matchedSvc.id)) {
-                           state.selectedServiceIds.push(matchedSvc.id);
+                        // Only auto-add if we are not actively traversing a category sequence OR if the matched service belongs to the current category being chosen.
+                        if (state.pendingCategoryIds.length === 0 || state.currentCategoryId === matchedSvc.category_id) {
+                            if (!state.selectedServiceIds.includes(matchedSvc.id)) {
+                               state.selectedServiceIds.push(matchedSvc.id);
+                            }
+                            state.stage = 'cart_review';
+                            state.currentCategoryId = null;
+                            state.currentFlow = 'booking_funnel';
+                            console.log(`[stateMachine.ts] Turn ${i}: Intercepted Strict Global Service: ${matchedSvc.title}`);
+                            continue;
                         }
-                        state.stage = 'cart_review';
-                        state.currentCategoryId = null;
-                        state.currentFlow = 'booking_funnel';
-                        console.log(`[stateMachine.ts] Turn ${i}: Intercepted Global Service Mention: ${matchedSvc.title}`);
-                        continue;
                     }
                 }
-
                 // --- Multi-Category Detection ---
                 const isAlreadyBooking = ['name_collection', 'phone_collection', 'availability_proposal', 'payment_request', 'waiting_for_receipt', 'done'].includes(state.stage);
                 const hasExplicitCategoryIntent = intent === 'listar_servicios' || intent === 'saludo';
@@ -596,16 +612,19 @@ export async function extractState(
                         const isRemovalIntent = removalWords.some(w => normalizedContent.includes(w) || normalizedContent.startsWith(w));
 
                         const isExplicitAdd = normalizedContent.includes("agregar") || normalizedContent.includes("sumar") || normalizedContent.includes("mas") || intent === 'afirmacion_o_agregar_carrito';
+                        const isModificarIntent = normalizedContent.includes("modificar") || normalizedContent.includes("cambiar");
 
                         if (isRemovalIntent && state.selectedServiceIds.length > 0) {
-                            state.stage = 'parent_selection';
-                            state.currentCategoryId = null;
-                            state.errorType = undefined;
+                            state.stage = 'cart_review';
+                            state.errorType = 'ask_what_to_remove';
+                        } else if (isModificarIntent) {
+                            state.stage = 'cart_review';
+                            state.errorType = 'ask_what_to_modify';
                         } else if (isExplicitAdd && newSvcsToAdd.length === 0) {
                             // If they say "agregar" but don't specify a service, go to categories
                             state.stage = 'parent_selection';
                             state.currentCategoryId = null;
-                            state.errorType = undefined;
+                            state.errorType = 'ask_what_to_add';
                         } else if (newSvcsToAdd.length > 0 && !isRemoval) {
                             newSvcsToAdd.forEach(fs => {
                                 state.selectedServiceIds.push(fs.id);
@@ -615,7 +634,7 @@ export async function extractState(
                         } else if (isUserConfirming) {
                             state.stage = 'name_collection';
                             state.errorType = undefined;
-                        } else if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("modificar") || normalizedContent.includes("no")) {
+                        } else if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("no")) {
                             state.stage = 'parent_selection';
                             state.errorType = undefined;
                         } else {
@@ -795,9 +814,16 @@ export function generateResponse(
             case 'greeting':
             case 'parent_selection': {
                 const list = categories.map(c => `• *${c.name}*`).join('\n');
-                const intro = isNew 
-                    ? "Bienvenida a *KÂLON Estética* ✨. Soy tu asistente virtual y estoy acá para ayudarte a reservar un momento para vos. Contame, ¿qué servicios te interesan hoy?"
-                    : "Decime de qué categoría te gustaría ver los servicios hoy para seguir:";
+                const isNew = state.selectedServiceIds.length === 0 && !state.currentCategoryId;
+
+                let intro;
+                if (state.errorType === 'ask_what_to_add') {
+                    intro = "¿De qué categoría te gustaría agregar otro servicio?";
+                } else if (isNew) {
+                    intro = "Bienvenida a *KÂLON Estética* ✨. Soy tu asistente virtual y estoy acá para ayudarte a reservar un momento para vos. Contame, ¿qué servicios te interesan hoy?";
+                } else {
+                    intro = "Decime de qué categoría te gustaría ver los servicios hoy para seguir:";
+                }
                 
                 return `${welcome}${intro}\n\n${list}\n\nEscribí el nombre de la categoría para ver los tratamientos.`;
             }
@@ -849,6 +875,14 @@ export function generateResponse(
                 const totalPrice = selectedServices.reduce((acc, s) => acc + Math.round(Number(s.price)), 0);
                 const totalDur = selectedServices.reduce((acc, s) => acc + parseDuration(s.duration), 0);
                 const durText = formatDurationHuman(totalDur);
+
+                if (state.errorType === 'ask_what_to_remove') {
+                    return `📝 *Tu carrito actual:*\n${list}\n\n¿Qué servicio puntual de la lista te gustaría eliminar?`;
+                }
+                
+                if (state.errorType === 'ask_what_to_modify') {
+                    return `📝 *Tu carrito actual:*\n${list}\n\n¿Qué servicio te gustaría modificar y por cuál?`;
+                }
 
                 if (state.errorType === 'unrecognized_cart_action') {
                     return `Perdón, no te entendí del todo. 🧐 ¿Te gustaría confirmar este pedido, o preferís agregar / modificar algo?\n\n*Resumen actual:*\n${list}\n💰 *Total:* $${totalPrice}`;
