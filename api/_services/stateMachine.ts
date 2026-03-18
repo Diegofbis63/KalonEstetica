@@ -130,9 +130,10 @@ export async function extractState(
     
     // --- 0. STATE MIGRATION & SANITY CHECK ---
     const migrateState = (oldState: any): ConvState => {
-        return {
-            clientName: oldState?.clientName || (initialName && initialName !== 'Cliente' ? initialName : null),
-            clientPhone: oldState?.clientPhone || initialPhone || null,
+        const out: ConvState = {
+            // Rule #2: Neon as Source of Truth - Prioritize initialName/initialPhone from DB
+            clientName: (initialName && initialName !== 'Cliente') ? initialName : (oldState?.clientName || null),
+            clientPhone: initialPhone || oldState?.clientPhone || null,
             selectedServiceIds: Array.isArray(oldState?.selectedServiceIds) ? [...(oldState.selectedServiceIds as string[])] : [],
             currentCategoryId: typeof oldState?.currentCategoryId === 'string' ? oldState.currentCategoryId : null,
             pendingCategoryIds: Array.isArray(oldState?.pendingCategoryIds) ? oldState.pendingCategoryIds : [],
@@ -145,6 +146,7 @@ export async function extractState(
             requestedAllOptions: !!oldState?.requestedAllOptions,
             isBotEnabled: oldState?.isBotEnabled !== false && defaultIsBotEnabled
         };
+        return out;
     };
 
     const state: ConvState = (initialState && !resetCause) ? migrateState(initialState) : {

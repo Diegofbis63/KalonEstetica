@@ -126,12 +126,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             messages.push({ role: 'user', content: incomingMessage, media_url: incomingMediaUrl });
         }
         
-        // 7. EXTRACT STATE (DB State is King)
+                // 7. EXTRACT STATE (DB State is King)
+        // Pass leadName and leadPhone as the primary sources to extractState
         const state = await extractState(messages, categories, services, isBotEnabled, leadName, leadPhone, savedState, lastUpdate);
 
-        // 8. UPDATE & EVOLVE LEAD
+        // 8. UPDATE & EVOLVE LEAD (Immediate Persistence)
         if (leadId) {
+            // Rule #1: Immediate write when name is identified
             if (state.clientName && state.clientName !== 'Cliente' && state.clientName !== leadName) { 
+                console.log(`[chat.ts] Rule #1: Persisting identified name "${state.clientName}" to lead ${leadId}`);
                 await updateLeadName(leadId, state.clientName);
             }
             if (state.clientPhone && !leadPhone) {
@@ -147,7 +150,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return res.status(200).json({ status: 'bot_disabled' });
         }
 
-        // 8. AVAILABILITY SEARCH
+        // 9. AVAILABILITY SEARCH (Rule #3: FIX FECHA URGENTE)
         const foundSlots: any[] = [];
         let timeWasAdjusted = false;
         if (state.stage === 'availability_proposal' && state.selectedServiceIds.length > 0) {
@@ -155,14 +158,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const selectedSvcObjs = services.filter(s => state.selectedServiceIds.includes(s.id));
             const totalDur = selectedSvcObjs.reduce((a, b) => a + parseDuration(b.duration), 0);
             
-            // CORRECT TIME FOR ARGENTINA (GMT-3)
+            // Rule #3: HOY es HOY en Argentina (GMT-3)
             const nowArg = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Argentina/Cordoba"}));
-            const baseDate = state.requestedDate ? new Date(state.requestedDate + "T12:00:00Z") : nowArg;
+            const todayStr = nowArg.getFullYear() + "-" + String(nowArg.getMonth() + 1).padStart(2, '0') + "-" + String(nowArg.getDate()).padStart(2, '0');
             
-            if (!state.requestedDate) {
-                baseDate.setDate(baseDate.getDate() + 1);
+            // Ensure baseDate is never in the past
+            let baseDate = state.requestedDate ? new Date(state.requestedDate + "T12:00:00Z") : new Date(nowArg.getTime());
+            
+            // If the user requested a date in the past, or no date was requested, start from tomorrow (or today if early)
+            const requestedDateStr = baseDate.toISOString().split('T')[0];
+            if (requestedDateStr < todayStr) {
+                console.log(`[chat.ts] Requested date ${requestedDateStr} is in the past. Reverting to today/tomorrow.`);
+                baseDate = new Date(nowArg);
             }
-            const isTargetToday = baseDate.toISOString().split('T')[0] === nowArg.toISOString().split('T')[0];
+
+            if (!state.requestedDate) {
+                baseDate.setDate(baseDate.getDate() + 1); // Default to tomorrow if not specified
+            } else {
+                // If requested today but we are past 20:00, push to tomorrow
+                if (requestedDateStr === todayStr && nowArg.getHours() >= 20) {
+                    baseDate.setDate(baseDate.getDate() + 1);
+                    console.log("[chat.ts] Past 20:00 GMT-3. Forcing search to tomorrow.");
+                }
+            }
 
             const limit = state.requestedAllOptions ? 3 : 1;
 
@@ -172,6 +190,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 
                 if (searchDate.getDay() === 0) continue; 
                 const dateStr = searchDate.toISOString().split('T')[0];
+                if (dateStr < todayStr) continue; // Final safety check
 
                 const taken = await getAppointmentsForDate(dateStr);
                 const takenIntervals = taken.map(r => {
@@ -183,14 +202,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 });
 
                 let startSearch = 9 * 60;
-                const isSearchingToday = dateStr === nowArg.toISOString().split('T')[0];
-
-                if (isSearchingToday) {
+                if (dateStr === todayStr) {
                     const currentMinutes = nowArg.getHours() * 60 + nowArg.getMinutes() + 30; // 30min buffer
                     startSearch = Math.max(9 * 60, currentMinutes);
                 }
 
-                if (state.requestedTime && d === 0) {
+                if (state.requestedTime && d === 0 && dateStr === requestedDateStr) {
                     const [rh, rm] = state.requestedTime.split(':').map(Number);
                     startSearch = Math.max(startSearch, rh * 60 + rm);
                 }
@@ -218,6 +235,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     }
                 }
             }
+
             if (foundSlots.length > 0) {
                 // Determine if we adjusted from user's explicit request
                 const reqD = state.requestedDate;
@@ -226,32 +244,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 if (reqD && foundSlots[0].date !== reqD) timeWasAdjusted = true;
                 if (reqT && foundSlots[0].time !== reqT) timeWasAdjusted = true;
                 
-                // Fallback for default "tomorrow" search if the only slot found is at a different time than requested
-                if (reqT && foundSlots[0].time !== reqT) timeWasAdjusted = true;
-
                 state.pendingDate = foundSlots[0].date;
                 state.pendingTime = foundSlots[0].time;
+                
+                // Rule #4 Anti-Undefined: Update DB state immediately so the generator sees it
+                if (leadId) await updateLeadState(leadId, state);
             }
         }
 
-        // 9. BOOKING CONFIRMATION (Media receipt)
+        // 10. BOOKING CONFIRMATION (Media receipt)
         if ((state.stage === 'waiting_for_receipt' || state.stage === 'payment_request' || state.stage === 'done') && (incomingMediaUrl || body.mediaData)) {
             if (leadId) {
                 console.log("[chat.ts] Media received, confirming appointment...");
                 const selectedSvcObjs = services.filter(s => state.selectedServiceIds.includes(s.id));
-                const catNames = Array.from(new Set(selectedSvcObjs.map(s => s.category_name || "Servicio"))).join(' + ');
-                const totalPrice = selectedSvcObjs.reduce((a, b) => a + Math.round(Number(b.price)), 0);
-                const totalDur = selectedSvcObjs.reduce((a, b) => a + parseDuration(b.duration), 0);
-                const dateTime = `${state.pendingDate}T${state.pendingTime}:00-03:00`;
                 
-                await createAppointment(leadId, DEFAULT_ORG_ID, dateTime, catNames, totalPrice, totalDur, selectedSvcObjs);
-                
-                state.stage = 'done';
-                await markLeadAsConverted(leadId);
+                // Rule #4: Final check before confirmation to prevent undefined values
+                if (state.pendingDate && state.pendingTime && selectedSvcObjs.length > 0) {
+                    const catNames = Array.from(new Set(selectedSvcObjs.map(s => s.category_name || "Servicio"))).join(' + ');
+                    const totalPrice = selectedSvcObjs.reduce((a, b) => a + Math.round(Number(b.price)), 0);
+                    const totalDur = selectedSvcObjs.reduce((a, b) => a + parseDuration(b.duration), 0);
+                    const dateTime = `${state.pendingDate}T${state.pendingTime}:00-03:00`;
+                    
+                    await createAppointment(leadId, DEFAULT_ORG_ID, dateTime, catNames, totalPrice, totalDur, selectedSvcObjs);
+                    
+                    state.stage = 'done';
+                    await markLeadAsConverted(leadId);
+                    await updateLeadState(leadId, state); // Sync state once more
+                } else {
+                    console.log("[chat.ts] WARNING: Attempted to confirm booking with missing details. Fallback to receipt request.");
+                    state.stage = 'payment_request';
+                }
             }
         }
 
-        // 10. GENERATE RESPONSE
+        // 11. GENERATE RESPONSE
         const responseText = generateResponse(state, categories, services, foundSlots, !!userId, !!(incomingMediaUrl || body.mediaData), timeWasAdjusted);
         
         if (leadId) {
