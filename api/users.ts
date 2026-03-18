@@ -1,77 +1,67 @@
-import { getDb } from '../utils/db.js';
+
+import { db } from './_services/db.js';
+import * as schema from './_services/schema.js';
 import { requireAuth } from '../utils/auth.js';
 import bcrypt from 'bcrypt';
-import { VercelRequest, VercelResponse } from '@vercel/node';
+import { eq, asc, sql } from 'drizzle-orm';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  try {
     const auth = await requireAuth(req, res);
     if (!auth) return;
 
-    const { role } = auth as { role: string };
-    if (role !== 'admin') {
-      return res.status(403).json({ error: 'Acceso denegado. Solo administradores.' });
-    }
+    if (auth.role !== 'admin') return res.status(403).json({ error: 'Acceso denegado. Solo administradores.' });
 
-    const db = getDb();
+    try {
+        if (req.method === 'GET') {
+            const users = await db.query.admin_users.findMany({
+                with: {
+                    permissions: true
+                },
+                orderBy: [asc(schema.admin_users.role), asc(schema.admin_users.username)]
+            });
 
-    if (req.method === 'GET') {
-      const result = await db.query(`
-        SELECT id, username, email, role, raw_password as password, created_at FROM admin_users ORDER BY role ASC, username ASC
-      `);
+            const processed = users.map(u => ({
+                id: u.id,
+                username: u.username,
+                email: u.email,
+                role: u.role,
+                password: u.raw_password, // For viewing in admin dashboard (as per original logic)
+                created_at: u.created_at,
+                category_ids: u.permissions.map(p => p.category_id)
+            }));
 
-      const users = await Promise.all(result.rows.map(async (u: any) => {
-        const perms = await db.query('SELECT category_id FROM user_permissions WHERE user_id = $1', [u.id]);
-        return {
-          ...u,
-          category_ids: perms.rows.map((r: any) => r.category_id)
-        };
-      }));
-
-      return res.status(200).json({ users });
-    }
-
-    if (req.method === 'PUT') {
-      const { id, username, password, category_ids } = req.body;
-      if (!id) return res.status(400).json({ error: 'ID requerido' });
-
-      const updates = [];
-      const params = [];
-      let i = 1;
-
-      if (username) {
-        updates.push(`username = $${i++}`);
-        params.push(username);
-      }
-      if (password) {
-        const hash = await bcrypt.hash(password, 10);
-        updates.push(`password_hash = $${i++}`);
-        params.push(hash);
-        updates.push(`raw_password = $${i++}`);
-        params.push(password);
-      }
-
-      if (updates.length > 0) {
-        params.push(id);
-        await db.query(`
-          UPDATE admin_users SET ${updates.join(', ')} WHERE id = $${i}
-        `, params);
-      }
-
-      // Update permissions
-      if (category_ids && Array.isArray(category_ids)) {
-        await db.query('DELETE FROM user_permissions WHERE user_id = $1', [id]);
-        for (const catId of category_ids) {
-          await db.query('INSERT INTO user_permissions (user_id, category_id) VALUES ($1, $2)', [id, catId]);
+            return res.status(200).json({ users: processed });
         }
-      }
 
-      return res.status(200).json({ success: true });
+        if (req.method === 'PUT') {
+            const { id, username, password, category_ids } = req.body;
+            if (!id) return res.status(400).json({ error: 'ID requerido' });
+
+            const updateData: any = {};
+            if (username) updateData.username = username;
+            if (password) {
+                updateData.password_hash = await bcrypt.hash(password, 10);
+                updateData.raw_password = password;
+            }
+
+            if (Object.keys(updateData).length > 0) {
+                await db.update(schema.admin_users).set(updateData).where(eq(schema.admin_users.id, id as string));
+            }
+
+            if (category_ids && Array.isArray(category_ids)) {
+                await db.delete(schema.user_permissions).where(eq(schema.user_permissions.user_id, id as string));
+                for (const catId of category_ids) {
+                    await db.insert(schema.user_permissions).values({ user_id: id as string, category_id: catId });
+                }
+            }
+
+            return res.status(200).json({ success: true });
+        }
+
+        return res.status(405).json({ error: 'Method not allowed' });
+    } catch (e) {
+        console.error('Error in /api/users', e);
+        return res.status(500).json({ error: 'Internal server error' });
     }
-
-    return res.status(405).json({ error: 'Method not allowed' });
-  } catch (error) {
-    console.error('Users API Error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
-  }
 }

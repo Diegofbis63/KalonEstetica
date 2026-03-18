@@ -1,51 +1,45 @@
-import { getDb } from '../../utils/db.js';
+
+import { db } from '../_services/db.js';
+import * as schema from '../_services/schema.js';
 import { requireAuth } from '../../utils/auth.js';
+import { eq, and, sql } from 'drizzle-orm';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method not allowed' });
-    }
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-    const user = await requireAuth(req, res) as { role: string; permissions: string[] };
+    const user = await requireAuth(req, res);
     if (!user) return;
 
     try {
-        const db = getDb();
         const { leadId, message, mediaUrl, mediaData } = req.body;
-
-        if (!leadId || (!message && !mediaUrl && !mediaData)) {
-            return res.status(400).json({ error: 'Faltan datos requeridos (leadId, message, mediaUrl o mediaData)' });
-        }
+        if (!leadId) return res.status(400).json({ error: 'Faltan datos requeridos (leadId)' });
 
         // 1. Get lead and check permissions
-        const leadQuery = `
-            SELECT l.*, c.name as category_name 
-            FROM leads l 
-            LEFT JOIN categories c ON l.category_id = c.id 
-            WHERE l.id = $1
-        `;
-        const leadRes = await db.query(leadQuery, [leadId]);
+        const lead = await db.query.leads.findFirst({
+            where: eq(schema.leads.id, leadId),
+            with: { category: true }
+        });
 
-        if (leadRes.rows.length === 0) {
-            return res.status(404).json({ error: 'Lead no encontrado' });
-        }
-
-        const lead = leadRes.rows[0];
+        if (!lead) return res.status(404).json({ error: 'Lead no encontrado' });
 
         // RBAC check
-        const isAuthorized = user.role === 'admin' || user.permissions?.includes(lead.category_name);
+        const isAuthorized = user.role === 'admin' || user.permissions?.includes(lead.category?.name);
         if (!isAuthorized) {
             return res.status(403).json({ error: 'No tienes permisos para responder a este prospecto' });
         }
 
-        // 2. Insert into chat_logs and update leads.updated_at (sent_to_whatsapp = false for bridge to pick it up)
-        await db.query(`
-            INSERT INTO chat_logs (lead_id, role, content, media_url, media_data, created_at, sent_to_whatsapp)
-            VALUES ($1, $2, $3, $4, $5, $6, false)
-        `, [leadId, 'admin', message || '', mediaUrl || null, mediaData || null, new Date().toISOString()]);
+        // 2. Insert into chat_logs
+        await db.insert(schema.chat_logs).values({
+            lead_id: leadId,
+            role: 'admin',
+            content: message || '',
+            media_url: mediaUrl || null,
+            media_data: mediaData || null,
+            sent_to_whatsapp: false
+        });
 
-        await db.query(`UPDATE leads SET updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [leadId]);
+        await db.update(schema.leads).set({ updated_at: new Date() }).where(eq(schema.leads.id, leadId));
 
         return res.status(200).json({ success: true });
     } catch (e) {

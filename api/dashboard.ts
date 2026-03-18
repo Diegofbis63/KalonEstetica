@@ -1,5 +1,8 @@
-import { getDb } from '../utils/db.js';
+
+import { db } from './_services/db.js';
+import * as schema from './_services/schema.js';
 import { requireAuth } from '../utils/auth.js';
+import { eq, desc, and, sql } from 'drizzle-orm';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -11,22 +14,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!user) return;
 
     try {
-        const db = getDb();
         const { date } = req.query; // For daily timeline filtering
 
-        interface LeadRow {
-            category_name: string;
-            phone: string;
-            email: string;
-            contact_info: { phone: string; email: string };
-            [key: string]: any;
+        // Fetch leads with category info and chat history
+        // Using raw SQL for the complex join/agg if needed, or Drizzle relational if possible
+        const leadsRes = await db.query.leads.findMany({
+            with: {
+                category: true,
+            },
+            orderBy: [desc(schema.leads.updated_at), desc(schema.leads.created_at)],
+            limit: 100
+        });
+
+        // Fetch appointments with lead and category info
+        const appointmentsQuery = db.select({
+            id: schema.appointments.id,
+            lead_id: schema.appointments.lead_id,
+            date_time: schema.appointments.date_time,
+            service_type: schema.appointments.service_type,
+            status: schema.appointments.status,
+            total_price: schema.appointments.total_price,
+            total_duration: schema.appointments.total_duration,
+            selected_services: schema.appointments.selected_services,
+            category_name: schema.categories.name,
+            client_name: schema.leads.client_name,
+            phone: sql<string>`${schema.leads.contact_info}->>'phone'`,
+            email: sql<string>`${schema.leads.contact_info}->>'email'`,
+            is_bot_enabled: schema.leads.is_bot_enabled
+        })
+        .from(schema.appointments)
+        .leftJoin(schema.leads, eq(schema.appointments.lead_id, schema.leads.id))
+        .leftJoin(schema.categories, eq(schema.appointments.category_id, schema.categories.id));
+
+        if (date) {
+            // Filter by date (Argentine Cordoba time)
+            // Note: date_time is stored with TZ. To filter by local date:
+            appointmentsQuery.where(sql`DATE(${schema.appointments.date_time} AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Cordoba') = ${date}`);
         }
-        
-        // Helper to check and obfuscate
-        const processRBAC = (row: LeadRow, user: { role: string; permissions: string[] }) => {
+
+        const apptsRes = await appointmentsQuery.orderBy(desc(schema.appointments.date_time)).limit(100);
+
+        // RBAC Processing
+        const processRBAC = (row: any, user: any) => {
             if (user.role === 'admin') return { ...row, canManage: true };
             
-            // Assume the category name is already joined as "category_name"
             const hasPermission = user.permissions?.includes(row.category_name);
             
             if (!hasPermission) {
@@ -41,39 +72,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return { ...row, canManage: true };
         };
 
-        // Fetch leads with category info and contact details extracted
-        const leadsQuery = `
-            SELECT l.*, l.contact_info->>'phone' as phone, l.contact_info->>'email' as email, 
-                   c.name as category_name, l.updated_at,
-                   COALESCE(
-                     (SELECT jsonb_agg(jsonb_build_object('role', role, 'content', content, 'media_url', media_url, 'created_at', created_at) ORDER BY created_at ASC) FROM chat_logs WHERE lead_id = l.id),
-                     '[]'::jsonb
-                   ) as chat_history
-            FROM leads l
-            LEFT JOIN categories c ON l.category_id = c.id
-            ORDER BY COALESCE(l.updated_at, l.created_at) DESC LIMIT 100
-        `;
-        const leadsRes = await db.query(leadsQuery);
-
-        // Fetch appointments with lead and category info
-        let appointmentsQuery = `
-            SELECT a.*, l.client_name, l.contact_info->>'phone' as phone, l.contact_info->>'email' as email, 
-                   l.is_bot_enabled, c.name as category_name 
-            FROM appointments a 
-            LEFT JOIN leads l ON a.lead_id = l.id 
-            LEFT JOIN categories c ON a.category_id = c.id
-        `;
-        const queryValues = [];
-        if (date) {
-            appointmentsQuery += ` WHERE DATE(a.date_time AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires') = $1 `;
-            queryValues.push(date);
-        }
-        appointmentsQuery += ` ORDER BY a.date_time DESC LIMIT 100`;
+        const processedLeads = leadsRes.map(l => {
+            const raw = {
+                ...l,
+                category_name: l.category?.name,
+                phone: (l.contact_info as any)?.phone,
+                email: (l.contact_info as any)?.email
+            };
+            return processRBAC(raw, user);
+        });
         
-        const apptsRes = await db.query(appointmentsQuery, queryValues);
-
-        const processedLeads = leadsRes.rows.map(r => processRBAC(r as LeadRow, user as { role: string; permissions: string[] }));
-        const processedAppts = apptsRes.rows.map(r => processRBAC(r as LeadRow, user as { role: string; permissions: string[] }));
+        const processedAppts = apptsRes.map(a => processRBAC(a, user));
 
         return res.status(200).json({
             leads: processedLeads,

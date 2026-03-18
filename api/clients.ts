@@ -1,5 +1,8 @@
-import { getDb } from '../utils/db.js';
+
+import { db } from './_services/db.js';
+import * as schema from './_services/schema.js';
 import { requireAuth } from '../utils/auth.js';
+import { eq, desc, sql } from 'drizzle-orm';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -7,80 +10,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!user) return;
 
     try {
-        const db = getDb();
-
         if (req.method === 'PATCH') {
             const { id } = req.query;
             const { client_name, phone, email, note } = req.body;
+            if (!id) return res.status(400).json({ error: 'Missing client id' });
 
-            if (!id) {
-                return res.status(400).json({ error: 'Missing client id' });
-            }
-
-            const clientUpdateValues: (string | number | boolean | null)[] = [];
-            let currentIdx = 1;
-            const setClauses: string[] = [];
-
-            if (client_name) {
-                setClauses.push(`client_name = $${currentIdx++}`);
-                clientUpdateValues.push(client_name);
-            }
-
-            // Build an object with only the keys we want to update in contact_info
-            const contactInfoUpdates: Record<string, string | null> = {};
+            const updateData: any = {};
+            if (client_name) updateData.client_name = client_name;
+            
+            // Handle contact_info partial update
+            const contactInfoUpdates: any = {};
             if (phone !== undefined) contactInfoUpdates.phone = phone;
             if (email !== undefined) contactInfoUpdates.email = email;
             if (note !== undefined) contactInfoUpdates.note = note;
 
             if (Object.keys(contactInfoUpdates).length > 0) {
-                setClauses.push(`contact_info = COALESCE(contact_info, '{}'::jsonb) || $${currentIdx++}::jsonb`);
-                clientUpdateValues.push(JSON.stringify(contactInfoUpdates));
+                updateData.contact_info = sql`COALESCE(${schema.leads.contact_info}, '{}'::jsonb) || ${sql.raw(`'${JSON.stringify(contactInfoUpdates)}'`)}::jsonb`;
             }
 
-            if (setClauses.length > 0) {
-                clientUpdateValues.push(id as string);
-                await db.query(
-                    `UPDATE leads SET ${setClauses.join(', ')} WHERE id = $${currentIdx}`,
-                    clientUpdateValues
-                );
+            if (Object.keys(updateData).length > 0) {
+                await db.update(schema.leads).set(updateData).where(eq(schema.leads.id, id as string));
             }
 
-            const result = await db.query('SELECT *, contact_info->>\'phone\' as phone, contact_info->>\'email\' as email, contact_info->>\'note\' as note FROM leads WHERE id = $1', [id]);
-            
-            return res.status(200).json({ 
-                message: 'Client updated successfully', 
-                client: result.rows[0] 
-            });
+            const client = await db.query.leads.findFirst({ where: eq(schema.leads.id, id as string) });
+            return res.status(200).json({ message: 'Client updated successfully', client });
         }
 
         if (req.method === 'GET') {
-            // Original GET logic
-            const query = `
-                SELECT 
-                    l.id,
-                    l.client_name,
-                    l.is_bot_enabled,
-                    l.contact_info->>'phone' as phone,
-                    l.contact_info->>'email' as email,
-                    l.contact_info->>'note' as note,
-                    COUNT(a.id) as total_appointments,
-                    MAX(a.date_time) as last_appointment,
-                    jsonb_agg(
-                        jsonb_build_object(
-                            'id', a.id,
-                            'date_time', a.date_time,
-                            'service_type', a.service_type,
-                            'status', a.status
-                        ) ORDER BY a.date_time DESC
-                    ) filter (where a.id is not null) as appointment_history
-                FROM leads l
-                LEFT JOIN appointments a ON l.id = a.lead_id
-                GROUP BY l.id, l.client_name
-                ORDER BY last_appointment DESC NULLS LAST;
-            `;
+            const clients = await db.select({
+                id: schema.leads.id,
+                client_name: schema.leads.client_name,
+                is_bot_enabled: schema.leads.is_bot_enabled,
+                phone: sql<string>`${schema.leads.contact_info}->>'phone'`,
+                email: sql<string>`${schema.leads.contact_info}->>'email'`,
+                note: sql<string>`${schema.leads.contact_info}->>'note'`,
+                total_appointments: sql<number>`count(${schema.appointments.id})`,
+                last_appointment: sql<string>`max(${schema.appointments.date_time})`
+            })
+            .from(schema.leads)
+            .leftJoin(schema.appointments, eq(schema.leads.id, schema.appointments.lead_id))
+            .groupBy(schema.leads.id)
+            .orderBy(desc(sql`max(${schema.appointments.date_time})`));
 
-            const result = await db.query(query);
-            return res.status(200).json({ clients: result.rows });
+            return res.status(200).json({ clients });
         }
 
         return res.status(405).json({ error: 'Method not allowed' });

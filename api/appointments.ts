@@ -1,5 +1,8 @@
-import { getDb } from '../utils/db.js';
+
+import { db } from './_services/db.js';
+import * as schema from './_services/schema.js';
 import { requireAuth } from '../utils/auth.js';
+import { eq, sql } from 'drizzle-orm';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -7,104 +10,60 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!user) return;
 
     try {
-        const db = getDb();
-
-        const checkPermission = async (id: string, user: { role: string; permissions: string[] }) => {
+        const checkPermission = async (id: string, user: any) => {
             if (user.role === 'admin') return true;
-            // Get category name for this appointment
-            const res = await db.query('SELECT c.name FROM appointments a LEFT JOIN categories c ON a.category_id = c.id WHERE a.id = $1', [id]);
-            if (res.rows.length === 0) return false;
-            const categoryName = res.rows[0].name;
-            return user.permissions.includes(categoryName);
+            const appt = await db.query.appointments.findFirst({
+                where: eq(schema.appointments.id, id),
+                with: { category: true }
+            });
+            if (!appt) return false;
+            return user.permissions?.includes(appt.category?.name);
         };
 
         if (req.method === 'PATCH') {
             const { id } = req.query;
             if (!id || typeof id !== 'string') return res.status(400).json({ error: 'Missing appointment ID' });
 
-            if (!await checkPermission(id, user as { role: string; permissions: string[] })) {
+            if (!await checkPermission(id, user)) {
                 return res.status(403).json({ error: 'No tienes permiso para gestionar este servicio' });
             }
 
             const { status, date_time, service_type, client_name, phone, selected_services, total_price, total_duration, payment_method } = req.body;
 
-            const updates: string[] = [];
-            const values: (string | number | boolean | null)[] = [];
-            let index = 1;
+            const updateData: any = {};
+            if (status !== undefined) updateData.status = status;
+            if (date_time !== undefined) updateData.date_time = new Date(date_time);
+            if (service_type !== undefined) updateData.service_type = service_type;
+            if (selected_services !== undefined) updateData.selected_services = selected_services;
+            if (total_price !== undefined) updateData.total_price = total_price.toString();
+            if (total_duration !== undefined) updateData.total_duration = total_duration;
+            if (payment_method !== undefined) updateData.payment_method = payment_method;
 
-            if (status !== undefined) {
-                updates.push(`status = $${index++}`);
-                values.push(status);
-            }
-            if (date_time !== undefined) {
-                updates.push(`date_time = $${index++}`);
-                values.push(date_time);
-            }
-            if (service_type !== undefined) {
-                updates.push(`service_type = $${index++}`);
-                values.push(service_type);
-            }
-            if (selected_services !== undefined) {
-                updates.push(`selected_services = $${index++}::jsonb`);
-                values.push(JSON.stringify(selected_services));
-            }
-            if (total_price !== undefined) {
-                updates.push(`total_price = $${index++}`);
-                values.push(total_price);
-            }
-            if (total_duration !== undefined) {
-                updates.push(`total_duration = $${index++}`);
-                values.push(total_duration);
-            }
-            if (payment_method !== undefined) {
-                updates.push(`payment_method = $${index++}`);
-                values.push(payment_method);
-            }
-
-            let appointmentResult = null;
-            if (updates.length > 0) {
-                values.push(id);
-                const query = `
-                    UPDATE appointments 
-                    SET ${updates.join(', ')} 
-                    WHERE id = $${index} 
-                    RETURNING *
-                `;
-
-                appointmentResult = await db.query(query, values);
+            let appointment = null;
+            if (Object.keys(updateData).length > 0) {
+                const result = await db.update(schema.appointments)
+                    .set(updateData)
+                    .where(eq(schema.appointments.id, id))
+                    .returning();
+                appointment = result[0];
             } else {
-                appointmentResult = await db.query("SELECT * FROM appointments WHERE id = $1", [id]);
+                appointment = await db.query.appointments.findFirst({ where: eq(schema.appointments.id, id) });
             }
 
-            if (!appointmentResult || appointmentResult.rows.length === 0) {
-                return res.status(404).json({ error: 'Appointment not found' });
-            }
+            if (!appointment) return res.status(404).json({ error: 'Appointment not found' });
 
-            const appointment = appointmentResult.rows[0];
-
+            // Sync Lead name/phone if changed
             if (client_name !== undefined || phone !== undefined) {
-                const leadUpdates: string[] = [];
-                const leadValues: (string | number | boolean | null)[] = [];
-                let leadIndex = 1;
-
-                if (client_name !== undefined) {
-                    leadUpdates.push(`client_name = $${leadIndex++}`);
-                    leadValues.push(client_name);
-                }
-
+                const leadUpdate: any = {};
+                if (client_name !== undefined) leadUpdate.client_name = client_name;
                 if (phone !== undefined) {
-                    leadUpdates.push(`contact_info = jsonb_set(COALESCE(contact_info::jsonb, '{}'::jsonb), '{phone}', $${leadIndex++}::jsonb)`);
-                    leadValues.push(JSON.stringify(phone));
+                    leadUpdate.contact_info = sql`jsonb_set(COALESCE(${schema.leads.contact_info}, '{}'::jsonb), '{phone}', ${sql.raw(`'${JSON.stringify(phone)}'`)}::jsonb)`;
                 }
-
-                if (leadUpdates.length > 0) {
-                    leadValues.push(appointment.lead_id);
-                    const leadQuery = `
-                        UPDATE leads
-                        SET ${leadUpdates.join(', ')}
-                        WHERE id = $${leadIndex}
-                    `;
-                    await db.query(leadQuery, leadValues);
+                
+                if (Object.keys(leadUpdate).length > 0) {
+                    await db.update(schema.leads)
+                        .set(leadUpdate)
+                        .where(eq(schema.leads.id, appointment.lead_id));
                 }
             }
 
@@ -112,48 +71,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         } else if (req.method === 'POST') {
             const { lead_id, date_time, service_type, category_id, selected_services, total_price, total_duration } = req.body;
+            if (!lead_id || !date_time || !service_type) return res.status(400).json({ error: 'Missing required fields' });
 
-            if (!lead_id || !date_time || !service_type) {
-                return res.status(400).json({ error: 'Missing required fields' });
-            }
+            const result = await db.insert(schema.appointments).values({
+                lead_id,
+                date_time: new Date(date_time),
+                service_type,
+                status: 'confirmed',
+                category_id,
+                selected_services: selected_services || [],
+                total_price: total_price?.toString() || '0',
+                total_duration: total_duration || 0
+            }).returning();
 
-            const query = `
-                INSERT INTO appointments (lead_id, date_time, service_type, status, category_id, selected_services, total_price, total_duration)
-                VALUES ($1, $2, $3, 'confirmed', $4, $5::jsonb, $6, $7)
-                RETURNING *
-            `;
-            const result = await db.query(query, [
-                lead_id, 
-                date_time, 
-                service_type, 
-                category_id, 
-                JSON.stringify(selected_services || []), 
-                total_price || 0,
-                total_duration || 0
-            ]);
+            await db.update(schema.leads).set({ status: 'qualified' }).where(eq(schema.leads.id, lead_id));
 
-            await db.query(`UPDATE leads SET status = 'qualified' WHERE id = $1`, [lead_id]);
-
-            return res.status(201).json({ appointment: result.rows[0] });
+            return res.status(201).json({ appointment: result[0] });
 
         } else if (req.method === 'DELETE') {
             const { id } = req.query;
             if (!id || typeof id !== 'string') return res.status(400).json({ error: 'Missing appointment ID' });
 
-            if (!await checkPermission(id, user as { role: string; permissions: string[] })) {
+            if (!await checkPermission(id, user)) {
                 return res.status(403).json({ error: 'No tienes permiso para gestionar este servicio' });
             }
 
-            const result = await db.query(
-                `UPDATE appointments SET status = 'canceled' WHERE id = $1 RETURNING *`,
-                [id]
-            );
+            const result = await db.update(schema.appointments)
+                .set({ status: 'canceled' })
+                .where(eq(schema.appointments.id, id))
+                .returning();
 
-            if (result.rows.length === 0) {
-                return res.status(404).json({ error: 'Appointment not found' });
-            }
-
-            return res.status(200).json({ message: 'Appointment soft deleted', appointment: result.rows[0] });
+            return res.status(200).json({ message: 'Appointment soft deleted', appointment: result[0] });
         } else {
             return res.status(405).json({ error: 'Method not allowed' });
         }
