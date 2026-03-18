@@ -203,13 +203,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
                 let startSearch = 9 * 60;
                 if (dateStr === todayStr) {
-                    const currentMinutes = nowArg.getHours() * 60 + nowArg.getMinutes() + 30; // 30min buffer
+                    // Only buffer if it's today and the requested time is very close
+                    const currentMinutes = nowArg.getHours() * 60 + nowArg.getMinutes(); 
                     startSearch = Math.max(9 * 60, currentMinutes);
                 }
 
                 if (state.requestedTime && d === 0 && dateStr === requestedDateStr) {
                     const [rh, rm] = state.requestedTime.split(':').map(Number);
                     startSearch = Math.max(startSearch, rh * 60 + rm);
+                    // Special case: if they asked for exactly right now (early), allow it if they really want it.
                 }
 
                 for (let totalMin = startSearch; totalMin <= 20 * 60 - totalDur; totalMin += 30) {

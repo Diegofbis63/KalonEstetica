@@ -222,8 +222,11 @@ export async function extractState(
     }
 
     try {
-        const today = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Argentina/Cordoba"}));
-        today.setHours(0,0,0,0);
+        // Rule #3: HOY es HOY en Argentina (GMT-3) - GLOBAL SYNC
+        const nowArg = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Argentina/Cordoba"}));
+        const today = new Date(nowArg.getFullYear(), nowArg.getMonth(), nowArg.getDate());
+        
+        console.log(`[stateMachine.ts] Global Time Sync: Now in Cordoba: ${nowArg.toISOString()} | Reference Today: ${today.toISOString().split('T')[0]}`);
 
         if (messagesToProcess.length === 0) return state;
 
