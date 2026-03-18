@@ -4,61 +4,38 @@ import CategoryCard from "./CategoryCard";
 import { ChevronRight, ChevronLeft, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
 
-const CATEGORIES = [
-  {
-    title: "Masajes",
-    slug: "Masajes",
-    desc: "Terapia manual profunda para liberar tensiones corporales.",
-    image: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?q=80&w=800"
-  },
-  {
-    title: "Cejas",
-    slug: "Cejas",
-    desc: "Diseño y perfilado personalizado para realzar tu mirada.",
-    image: "https://images.unsplash.com/photo-1596704017254-9b121068fb31?q=80&w=800"
-  },
-  {
-    title: "Depilación",
-    slug: "Depilacion",
-    desc: "Tecnología láser de última generación para una piel suave.",
-    image: "https://images.unsplash.com/photo-1559599101-f09722fb4948?q=80&w=800"
-  },
-  {
-    title: "Pestañas",
-    slug: "Pestañas",
-    desc: "Curvatura y volumen para resaltar tu belleza natural.",
-    image: "https://images.unsplash.com/photo-1512496015851-a90fb38ba796?q=80&w=800"
-  },
-  {
-    title: "Corporal",
-    slug: "Corporal",
-    desc: "Tratamientos reductores y reafirmantes con tecnología Venus.",
-    image: "https://images.unsplash.com/photo-1515377905703-c4788e51af15?q=80&w=800"
-  },
-  {
-    title: "Facial",
-    slug: "Facial",
-    desc: "Limpieza profunda y renovación celular para el rostro.",
-    image: "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?q=80&w=800"
-  },
-  {
-    title: "Uñas",
-    slug: "Uñas",
-    desc: "Arte y cuidado premium para tus manos y pies.",
-    image: "https://images.unsplash.com/photo-1604654894611-6973b376cbde?q=80&w=800"
-  }
+import { useQuery } from "@tanstack/react-query";
+import { Swiper, SwiperSlide } from 'swiper/react';
+import { Navigation, Autoplay, Pagination } from 'swiper/modules';
+import 'swiper/css';
+import 'swiper/css/navigation';
+import 'swiper/css/pagination';
+
+interface Category {
+  id: string;
+  name: string;
+  description: string;
+  image_url: string;
+  slug: string;
+}
+
+const FALLBACK_CATEGORIES = [
+  { name: "Masajes", slug: "masajes", description: "Terapia manual profunda...", image_url: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?q=80&w=800" },
+  { name: "Cejas", slug: "cejas", description: "Diseño y perfilado...", image_url: "https://images.unsplash.com/photo-1596704017254-9b121068fb31?q=80&w=800" }
 ];
 
 const ServicesSection = () => {
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-
-  const scroll = (direction: 'left' | 'right') => {
-    if (scrollContainerRef.current) {
-      const { scrollLeft, clientWidth } = scrollContainerRef.current;
-      const scrollTo = direction === 'left' ? scrollLeft - clientWidth : scrollLeft + clientWidth;
-      scrollContainerRef.current.scrollTo({ left: scrollTo, behavior: 'smooth' });
+  const { data, isLoading } = useQuery({
+    queryKey: ['categories'],
+    queryFn: async () => {
+      const res = await fetch('/api/categories');
+      if (!res.ok) throw new Error('Error fetching categories');
+      const json = await res.json();
+      return json.categories as Category[];
     }
-  };
+  });
+
+  const categories = data || [];
 
   return (
     <section id="servicios" className="px-4 md:px-8 pb-20 relative overflow-hidden">
@@ -78,15 +55,13 @@ const ServicesSection = () => {
             <div className="flex items-center gap-4">
               <div className="flex gap-2">
                 <button
-                  onClick={() => scroll('left')}
-                  className="p-3 rounded-full border border-cream/10 bg-noir-light/30 text-cream/40 hover:text-gold hover:border-gold/30 transition-all"
+                  className="swiper-button-prev-custom p-3 rounded-full border border-cream/10 bg-noir-light/30 text-cream/40 hover:text-gold hover:border-gold/30 transition-all disabled:opacity-30"
                   aria-label="Anterior"
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </button>
                 <button
-                  onClick={() => scroll('right')}
-                  className="p-3 rounded-full border border-cream/10 bg-noir-light/30 text-cream/40 hover:text-gold hover:border-gold/30 transition-all"
+                  className="swiper-button-next-custom p-3 rounded-full border border-cream/10 bg-noir-light/30 text-cream/40 hover:text-gold hover:border-gold/30 transition-all disabled:opacity-30"
                   aria-label="Siguiente"
                 >
                   <ChevronRight className="w-5 h-5" />
@@ -96,54 +71,64 @@ const ServicesSection = () => {
           </div>
         </ScrollReveal>
 
-        <div
-          ref={scrollContainerRef}
-          className="flex overflow-x-auto gap-6 pb-12 snap-x snap-mandatory scrollbar-hide no-scrollbar"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-        >
-          {CATEGORIES.map((cat, i) => (
-            <div key={cat.slug} className="min-w-[280px] md:min-w-[320px] snap-start">
-              <ScrollReveal delay={i * 0.05} direction="right">
-                <CategoryCard
-                  title={cat.title}
-                  desc={cat.desc}
-                  image={cat.image}
-                  slug={cat.slug}
-                />
-              </ScrollReveal>
-            </div>
-          ))}
-
-          <div className="min-w-[200px] flex items-center justify-center snap-start">
-            <motion.a
-              href="#chat"
-              className="group flex flex-col items-center gap-4 p-8 rounded-2xl border border-gold/10 bg-gold/5 hover:bg-gold/10 transition-all"
-              whileHover={{ y: -5 }}
-            >
-              <div className="w-12 h-12 rounded-full bg-gold/20 flex items-center justify-center group-hover:bg-gold transition-colors">
-                <ArrowRight className="w-6 h-6 text-gold group-hover:text-noir transition-colors" />
-              </div>
-              <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-gold">Reserva Ahora</span>
-            </motion.a>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-20">
+            <div className="w-10 h-10 border-2 border-gold/20 border-t-gold rounded-full animate-spin" />
           </div>
-        </div>
+        ) : (
+          <Swiper
+            modules={[Navigation, Autoplay, Pagination]}
+            spaceBetween={30}
+            slidesPerView={'auto'}
+            navigation={{
+              nextEl: '.swiper-button-next-custom',
+              prevEl: '.swiper-button-prev-custom',
+            }}
+            autoplay={{ delay: 4000, disableOnInteraction: false }}
+            pagination={{ clickable: true, dynamicBullets: true }}
+            className="pb-16 !overflow-visible"
+            breakpoints={{
+              320: { slidesPerView: 1.2, spaceBetween: 20 },
+              640: { slidesPerView: 2.2, spaceBetween: 25 },
+              1024: { slidesPerView: 3.5, spaceBetween: 30 },
+            }}
+          >
+            {categories.map((cat, i) => (
+              <SwiperSlide key={cat.id || cat.slug} className="h-auto">
+                <ScrollReveal delay={i * 0.05} direction="up">
+                  <CategoryCard
+                    title={cat.name}
+                    desc={cat.description || "Explora nuestros tratamientos exclusivos."}
+                    image={cat.image_url || "https://images.unsplash.com/photo-1560750588-73207b1ef5b8?q=80&w=800"}
+                    slug={cat.slug}
+                  />
+                </ScrollReveal>
+              </SwiperSlide>
+            ))}
 
-        {/* Visual Cue: Scroll indicator */}
-        <div className="flex justify-center mt-4">
-          <div className="w-32 h-[1px] bg-cream/5 relative overflow-hidden">
-            <motion.div
-              className="absolute inset-0 bg-gold/30 w-1/3"
-              animate={{ x: ["-100%", "200%"] }}
-              transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-            />
-          </div>
-        </div>
+            <SwiperSlide className="w-auto flex items-center h-auto">
+              <motion.a
+                href="#chat"
+                className="group flex flex-col items-center justify-center gap-4 p-12 h-full min-h-[400px] rounded-3xl border border-gold/10 bg-gold/5 backdrop-blur-sm hover:bg-gold/10 transition-all"
+                whileHover={{ y: -5 }}
+              >
+                <div className="w-16 h-16 rounded-full bg-gold/20 flex items-center justify-center group-hover:bg-gold transition-colors">
+                  <ArrowRight className="w-8 h-8 text-gold group-hover:text-noir transition-colors" />
+                </div>
+                <div className="text-center">
+                  <span className="block text-xs uppercase tracking-[0.2em] font-bold text-gold mb-2">Reserva Online</span>
+                  <p className="text-sm text-cream/40 font-serif italic">Próximamente más sorpresas</p>
+                </div>
+              </motion.a>
+            </SwiperSlide>
+          </Swiper>
+        )}
       </div>
 
       <style>{`
-        .no-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
+        .swiper-pagination-bullet { background: rgba(212, 175, 55, 0.2); opacity: 1; }
+        .swiper-pagination-bullet-active { background: #d4af37; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
       `}</style>
     </section>
   );

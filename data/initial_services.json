@@ -1,0 +1,81 @@
+{
+  "project": "KALON_ESTETICA",
+  "data_version": "1.0_extracted",
+  "timezone": "America/Argentina/Cordoba",
+  "note": "Tiempos estimados (duration_min) sujetos a revisión por la dueña.",
+  "services_structure": {
+    "Depilación Femenina Tradicional": [
+      { "name": "Rostro completo", "price": 4000, "duration_min": 20 },
+      { "name": "Bozo / Mentón / Nariz / Oreja (c/u)", "price": 2000, "duration_min": 10 },
+      { "name": "Cejas (Perfilado)", "price": 3000, "duration_min": 30 },
+      { "name": "Axilas", "price": 3500, "duration_min": 15 },
+      { "name": "Brazos completos", "price": 6000, "duration_min": 30 },
+      { "name": "Medio Brazo", "price": 4000, "duration_min": 20 },
+      { "name": "Pierna completa", "price": 9000, "duration_min": 45 },
+      { "name": "Media Pierna", "price": 6000, "duration_min": 30 },
+      { "name": "Cavado Completo (sin tiro)", "price": 6000, "duration_min": 30 },
+      { "name": "Cavado Profundo (sin tiro)", "price": 7500, "duration_min": 30 },
+      { "name": "Tiro", "price": 2000, "duration_min": 10 },
+      { "name": "Pelvis completa", "price": 11000, "duration_min": 50 },
+      { "name": "Glúteos / Abdomen / Espalda (c/u)", "price": 5000, "duration_min": 25 },
+      { "name": "Combo Fede (Pierna ent+Cav p+Tiro+Axilas)", "price": 18500, "duration_min": 75 },
+      { "name": "Combo Julieta (Pierna ent+Cav p+Axilas)", "price": 16500, "duration_min": 65 },
+      { "name": "Combo (Pelvis comp+Pierna comp)", "price": 18000, "duration_min": 90 },
+      { "name": "Combo (Pelvis comp+Media pierna)", "price": 15000, "duration_min": 70 },
+      { "name": "Cavado Profundo + Tiro (Promo)", "price": 9500, "duration_min": 40 }
+    ],
+    "Depilación Masculina Tradicional": [
+      { "name": "Rostro completo / Pecho / Abdomen / Espalda (c/u)", "price": 7000, "duration_min": 30 },
+      { "name": "Bozo / Mentón / Nariz / Oreja / Axila (c/u)", "price": 3000, "duration_min": 15 },
+      { "name": "Cejas", "price": 3000, "duration_min": 20 },
+      { "name": "Brazo completo", "price": 8000, "duration_min": 40 },
+      { "name": "Pierna completa", "price": 12000, "duration_min": 60 },
+      { "name": "Glúteos", "price": 6000, "duration_min": 30 },
+      { "name": "Tiro / Cavado (c/u)", "price": 4000, "duration_min": 20 }
+    ],
+    "Depilación Definitiva SOPRANO (Packs)": [
+      { "name": "Pack 1 Zona Femenino (6 sesiones)", "price": 15000, "duration_min": 30 },
+      { "name": "Pack 2 Zonas Femenino (6 sesiones)", "price": 25000, "duration_min": 45 },
+      { "name": "Pack 3 Zonas Femenino (6 sesiones)", "price": 30000, "duration_min": 60 },
+      { "name": "Pack 4 Zonas Femenino (6 sesiones)", "price": 35000, "duration_min": 75 },
+      { "name": "Pack Cuerpo Completo Femenino (6 sesiones)", "price": 45000, "duration_min": 120 },
+      { "name": "Pack 1 Zona Masculino (6 sesiones)", "price": 20000, "duration_min": 35 },
+      { "name": "Pack 2 Zonas Masculino (6 sesiones)", "price": 30000, "duration_min": 50 },
+      { "name": "Pack 3 Zonas Masculino (6 sesiones)", "price": 38000, "duration_min": 70 },
+      { "name": "Pack 4 Zonas Masculino (6 sesiones)", "price": 45000, "duration_min": 90 },
+      { "name": "Pack Cuerpo Completo Masculino (6 sesiones)", "price": 55000, "duration_min": 150 },
+      { "name": "Pack Rostro completo (6 sesiones)", "price": 15000, "duration_min": 40 }
+    ],
+    "Tratamientos Faciales": [
+      { "name": "Limpieza Facial Profunda c/ Ultrasonido", "price": 18000, "duration_min": 60 },
+      { "name": "Limpieza Express", "price": 12000, "duration_min": 40 },
+      { "name": "Dermaplaning + Hidratación", "price": 20000, "duration_min": 50 },
+      { "name": "Radiofrecuencia Tripolar Facial", "price": 15000, "duration_min": 45 },
+      { "name": "Peeling Químico (según evaluación)", "price": 25000, "duration_min": 60 },
+      { "name": "Microneedling (Dermapen) + Activos", "price": 30000, "duration_min": 75 }
+    ],
+    "Manicuria y Pedicuria": [
+      { "name": "Manicuría Rusa + Esmaltado Semipermanente", "price": 15000, "duration_min": 60 },
+      { "name": "Kapping Gel + Semi", "price": 18000, "duration_min": 75 },
+      { "name": "Esculpidas Soft Gel + Semi", "price": 22000, "duration_min": 90 },
+      { "name": "Pedicuría Completa + Semi", "price": 18000, "duration_min": 75 },
+      { "name": "Belleza de Pies + Semi", "price": 14000, "duration_min": 60 },
+      { "name": "Adicional Efecto/Diseño (básico)", "price": 2000, "duration_min": 15 },
+      { "name": "Retirado de Semi (otro lugar)", "price": 3000, "duration_min": 20 }
+    ],
+    "Masajes y Terapias": [
+      { "name": "Masaje Descontracturante/Relajante (Cuerpo Completo)", "price": 22000, "duration_min": 80 },
+      { "name": "Masaje Espalda/Cuello (Medio Cuerpo)", "price": 16000, "duration_min": 45 },
+      { "name": "Reflexología Podal", "price": 15000, "duration_min": 45 },
+      { "name": "Reset ATM (Masaje Mandibular)", "price": 18000, "duration_min": 50 }
+    ],
+    "Psicología": [
+      { "name": "Sesión Individual Adolescentes/Adultos (TCC)", "price": 25000, "duration_min": 50 }
+    ],
+    "Pestañas, Reiki y Podología": [
+      { "name": "Placeholder: Pestañas (Lifting/Extensiones)", "price": 0, "duration_min": 60 },
+      { "name": "Placeholder: Reiki con Liberaciones", "price": 0, "duration_min": 60 },
+      { "name": "Placeholder: Podología Clínica/Estética", "price": 0, "duration_min": 60 }
+    ]
+  }
+}
