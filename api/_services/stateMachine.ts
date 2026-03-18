@@ -72,11 +72,17 @@ export async function extractState(
     let resetCause: string | null = null;
     
     if (initialState) {
-        // 1. Reset by time (12h amnesia check) - Priority #1
+        // 1. Reset by time (Desmayo del Carrito) - Priority #1
         if (lastUpdatedAt) {
             const lastUpdate = new Date(lastUpdatedAt);
-            if (now.getTime() - lastUpdate.getTime() > TWELVE_HOURS) {
-                resetCause = 'timeout';
+            const timeDiff = now.getTime() - lastUpdate.getTime();
+            const ONE_HOUR = 60 * 60 * 1000;
+            const TWELVE_HOURS = 12 * ONE_HOUR;
+
+            if (initialState.stage === 'done') {
+                if (timeDiff > TWELVE_HOURS) resetCause = 'timeout';
+            } else {
+                if (timeDiff > ONE_HOUR) resetCause = 'timeout';
             }
         }
 
