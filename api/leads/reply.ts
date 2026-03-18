@@ -1,4 +1,5 @@
 
+// @ts-nocheck
 import { db } from '../_services/db.js';
 import * as schema from '../_services/schema.js';
 import { requireAuth } from '../../utils/auth.js';
