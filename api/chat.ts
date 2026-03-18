@@ -126,18 +126,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         
                 // 7. EXTRACT STATE (DB State is King)
-        // Pass leadName and leadPhone as the primary sources to extractState
         const state = await extractState(messages, categories, services, isBotEnabled, leadName, leadPhone, savedState, lastUpdate);
 
-        // 8. UPDATE & EVOLVE LEAD (Immediate Persistence)
+        // 8. IMMEDIATE STEP-BY-STEP PERSISTENCE (NAME + PHONE + STATE = SOURCE OF TRUTH)
+        // Rule: As soon as we have ANY data, we write it to the DB so it's visible in the Dashboard instantly.
         if (leadId) {
-            // Rule #1: Immediate write when name is identified
-            if (state.clientName && state.clientName !== 'Cliente' && state.clientName !== leadName) { 
-                console.log(`[chat.ts] Rule #1: Persisting identified name "${state.clientName}" to lead ${leadId}`);
-                await updateLeadName(leadId, state.clientName);
-            }
-            if (state.clientPhone && !leadPhone) {
-                 await sql`UPDATE leads SET contact_info = contact_info || ${JSON.stringify({ phone: state.clientPhone })}, updated_at = NOW() WHERE id = ${leadId}`;
+            const nameToSync = state.clientName && state.clientName !== 'Cliente' ? state.clientName : leadName;
+            const phoneToSync = state.clientPhone || leadPhone;
+            
+            // Critical Update: Name, Phone, and State must be synchronized step by step
+            if (nameToSync !== leadName || phoneToSync !== leadPhone) {
+                console.log(`[chat.ts] Rule #1: Step-by-step Sync for lead ${leadId} ("${nameToSync}" / "${phoneToSync}")`);
+                const updatedContact = { name: nameToSync, phone: phoneToSync };
+                await sql`UPDATE leads SET client_name = ${nameToSync}, contact_info = contact_info || ${JSON.stringify(updatedContact)}, updated_at = NOW() WHERE id = ${leadId}`;
             }
 
             await updateLeadState(leadId, state);
@@ -213,7 +214,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     // Special case: if they asked for exactly right now (early), allow it if they really want it.
                 }
 
-                for (let totalMin = startSearch; totalMin <= 20 * 60 - totalDur; totalMin += 30) {
+                // Rule #3: Precision in end time (20:00 strictly = 1200 mins)
+                for (let totalMin = startSearch; totalMin <= 1200 - totalDur; totalMin += 30) {
                     const potentialStart = totalMin;
                     const potentialEnd = totalMin + totalDur;
                     const h = Math.floor(potentialStart / 60);
@@ -230,7 +232,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         }
                     }
                     
-                    if (!overlaps) {
+                    if (!overlaps && potentialEnd <= 1200) {
                         foundSlots.push({ date: dateStr, time: timeStr });
                         if (foundSlots.length >= limit) break;
                     }
