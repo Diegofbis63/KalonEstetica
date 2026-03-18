@@ -715,7 +715,7 @@ export async function extractState(
 
         // Final stage progression check - DEFENSIVE MODE (DB FIRST)
         if (state.selectedServiceIds.length > 0 && state.pendingCategoryIds.length === 0 && !state.currentCategoryId) {
-            const isFinished = ['done', 'waiting_for_receipt', 'payment_request', 'cart_review', 'sub_service_selection'].includes(state.stage);
+            const isFinished = ['done', 'waiting_for_receipt', 'payment_request', 'cart_review', 'sub_service_selection', 'parent_selection'].includes(state.stage);
             if (isFinished) return state;
 
             // Priority: If user JUST provided a date/time, LOCK the stage to availability_proposal
