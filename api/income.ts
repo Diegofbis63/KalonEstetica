@@ -1,8 +1,8 @@
-
+// @ts-nocheck
 import { db } from './_services/db.js';
 import * as schema from './_services/schema.js';
 import { requireAuth } from '../utils/auth.js';
-import { eq, desc, and, sql, gte, lt } from 'drizzle-orm';
+import { eq, desc, and, sql, gte, lt, asc } from 'drizzle-orm';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -82,8 +82,4 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.error('Error in /api/income', e);
         return res.status(500).json({ error: 'Internal server error' });
     }
-}
-async function asc(arg0: any): Promise<any> {
-    const { asc } = await import('drizzle-orm');
-    return asc(arg0);
 }

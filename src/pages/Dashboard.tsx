@@ -183,7 +183,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
       if (!res.ok) throw new Error('Failed to load dashboard');
       return res.json();
     },
-    refetchInterval: 2000, // Autorefresh every 2 seconds
+    refetchInterval: 15000, // Reduced refresh rate to avoid loop feel & flicker
     refetchIntervalInBackground: true,
   });
 
@@ -195,7 +195,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
       return res.json();
     },
     enabled: currentTab === 'dashboard',
-    refetchInterval: 2000, 
+    refetchInterval: 15000, 
     refetchIntervalInBackground: true,
   });
 
@@ -862,9 +862,9 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-right">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
-                    <TableBody>
+                      <TableBody>
                       {filteredAppointments.map((a, i) => (
-                         <TableRow key={a.id} className={`border-b border-cream/5 hover:bg-cream/[0.02] transition-colors group animate-in fade-in slide-in-from-bottom-2 ${!(a.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? 'opacity-40 grayscale-[0.5]' : ''}`} style={{ animationDelay: `${i * 50}ms` }}>
+                         <TableRow key={a.id} className={`border-b border-cream/5 hover:bg-cream/[0.02] transition-colors group ${!(a.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? 'opacity-40 grayscale-[0.5]' : ''}`}>
                            <TableCell className="px-5 py-6">
                              <div className="font-serif font-bold text-lg text-cream tracking-tight whitespace-nowrap">
                                {(a.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? a.client_name : `Ocupado - ${a.category_name}`}
@@ -1168,7 +1168,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                     </TableHeader>
                     <TableBody>
                       {filteredLeads.map((l, i) => (
-                         <TableRow key={l.id} className={`border-b border-cream/5 hover:bg-cream/[0.02] group transition-colors animate-in fade-in slide-in-from-bottom-2 ${!(l.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? 'opacity-40' : ''}`} style={{ animationDelay: `${i * 50}ms` }}>
+                         <TableRow key={l.id} className={`border-b border-cream/5 hover:bg-cream/[0.02] group transition-colors ${!(l.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? 'opacity-40' : ''}`}>
                            <TableCell className="px-5 py-6">
                              <div className="font-serif font-bold text-cream text-lg tracking-tight leading-tight whitespace-nowrap">{(l.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? l.client_name : `Interesado - ${l.category_name}`}</div>
                            </TableCell>
