@@ -819,13 +819,8 @@ export function generateResponse(
     console.log(`[stateMachine.ts] Generating response for stage: ${state.stage}. hasMediaInLastMsg: ${hasMediaInLastMsg}`);
     
     // 1. TERMINAL CONFIRMATION & COURTESY (Top priority)
-    if (state.stage === 'done' || (state.stage === 'waiting_for_receipt' && hasMediaInLastMsg)) {
-        if (state.lastIntent === 'courtesy_ack') {
-            const name = state.clientName ? state.clientName.split(' ')[0] : '';
-            return `¡De nada${name ? `, ${name}` : ''}! Te esperamos. ✨`;
-        }
-        return "¡Excelente noticia! 💖 Recibimos tu comprobante correctamente. Tu turno ya quedó agendado y confirmado en nuestro sistema. ¡Qué placer va a ser recibirte en KÂLON para mimarte un rato! Nos vemos pronto. ✨";
-    }
+    // The 'done' stage is now handled within the switch statement for better organization.
+    // The 'waiting_for_receipt' stage with hasMediaInLastMsg is handled within its case.
 
     const welcome = isFromWhatsApp 
         ? (state.clientName ? `¡Hola ${state.clientName.split(' ')[0]}! Qué lindo saludarte de nuevo. ` : "¡Hola! Qué lindo saludarte. ")
