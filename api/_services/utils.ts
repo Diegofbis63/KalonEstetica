@@ -49,9 +49,17 @@ export function extractName(text: string): string {
 }
 
 export function formatDateHuman(dateStr: string): string {
+    if (!dateStr || dateStr.trim() === "") return "(fecha por confirmar)";
     const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-    const [y, m, d] = dateStr.split("-").map(Number);
-    return `${d} ${months[m - 1]} ${y}`;
+    const parts = dateStr.split("-").map(Number);
+    if (parts.length < 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) return dateStr;
+    const [y, m, d] = parts;
+    return `${d} ${months[(m || 1) - 1]} ${y}`;
+}
+
+export function formatPrice(price: number | string): string {
+    const num = Math.round(Number(price));
+    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 }
 
 export function formatDurationHuman(minutes: number): string {
