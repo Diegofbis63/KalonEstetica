@@ -311,26 +311,39 @@ export async function extractState(
                     }
                 }
 
-                // --- Relative Date & Time Detection ---
+                // --- Relative Date & Time Detection (Rule #3/Sanidad Temporal) ---
                 const relDate = parseRelativeDate(msg.content, today);
                 const timeMatch = msg.content.match(/(\d{1,2})(:|\s?hs?|y\s)(\d{2})?/i);
+                
                 if (relDate || timeMatch) {
+                    // Sanity Check: If we found a date/time, we override any 'stale' or past state
                     if (relDate) {
-                        state.requestedDate = relDate;
-                        state.pendingDate = null;
-                        state.pendingTime = null;
+                        const relDateLocal = relDate; // e.g. "2026-03-18"
+                        const todayStr = today.toISOString().split('T')[0];
+                        
+                        if (relDateLocal >= todayStr) {
+                             state.requestedDate = relDateLocal;
+                             state.pendingDate = null;
+                             state.pendingTime = null;
+                             console.log(`[stateMachine.ts] Turn ${i}: Fresh Date detected: ${relDateLocal}`);
+                        } else {
+                             console.log(`[stateMachine.ts] Turn ${i}: Ignoring past date from history: ${relDateLocal}`);
+                             // Don't set requestedDate if it's in the past
+                        }
                     }
                     if (timeMatch) {
                         let h = parseInt(timeMatch[1]);
                         const m = timeMatch[3] ? parseInt(timeMatch[3]) : 0;
                         if (h < 9) h += 12;
-                        state.requestedTime = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+                        const formattedTime = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+                        
+                        state.requestedTime = formattedTime;
                         state.pendingDate = null;
                         state.pendingTime = null;
+                        console.log(`[stateMachine.ts] Turn ${i}: Fresh Time detected: ${formattedTime}`);
                     }
                     if (state.selectedServiceIds.length > 0) {
-                         state.stage = 'availability_proposal';
-                         console.log(`[stateMachine.ts] Turn ${i}: Requested date/time detected. Re-triggering availability_proposal.`);
+                          state.stage = 'availability_proposal';
                     }
                 }
 
