@@ -256,12 +256,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // 10. BOOKING CONFIRMATION (Media receipt)
         // Rule #4: Final check before confirmation to prevent undefined values
         const hasArrivalMedia = !!(incomingMediaUrl || body.mediaData);
+        const isReceiptTurn = state.stage === 'waiting_for_receipt' || state.stage === 'payment_request';
         
-        if ((state.stage === 'waiting_for_receipt' || state.stage === 'payment_request') && hasArrivalMedia) {
+        if (isReceiptTurn && (hasArrivalMedia || incomingMessage?.toLowerCase().includes("comprobante"))) {
             if (leadId) {
-                console.log("[chat.ts] Media received, confirming appointment...");
+                console.log("[chat.ts] Media search triggered (Media: " + hasArrivalMedia + ")");
                 const selectedSvcObjs = services.filter(s => state.selectedServiceIds.includes(s.id));
                 
+                // If we are in the receipt turns and have ANY data, we MUST recover the date/time if lost
+                if (!state.pendingDate || !state.pendingTime) {
+                   console.log("[chat.ts] CRITICAL: Recovering pending date/time from savedState for lead " + leadId);
+                   state.pendingDate = savedState?.pendingDate || state.requestedDate;
+                   state.pendingTime = savedState?.pendingTime || state.requestedTime;
+                }
+
                 if (state.pendingDate && state.pendingTime && selectedSvcObjs.length > 0) {
                     const catNames = Array.from(new Set(selectedSvcObjs.map(s => s.category_name || "Servicio"))).join(' + ');
                     const totalPrice = selectedSvcObjs.reduce((a, b) => a + Math.round(Number(b.price)), 0);
@@ -270,16 +278,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     
                     try {
                         await createAppointment(leadId, DEFAULT_ORG_ID, dateTime, catNames, totalPrice, totalDur, selectedSvcObjs);
-                        console.log(`[chat.ts] Appointment CREATED SUCCESS for lead ${leadId} at ${dateTime}`);
+                        console.log(`[chat.ts] Success in creation for lead ${leadId} at ${dateTime}`);
                         state.stage = 'done';
                         await markLeadAsConverted(leadId);
                     } catch (appErr) {
-                        console.error("[chat.ts] CRITICAL: DB Failed to create appointment:", appErr);
-                        // Stay in payment_request if DB fails
+                        console.error("[chat.ts] CRITICAL: Error inserting appointment:", appErr);
                         state.stage = 'payment_request';
                     }
                 } else {
-                    console.log("[chat.ts] WARNING: Attempted to confirm booking with missing details. Fallback to manual check.");
+                    console.log("[chat.ts] WARNING: Missing booking data for lead " + leadId + " during receipt.");
                     state.stage = 'payment_request';
                 }
             }

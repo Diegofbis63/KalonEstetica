@@ -716,9 +716,9 @@ export async function extractState(
                 }
 
                 if (currentBotAsked === 'payment' || state.stage === 'payment_request' || state.stage === 'waiting_for_receipt') {
-                    // Lock stage to payment until success or manual reset
-                    state.stage = 'payment_request'; 
-                    const isConfirmationText = normalizedContent.includes("pago") || normalizedContent.includes("comprobante") || normalizedContent.includes("listo") || normalizedContent.includes("enviado") || normalizedContent.includes("aca esta") || normalizedContent.includes("te mando") || normalizedContent.includes("ya esta");
+                    // Force logic lock: If we are paying, we stay in paying until done or manual reset
+                    const isConfirmationText = normalizedContent.includes("pago") || normalizedContent.includes("comprobante") || normalizedContent.includes("listo") || normalizedContent.includes("enviado") || normalizedContent.includes("aca esta") || normalizedContent.includes("te mando") || normalizedContent.includes("ya esta") || normalizedContent.includes("adjunto") || normalizedContent.includes("transferi");
+                    
                     if (hasMedia || isConfirmationText) {
                         state.stage = 'waiting_for_receipt';
                         console.log(`[stateMachine.ts] Turn ${i}: Detected receipt/confirmation. Transitioning stage definitively to waiting_for_receipt.`);
