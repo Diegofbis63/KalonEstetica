@@ -55,7 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .from(schema.leads)
             .leftJoin(schema.appointments, eq(schema.leads.id, schema.appointments.lead_id))
             .groupBy(schema.leads.id, schema.leads.client_name, schema.leads.is_bot_enabled, schema.leads.contact_info)
-            .orderBy(desc(sql`max(${schema.appointments.date_time})`))) || [];
+            .orderBy(sql`max(${schema.appointments.date_time}) DESC NULLS LAST`)) || [];
 
             return res.status(200).json({ clients });
         }
