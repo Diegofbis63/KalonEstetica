@@ -33,13 +33,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             dateFilter = and(gte(schema.appointments.date_time, new Date(startDate as string)), lt(schema.appointments.date_time, new Date(`${endDate} 23:59:59`)));
         }
 
-        let whereClause = and(
-            or(
-                eq(schema.appointments.status, 'completed'),
-                eq(schema.appointments.status, 'REALIZADA')
-            ),
-            dateFilter
-        ) as any;
+        const statusFilter = or(
+            eq(schema.appointments.status, 'completed'),
+            eq(schema.appointments.status, 'REALIZADA')
+        );
+
+        let whereClause = dateFilter ? and(statusFilter, dateFilter) : statusFilter;
 
         // 1. KPI Stats
         const stats = await db.select({
@@ -48,7 +47,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             average_ticket: sql`CASE WHEN COUNT(*) > 0 THEN COALESCE(SUM(${schema.appointments.total_price}::numeric), 0) / COUNT(*) ELSE 0 END`
         })
         .from(schema.appointments)
-        .where(whereClause);
+        .where(whereClause as any);
 
         const kpi = stats[0] || { total_revenue: '0', total_count: '0', average_ticket: '0' };
 
@@ -66,14 +65,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const payments = (await db.select({
             id: schema.appointments.id,
             lead_id: schema.appointments.lead_id,
-            client_name: schema.leads.client_name,
+            client_name: sql`COALESCE(${schema.leads.client_name}, 'Cliente sin Registro')`,
             is_bot_enabled: schema.leads.is_bot_enabled,
             category_name: schema.categories.name,
             selected_services: schema.appointments.selected_services,
             date: schema.appointments.date_time,
             amount: schema.appointments.total_price,
             status: schema.appointments.status,
-            payment_method: schema.appointments.payment_method
+            payment_method: schema.appointments.payment_method,
+            phone: sql<string>`COALESCE(${schema.leads.contact_info}->>'phone', 'S/D')`
         })
         .from(schema.appointments)
         .leftJoin(schema.leads, eq(schema.appointments.lead_id, schema.leads.id))
