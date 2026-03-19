@@ -2,15 +2,17 @@
 import { db } from './_services/db.js';
 import * as schema from './_services/schema.js';
 import { requireAuth } from '../utils/auth.js';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, sql as drizzleSql } from 'drizzle-orm';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'OPTIONS') return res.status(200).end();
 
     // Determine target based on query param, body, or URL path
-    const { type, id, categoryId, category_id } = req.query;
+    const { type, id, categoryId, category_id, categorySlug, slug } = req.query;
     const catId = (categoryId || category_id) as string;
+    const catSlug = categorySlug as string;
+    const itemSlug = slug as string;
     
     // Robust detection: prioritize URL path which Vercel rewrites or original
     const fullUrl = (req.url || '').toLowerCase();
@@ -23,8 +25,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (req.method === 'GET') {
             let list;
             if (isService) {
-                // Return services filtered by category if requested
-                const where = catId ? eq(schema.services.category_id, catId) : undefined;
+                // Return services filtered by category (ID or Slug) if requested
+                const where = catId 
+                    ? eq(schema.services.category_id, catId) 
+                    : catSlug 
+                        ? drizzleSql`${schema.services.category_id} IN (SELECT id FROM categories WHERE slug = ${catSlug})`
+                        : undefined;
+                
                 list = await db.query.services.findMany({
                     where,
                     orderBy: [desc(schema.services.sort_order), desc(schema.services.created_at)],
@@ -42,7 +49,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     };
                 });
             } else {
+                // Return categories filtered by slug if requested
+                const where = itemSlug ? eq(schema.categories.slug, itemSlug) : undefined;
                 list = await db.query.categories.findMany({
+                    where,
                     orderBy: [desc(schema.categories.sort_order), desc(schema.categories.created_at)]
                 });
             }

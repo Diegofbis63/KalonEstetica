@@ -8,7 +8,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'OPTIONS') return res.status(200).end();
 
-    // 1. LOGS Handling (Public for POST, Auth for GET)
+    // 1. LOGS Handling
     if (req.url?.includes('logs')) {
       if (req.method === 'POST') {
           const { message, level, context, stack } = req.body;
@@ -24,7 +24,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ logs });
     }
 
-    // Auth is mandatory for Dashboard
+    // Auth is mandatory
     const user = await requireAuth(req, res);
     if (!user) return;
 
@@ -33,30 +33,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const { date } = req.query; 
             
             // 1. Get Metrics (Casting to Numbers)
-            const [metrics] = await sql`SELECT * FROM view_system_metrics`;
+            const metrics: any = (await sql`SELECT * FROM view_system_metrics`)[0] || {};
 
-            // 2. Fetch DATA (Appointments & Leads)
+            // 2. Fetch DATA
             const timeframe = date ? drizzleSql`(${schema.appointments.date_time} AT TIME ZONE 'America/Argentina/Cordoba')::date = ${date}` : undefined;
 
-            const appointments = await db.query.appointments.findMany({
+            const appointments = (await db.query.appointments.findMany({
                 where: timeframe,
                 orderBy: [desc(schema.appointments.date_time)],
                 limit: 200, 
                 with: { lead: true, category: true }
-            });
+            })) as any[];
 
-            const leads = await db.query.leads.findMany({
+            const leads = (await db.query.leads.findMany({
                 orderBy: [desc(schema.leads.updated_at)],
                 limit: 100
-            });
+            })) as any[];
 
-            // 3. Map for Frontend (Sanitization of Types for Zod)
+            // 3. Map for Frontend (Hard fallbacks for Zod)
             const mappedAppointments = appointments.map(a => {
                 const lead = a.lead || {};
                 const contactInfo = lead.contact_info || {};
                 
-                // SANITIZE selected_services: nested duration must be number
-                // CRITICAL: Avoid NaN at all costs. 
                 let services = Array.isArray(a.selected_services) ? a.selected_services : [];
                 services = services.map((s: any) => {
                     if (!s) return null;
@@ -64,45 +62,55 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     const cleanDur = parseInt(String(rawDur)) || 0;
                     const cleanPrice = Number(s.price || 0) || 0;
                     return {
-                        ...s,
+                        id: s.id || crypto.randomUUID(),
+                        title: s.title || (s.name || 'Servicio'),
                         duration: isNaN(cleanDur) ? 0 : cleanDur,
                         price: isNaN(cleanPrice) ? 0 : cleanPrice
                     };
                 }).filter(Boolean);
 
                 return {
-                    ...a,
+                    id: a.id,
+                    lead_id: a.lead_id || null,
                     client_name: lead.client_name || 'Sin Nombre',
                     phone: contactInfo.phone || null,
+                    service_type: a.service_type || 'General',
                     category_name: a.category?.name || a.service_type || 'Servicio',
-                    is_bot_enabled: lead.is_bot_enabled ?? true,
-                    created_at: a.created_at?.toISOString() || null,
-                    date_time: a.date_time?.toISOString() || null,
+                    category_id: a.category_id || null,
+                    date_time: a.date_time?.toISOString ? a.date_time.toISOString() : new Date().toISOString(),
+                    status: a.status || 'pending',
+                    created_at: a.created_at?.toISOString ? a.created_at.toISOString() : new Date().toISOString(),
                     total_price: Number(a.total_price) || 0,
                     total_duration: parseInt(String(a.total_duration || "0")) || 0,
-                    selected_services: services
+                    selected_services: services,
+                    canManage: true,
+                    is_bot_enabled: lead.is_bot_enabled ?? true
                 };
             });
 
             const mappedLeads = leads.map(l => {
                 const contactInfo = l.contact_info || {};
                 return {
-                    ...l,
+                    id: l.id,
+                    client_name: l.client_name || 'Interés Nuevo',
                     phone: contactInfo.phone || null,
+                    status: l.status || 'draft',
+                    intent_score: Number(l.intent_score) || 0,
+                    category_id: l.category_id || null,
                     category_name: l.category_id ? 'Tiene interés' : 'Interés General',
                     is_bot_enabled: l.is_bot_enabled ?? true,
-                    created_at: l.created_at?.toISOString() || null,
-                    updated_at: l.updated_at?.toISOString() || null,
-                    intent_score: Number(l.intent_score || 0) || 0
+                    canManage: true,
+                    created_at: l.created_at?.toISOString ? l.created_at.toISOString() : new Date().toISOString(),
+                    updated_at: l.updated_at?.toISOString ? l.updated_at.toISOString() : null
                 };
             });
 
             return res.status(200).json({ 
                 stats: {
-                     totalAppointments: Number(metrics?.total_appointments) || 0,
-                     totalUsers: Number(metrics?.total_leads) || 0,
-                     newToday: Number(metrics?.new_today) || 0,
-                     total_revenue: Number(metrics?.total_revenue) || 0
+                     totalAppointments: Number(metrics.total_appointments) || 0,
+                     totalUsers: Number(metrics.total_leads) || 0,
+                     newToday: Number(metrics.new_today) || 0,
+                     total_revenue: Number(metrics.total_revenue) || 0
                 },
                 appointments: mappedAppointments,
                 leads: mappedLeads
