@@ -22,9 +22,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // --- STAFF OPS ---
         if (isStaffOperation) {
             if (req.method === 'GET') {
-                const staffList = await db.query.staff.findMany({ with: { specialties: true }, orderBy: [desc(schema.staff.created_at)] });
-                const formatted = staffList.map(s => ({ ...s, specialties: s.specialties.map(spec => spec.category_id) }));
-                return res.status(200).json({ staff: formatted });
+                const staffList = await sql`SELECT * FROM view_staff_full ORDER BY created_at DESC`;
+                return res.status(200).json({ staff: staffList });
             }
 
             if (req.method === 'POST') {
@@ -60,9 +59,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // --- USER ACCOUNT OPS (RBAC) ---
         else {
             if (req.method === 'GET') {
-                const users = await db.query.admin_users.findMany({ with: { permissions: true }, orderBy: [desc(schema.admin_users.created_at)] });
-                const formatted = users.map(u => ({ ...u, category_ids: u.permissions.map(p => p.category_id) }));
-                return res.status(200).json({ users: formatted });
+                const users = await sql`
+                    SELECT u.*, COALESCE(json_agg(p.category_id), '[]') as category_ids
+                    FROM admin_users u
+                    LEFT JOIN user_permissions p ON p.user_id = u.id
+                    GROUP BY u.id
+                    ORDER BY u.created_at DESC
+                `;
+                return res.status(200).json({ users });
             }
 
             if (req.method === 'PUT') {
