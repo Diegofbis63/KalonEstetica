@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 
@@ -9,12 +10,15 @@ interface CategoryCardProps {
 }
 
 const CategoryCard = ({ title, desc, image, slug }: CategoryCardProps) => {
+  const [imgSrc, setImgSrc] = useState(image || "https://images.unsplash.com/photo-1560750588-73207b1ef5b8?q=80&w=800");
+
   return (
     <div className="rounded-3xl border border-white/5 bg-noir-light/40 backdrop-blur-md hover:border-gold/30 hover:shadow-[0_0_30px_-5px_rgba(212,175,55,0.15)] transition-all duration-500 group overflow-hidden h-full flex flex-col group/card relative">
       <div className="aspect-[4/5] overflow-hidden relative">
         <img
-          src={image}
+          src={imgSrc}
           alt={title}
+          onError={() => setImgSrc("https://images.unsplash.com/photo-1560750588-73207b1ef5b8?q=80&w=800")}
           className="w-full h-full object-cover scale-110 group-hover:scale-100 transition-transform duration-1000 ease-out"
           loading="lazy"
         />
@@ -35,7 +39,6 @@ const CategoryCard = ({ title, desc, image, slug }: CategoryCardProps) => {
         >
           <span className="font-bold flex items-center gap-2">
             Explorar Tratamientos
-            <div className="w-1.5 h-1.5 rounded-full bg-gold animate-pulse" />
           </span>
           <div className="w-10 h-10 rounded-full border border-gold/10 flex items-center justify-center group-hover/card:bg-gold group-hover/card:text-noir transition-all transform group-hover/card:rotate-[-45deg]">
             <ArrowRight className="w-5 h-5 shadow-sm" />

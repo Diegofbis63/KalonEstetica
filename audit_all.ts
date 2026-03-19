@@ -6,9 +6,9 @@ const sql = neon(url);
 
 async function run() {
     try {
-        console.log("--- REALIZADA DATES ---");
-        const a = await sql`SELECT id, date_time, status FROM appointments WHERE status = 'REALIZADA'`;
-        console.log(JSON.stringify(a, null, 2));
+        console.log("--- CATEGORIES ---");
+        const c = await sql`SELECT id, name, image_url FROM categories`;
+        console.log(JSON.stringify(c, null, 2));
     } catch (e) {
         console.error(e);
     }

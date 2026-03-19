@@ -81,12 +81,13 @@ const ServicesSection = () => {
             modules={[Navigation, Autoplay, Pagination]}
             spaceBetween={20}
             slidesPerView={1.2}
+            loop={true}
             grabCursor={true}
             navigation={{
               nextEl: '.swiper-button-next-custom',
               prevEl: '.swiper-button-prev-custom',
             }}
-            autoplay={{ delay: 5000, disableOnInteraction: false }}
+            autoplay={{ delay: 3500, disableOnInteraction: false }}
             pagination={{ clickable: true, dynamicBullets: true }}
             className="pb-16 !overflow-visible"
             breakpoints={{
@@ -95,12 +96,12 @@ const ServicesSection = () => {
                 spaceBetween: 25 
               },
               1024: { 
-                slidesPerView: 3.2, 
+                slidesPerView: 3, 
                 spaceBetween: 30 
               },
-              1440: { 
-                slidesPerView: 4.2, 
-                spaceBetween: 40 
+              1280: { 
+                slidesPerView: 4, 
+                spaceBetween: 30 
               },
             }}
           >
@@ -110,7 +111,7 @@ const ServicesSection = () => {
                   <CategoryCard
                     title={cat.name}
                     desc={cat.description || "Explora nuestros tratamientos exclusivos."}
-                    image={cat.image_url || "https://images.unsplash.com/photo-1560750588-73207b1ef5b8?q=80&w=800"}
+                    image={cat.image_url}
                     slug={cat.slug}
                   />
                 </ScrollReveal>
