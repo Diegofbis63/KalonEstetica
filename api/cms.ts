@@ -8,9 +8,12 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'OPTIONS') return res.status(200).end();
 
-    // Determine target based on query param or path
-    const { type, id, categoryId } = req.query;
-    const isService = type === 'service' || req.body?.type === 'service';
+    // Determine target based on query param, body, or URL path
+    const { type, id, categoryId, category_id } = req.query;
+    const catId = (categoryId || category_id) as string;
+    
+    // Robust detection: if endpoint is called as /api/services or has type=service
+    const isService = req.url?.includes('services') || type === 'service' || req.body?.type === 'service';
     const table = isService ? schema.services : schema.categories;
     const key = isService ? 'services' : 'categories';
 
@@ -19,17 +22,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             let list;
             if (isService) {
                 // Return services filtered by category if requested
-                const where = categoryId ? eq(schema.services.category_id, categoryId as string) : undefined;
+                const where = catId ? eq(schema.services.category_id, catId) : undefined;
                 list = await db.query.services.findMany({
                     where,
                     orderBy: [desc(schema.services.sort_order), desc(schema.services.created_at)],
                     with: { category: true }
                 });
                 
-                // SANITIZE: duration must be Numeric for Zod
+                // SANITIZE: duration must be an actual Number for Zod
                 list = list.map((s: any) => ({
                     ...s,
-                    duration: Number(s.duration_min || (s.duration ? parseInt(s.duration) : 0)) || 0,
+                    // Use parseInt to strip " min" or other strings that cause NaN
+                    duration: parseInt(String(s.duration_min || s.duration || "0")) || 0,
+                    price: Number(s.price || 0),
                     category_name: s.category?.name
                 }));
             } else {
@@ -42,20 +47,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // AUTH required for mutations
-        let user;
-        try {
-            user = await requireAuth(req, res);
-        } catch (e) {
-            return res.status(401).json({ error: 'Unauthorized' });
-        }
+        const user = await requireAuth(req, res);
         if (!user) return;
 
         if (req.method === 'POST') {
             const data = req.body.data || req.body;
-            // Ensure numeric duration for services
-            if (isService && data.duration_min === undefined && data.duration) {
-                data.duration_min = parseInt(data.duration) || 0;
-            }
+            if (isService && data.duration) data.duration_min = parseInt(String(data.duration)) || 0;
             const [item] = await db.insert(table).values(data).returning();
             return res.status(201).json({ [isService ? 'service' : 'category']: item });
         }
@@ -63,10 +60,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (req.method === 'PUT') {
             const { id: itemId, ...data } = req.body.data || req.body;
             if (!itemId) return res.status(400).json({ error: 'Missing ID' });
-            
-            if (isService && data.duration_min === undefined && data.duration) {
-                data.duration_min = parseInt(data.duration) || 0;
-            }
+            if (isService && data.duration) data.duration_min = parseInt(String(data.duration)) || 0;
             const [updated] = await db.update(table).set(data).where(eq(table.id, itemId as string)).returning();
             return res.status(200).json({ [isService ? 'service' : 'category']: updated });
         }

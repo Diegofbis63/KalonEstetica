@@ -59,7 +59,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 let services = Array.isArray(a.selected_services) ? a.selected_services : [];
                 services = services.map((s: any) => ({
                     ...s,
-                    duration: Number(s.duration || (s.duration_min || 0)) || 0,
+                    // Use parseInt(String(...)) to safely convert "60 min" -> 60 and avoid NaN causing Zod failures
+                    duration: parseInt(String(s.duration || s.duration_min || "0")) || 0,
                     price: Number(s.price || 0)
                 }));
 
@@ -72,7 +73,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     created_at: a.created_at?.toISOString(),
                     date_time: a.date_time?.toISOString(),
                     total_price: Number(a.total_price) || 0,
-                    total_duration: Number(a.total_duration) || 0,
+                    // Sanitizing root total_duration too
+                    total_duration: parseInt(String(a.total_duration || "0")) || 0,
                     selected_services: services
                 };
             });
