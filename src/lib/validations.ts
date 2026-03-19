@@ -47,7 +47,12 @@ export const AppointmentSchema = z.object({
   created_at: z.string().optional(),
   total_price: z.number().optional().nullable(),
   total_duration: z.number().optional().nullable(),
-  selected_services: z.array(z.any()).optional().default([]),
+  selected_services: z.array(z.object({
+    id: z.string().optional(),
+    title: z.string().optional(),
+    price: z.number().optional().nullable(),
+    duration: z.number().optional().nullable(),
+  })).optional().default([]),
   canManage: z.boolean().optional().default(true),
   is_bot_enabled: z.boolean().optional().default(false),
 });
@@ -91,7 +96,7 @@ export const UsersResponseSchema = z.object({
 export const DashboardResponseSchema = z.object({
   leads: z.array(LeadSchema).default([]),
   appointments: z.array(AppointmentSchema).default([]),
-  stats: z.any().optional(),
+  stats: z.record(z.string(), z.union([z.number(), z.string()])).optional(),
 });
 
 // --- CLIENTS ---

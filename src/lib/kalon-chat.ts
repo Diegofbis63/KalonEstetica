@@ -21,7 +21,12 @@ export async function streamKalonChat({
 }) {
   try {
     const lastMsg = messages[messages.length - 1];
-    const body: Record<string, any> = { 
+    const body: {
+      messages: Msg[];
+      clientPhone?: string;
+      mediaUrl?: string;
+      message?: string;
+    } = { 
       messages, 
       clientPhone, 
       mediaUrl: mediaUrl || lastMsg?.media_url 
