@@ -6,10 +6,11 @@ import { requireAuth } from '../utils/auth.js';
 import { eq, asc, and } from 'drizzle-orm';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { id, slug, active: activeFilter } = req.query;
 
-    // 1. GET - Fetch Categories
+    // 1. GET - Fetch Categories (STRICT MODE)
     if (req.method === 'GET') {
         try {
             let categoriesQuery;
@@ -25,28 +26,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
             const categoriesRes = await categoriesQuery;
             
+            // Single Item Fetch: Return {} if not found, never null
             if (id || slug) {
-                return res.status(200).json({ category: categoriesRes[0] || null });
+                return res.status(200).json({ category: categoriesRes[0] || {} });
             }
 
-            return res.status(200).json({ categories: categoriesRes });
+            // List Fetch: Always return array
+            return res.status(200).json({ categories: categoriesRes || [] });
         } catch (e) {
-            console.error(e);
-            return res.status(500).json({ error: 'Error al obtener categorías' });
+            console.error('[API ERROR] Categories GET:', e);
+            // FAIL-SAFE: Empty array
+            return res.status(200).json({ categories: [], error_managed: true });
         }
     }
 
     // AUTH REQUIRED FOR MUTATIONS
-    const user = await requireAuth(req, res);
+    let user;
+    try {
+        user = await requireAuth(req, res);
+    } catch (e) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
     if (!user) return;
 
     // 2. POST - Create Category
     if (req.method === 'POST') {
         const { name, description, image_url, sort_order, slug, active } = req.body;
         try {
-            // Generate slug if not provided
             const finalSlug = slug || name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, '-');
-            
             const result = await db.insert(schema.categories).values({
                 organization_id: 'kalon-estetica',
                 name,
@@ -56,10 +63,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 slug: finalSlug,
                 active: active ?? true
             }).returning();
-            return res.status(201).json({ category: result[0] });
+            return res.status(201).json({ category: result[0] || {} });
         } catch (e) {
-            console.error(e);
-            return res.status(500).json({ error: 'Error al crear categoría' });
+            console.error('[API ERROR] Categories POST:', e);
+            return res.status(200).json({ category: {}, error: 'Error al crear' });
         }
     }
 
@@ -74,14 +81,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         .set({ sort_order: item.sort_order })
                         .where(eq(schema.categories.id, item.id));
                 }
-                return res.status(200).json({ success: true });
+                return res.status(200).json({ success: true, categories: [] });
             } catch (e) {
-                console.error(e);
-                return res.status(500).json({ error: 'Error al reordenar categorías' });
+                console.error('[API ERROR] Categories REORDER:', e);
+                return res.status(200).json({ success: false, categories: [] });
             }
         }
 
-        if (!id) return res.status(400).json({ error: 'Missing ID' });
+        if (!id) return res.status(200).json({ error: 'Missing ID', category: {} });
 
         try {
             const updateData: Record<string, unknown> = {
@@ -96,26 +103,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 .set(updateData)
                 .where(eq(schema.categories.id, id as string))
                 .returning();
-            return res.status(200).json({ category: result[0] });
+            return res.status(200).json({ category: result[0] || {} });
         } catch (e) {
-            console.error(e);
-            return res.status(500).json({ error: 'Error al actualizar categoría' });
+            console.error('[API ERROR] Categories PUT:', e);
+            return res.status(200).json({ category: {}, error: 'Error al actualizar' });
         }
     }
 
     // 4. DELETE - Delete Category
     if (req.method === 'DELETE') {
         const { id } = req.query;
-        if (!id) return res.status(400).json({ error: 'Missing ID' });
+        if (!id) return res.status(200).json({ success: false, error: 'Missing ID' });
         
         try {
             await db.delete(schema.categories).where(eq(schema.categories.id, id as string));
             return res.status(200).json({ success: true });
         } catch (e) {
-            console.error(e);
-            return res.status(500).json({ error: 'Error al eliminar categoría' });
+            console.error('[API ERROR] Categories DELETE:', e);
+            return res.status(200).json({ success: false, error: 'Error al eliminar' });
         }
     }
 
     return res.status(405).json({ error: 'Method not allowed' });
 }
+

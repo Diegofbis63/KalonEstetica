@@ -8,7 +8,12 @@ import {
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useChat } from "@/context/ChatContext";
-import { Lead } from "@/types/chat";
+import { 
+  safeFetch, 
+  IncomeResponseSchema,
+  Payment,
+  Lead
+} from "@/lib/validations";
 import { toPng } from 'html-to-image';
 import { ReceiptTemplate } from "@/components/income/ReceiptTemplate";
 import { 
@@ -59,30 +64,6 @@ import { toast } from "sonner";
 import { DateRange } from "react-day-picker";
 import { useIsMobile } from "@/hooks/use-mobile";
 
-interface IncomeStats {
-  revenue: number;
-  ticket: number;
-  count: number;
-}
-
-interface EvolutionData {
-  date: string;
-  revenue: number;
-}
-
-interface Payment {
-  id: string;
-  lead_id: string;
-  client_name: string;
-  is_bot_enabled?: boolean;
-  parent_service: string;
-  selected_services: Array<{ title: string, price: number }>;
-  date: string;
-  amount: number;
-  status: string;
-  payment_method: string;
-  phone?: string;
-}
 
 const formatCurrency = (val: number) => {
   return new Intl.NumberFormat('es-AR', {
@@ -137,19 +118,15 @@ export default function Incomes() {
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['income', period, date?.from, date?.to],
-    queryFn: async () => {
+    queryFn: () => {
       let url = `/api/income?period=${period}`;
       if (period === 'personalizado' && date?.from && date?.to) {
         url += `&startDate=${format(date.from, 'yyyy-MM-dd')}&endDate=${format(date.to, 'yyyy-MM-dd')}`;
       }
-      const res = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      if (!res.ok) throw new Error('Failed to load income data');
-      return res.json() as Promise<{ stats: IncomeStats, evolution: EvolutionData[], payments: Payment[] }>;
+      return safeFetch(url, IncomeResponseSchema, { stats: { revenue: 0, ticket: 0, count: 0 }, evolution: [], payments: [] });
     },
     enabled: period !== 'personalizado' || (!!date?.from && !!date?.to),
-    refetchInterval: 5000, // Autorefresh every 5 seconds
+    refetchInterval: 300000, 
   });
 
   const updatePaymentMutation = useMutation({
@@ -246,8 +223,9 @@ export default function Incomes() {
       const text = `Hola ${payment.client_name}, te enviamos el comprobante de tu pago en KÂLON por el servicio de ${payment.parent_service}. ✨`;
       
       const lead: Lead = {
-        id: payment.lead_id,
-        client_name: payment.client_name
+        id: (payment.lead_id || payment.id) as string,
+        client_name: payment.client_name,
+        phone: payment.phone ?? undefined
       };
       
       openChat(lead, text, dataUrl);

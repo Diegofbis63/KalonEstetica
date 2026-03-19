@@ -5,10 +5,16 @@ import { requireAuth } from '../utils/auth.js';
 import { eq, desc, and, sql, gte, lt, asc } from 'drizzle-orm';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-    const user = await requireAuth(req, res);
+    let user;
+    try {
+        user = await requireAuth(req, res);
+    } catch (e) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
     if (!user) return;
 
     try {
@@ -36,20 +42,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from(schema.appointments)
         .where(whereClause);
 
-        const kpi = stats[0];
+        const kpi = stats[0] || { total_revenue: '0', total_count: '0', average_ticket: '0' };
 
         // 2. Evolution
-        const evolution = await db.select({
+        const evolution = (await db.select({
             date: sql`DATE(${schema.appointments.date_time})`,
             revenue: sql`SUM(${schema.appointments.total_price}::numeric)`
         })
         .from(schema.appointments)
         .where(whereClause)
         .groupBy(sql`DATE(${schema.appointments.date_time})`)
-        .orderBy(asc(sql`DATE(${schema.appointments.date_time})`));
+        .orderBy(asc(sql`DATE(${schema.appointments.date_time})`))) || [];
 
         // 3. Payments
-        const payments = await db.select({
+        const payments = (await db.select({
             id: schema.appointments.id,
             lead_id: schema.appointments.lead_id,
             client_name: schema.leads.client_name,
@@ -66,7 +72,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .leftJoin(schema.categories, eq(schema.appointments.category_id, schema.categories.id))
         .where(whereClause)
         .orderBy(desc(schema.appointments.date_time))
-        .limit(100);
+        .limit(100)) || [];
 
         return res.status(200).json({
             stats: {
@@ -79,7 +85,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
 
     } catch (e) {
-        console.error('Error in /api/income', e);
-        return res.status(500).json({ error: 'Internal server error' });
+        console.error('[API ERROR] Income:', e);
+        return res.status(200).json({
+            stats: { revenue: 0, ticket: 0, count: 0 },
+            evolution: [],
+            payments: [],
+            error_managed: true
+        });
     }
 }
+

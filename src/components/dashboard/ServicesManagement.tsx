@@ -2,6 +2,13 @@ import React, { useState, useRef } from 'react';
 import { useAuth } from '@/components/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
+  safeFetch, 
+  CategoriesResponseSchema, 
+  ServicesResponseSchema,
+  Category,
+  Service
+} from "@/lib/validations";
+import { 
   Plus, 
   GripVertical, 
   Edit, 
@@ -42,28 +49,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-
-// --- Types ---
-
-interface Category {
-  id: string;
-  name: string;
-  description: string;
-  image_url: string;
-  sort_order: number;
-}
-
-interface Service {
-  id: string;
-  category_id: string;
-  title: string;
-  description: string;
-  price: string;
-  duration: string;
-  image_url: string;
-  sort_order: number;
-  active: boolean;
-}
 
 // --- Sortable Item Components ---
 
@@ -217,7 +202,7 @@ export default function ServicesManagement() {
     reader.onloadend = () => {
       const base64 = reader.result as string;
       if (editingCategory) {
-        setEditingCategory({ ...editingCategory, image_url: base64 });
+        setEditingCategory(prev => prev ? { ...prev, image_url: base64 } : null);
       }
       setIsUploading(false);
       toast.success("Imagen cargada localmente");
@@ -235,21 +220,23 @@ export default function ServicesManagement() {
   const [editingCategory, setEditingCategory] = useState<Partial<Category> | null>(null);
   const [editingService, setEditingService] = useState<Partial<Service> | null>(null);
 
+
   // Queries
-  const { data: catData, isLoading: catsLoading } = useQuery<{ categories: Category[] }>({
+  const { data: catData, isLoading: catsLoading } = useQuery({
     queryKey: ['categories'],
-    queryFn: () => fetch('/api/categories').then(res => res.json()),
+    queryFn: () => safeFetch('/api/categories', CategoriesResponseSchema, { categories: [] }),
     staleTime: 60000,
     retry: 3,
   });
 
-  const { data: servData, isLoading: servsLoading } = useQuery<{ services: Service[] }>({
+  const { data: servData, isLoading: servsLoading } = useQuery({
     queryKey: ['services', activeCategoryId],
-    queryFn: () => fetch(`/api/services?category_id=${activeCategoryId}`).then(res => res.json()),
+    queryFn: () => safeFetch(`/api/services?category_id=${activeCategoryId}`, ServicesResponseSchema, { services: [] }),
     enabled: !!activeCategoryId,
     staleTime: 60000,
     retry: 3,
   });
+
 
   // Mutations
   const reorderCategoriesMutation = useMutation({
@@ -392,7 +379,7 @@ export default function ServicesManagement() {
     reorderServicesMutation.mutate(reorderData);
   };
 
-  const activeCategory = catData?.categories.find(c => c.id === activeCategoryId);
+  const activeCategory = catData?.categories?.find(c => c.id === activeCategoryId);
 
   // Set first category as active on load
   React.useEffect(() => {
@@ -429,9 +416,9 @@ export default function ServicesManagement() {
             onDragEnd={handleCategoryDragEnd}
             modifiers={[restrictToVerticalAxis]}
           >
-            <SortableContext items={catData?.categories.map(c => c.id) || []} strategy={verticalListSortingStrategy}>
+            <SortableContext items={catData?.categories?.map(c => c.id) || []} strategy={verticalListSortingStrategy}>
               <div className="space-y-2">
-                {catData?.categories.map(cat => (
+                {catData?.categories?.map(cat => (
                   <SortableCategoryItem 
                     key={cat.id} 
                     category={cat} 
@@ -524,9 +511,9 @@ export default function ServicesManagement() {
                         onDragEnd={handleServiceDragEnd}
                         modifiers={[restrictToVerticalAxis]}
                     >
-                        <SortableContext items={servData?.services.map(s => s.id) || []} strategy={verticalListSortingStrategy}>
+                        <SortableContext items={servData?.services?.map(s => s.id) || []} strategy={verticalListSortingStrategy}>
                             <div className="space-y-3">
-                                {servData?.services.map(svc => (
+                                {servData?.services?.map(svc => (
                                     <SortableServiceItem 
                                         key={svc.id} 
                                         service={svc}

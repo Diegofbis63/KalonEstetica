@@ -8,9 +8,10 @@ import { SliderSkeleton } from "../Skeletons";
 import { useQuery } from "@tanstack/react-query";
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Navigation, Autoplay, Pagination } from 'swiper/modules';
-import 'swiper/css';
-import 'swiper/css/navigation';
-import 'swiper/css/pagination';
+import { 
+  safeFetch, 
+  CategoriesResponseSchema, 
+} from "@/lib/validations";
 
 interface Category {
   id: string;
@@ -28,15 +29,11 @@ const FALLBACK_CATEGORIES = [
 const ServicesSection = () => {
   const { data, isLoading } = useQuery({
     queryKey: ['categories'],
-    queryFn: async () => {
-      const res = await fetch('/api/categories');
-      if (!res.ok) throw new Error('Error fetching categories');
-      const json = await res.json();
-      return json.categories as Category[];
-    }
+    queryFn: () => safeFetch('/api/categories', CategoriesResponseSchema, { categories: [] }),
+    staleTime: 600000, 
   });
 
-  const categories = data || [];
+  const categories = data?.categories || [];
 
   return (
     <section id="servicios" className="px-4 md:px-8 pb-20 relative overflow-hidden">

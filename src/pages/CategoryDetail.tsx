@@ -5,6 +5,11 @@ import { motion } from "framer-motion";
 import { ChevronLeft, Clock, Sparkles, Star } from "lucide-react";
 import ScrollReveal from "@/components/landing/ScrollReveal";
 import { useQuery } from "@tanstack/react-query";
+import { 
+  safeFetch, 
+  CategoriesResponseSchema, 
+  ServicesResponseSchema,
+} from "@/lib/validations";
 
 interface Service {
   id: string;
@@ -30,10 +35,8 @@ const CategoryDetail = () => {
   const { data: catData, isLoading: catLoading } = useQuery({
     queryKey: ['category', slug],
     queryFn: async () => {
-      const res = await fetch(`/api/categories?slug=${slug}`);
-      if (!res.ok) throw new Error('Error fetching category');
-      const json = await res.json();
-      return json.category as Category;
+      const data = await safeFetch(`/api/categories?slug=${slug}`, CategoriesResponseSchema, { categories: [] });
+      return data.categories[0] || null;
     }
   });
 
@@ -41,10 +44,8 @@ const CategoryDetail = () => {
   const { data: svcData, isLoading: svcLoading } = useQuery({
     queryKey: ['services', slug],
     queryFn: async () => {
-      const res = await fetch(`/api/services?active=true&categorySlug=${slug}`);
-      if (!res.ok) throw new Error('Error fetching services');
-      const json = await res.json();
-      return json.services as Service[];
+      const data = await safeFetch(`/api/services?active=true&categorySlug=${slug}`, ServicesResponseSchema, { services: [] });
+      return data.services;
     }
   });
 

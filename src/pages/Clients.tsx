@@ -69,54 +69,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-interface Client {
-  id: string;
-  client_name: string;
-  phone: string;
-  email: string | null;
-  note: string | null;
-  is_bot_enabled?: boolean;
-  total_appointments: number;
-  last_appointment: string;
-  appointment_history: Array<{
-    id: string;
-    date_time: string;
-    service_type: string;
-    status: string;
-  }>;
-}
-
-interface Lead {
-  id: string;
-  client_name: string;
-  contact_info: {
-    email?: string;
-    phone?: string;
-  };
-  status?: string;
-  intent_score?: number;
-  created_at?: string;
-  is_bot_enabled?: boolean;
-  canManage?: boolean;
-  phone?: string;
-  chat_history?: { role: string; content: string; media_url?: string; created_at?: string }[];
-}
-
-interface ChatMessage {
-  role: string;
-  content: string;
-  media_url?: string;
-  media_data?: string;
-  created_at?: string;
-  isPending?: boolean;
-}
-
-interface ClientUpdateData {
-  client_name: string;
-  phone: string;
-  email: string;
-  note: string;
-}
+import { 
+  safeFetch, 
+  ClientsResponseSchema,
+  Client,
+  Lead
+} from "@/lib/validations";
 
 export default function Clients() {
   const { user: authUser } = useAuth();
@@ -135,17 +93,12 @@ export default function Clients() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['clients-list'],
-    queryFn: async () => {
-      const res = await fetch('/api/clients');
-      if (!res.ok) throw new Error('Failed to load clients');
-      return res.json();
-    },
-    refetchInterval: 2000, // Autorefresh every 2 seconds
-    refetchIntervalInBackground: true,
+    queryFn: () => safeFetch('/api/clients', ClientsResponseSchema, { clients: [] }),
+    refetchInterval: 60000,
   });
 
   const updateClient = useMutation({
-    mutationFn: async (clientData: ClientUpdateData) => {
+    mutationFn: async (clientData: { client_name: string; phone: string; email: string; note: string }) => {
       const res = await fetch(`/api/clients?id=${selectedClient?.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -355,9 +308,9 @@ export default function Clients() {
                       <button
                         onClick={() => {
                           const leadObj: Lead = {
-                            id: client.id,
+                            id: client.id as string,
                             client_name: client.client_name,
-                            contact_info: { phone: client.phone }
+                            phone: client.phone ?? undefined
                           };
                           openChat(leadObj);
                         }}
@@ -566,9 +519,9 @@ export default function Clients() {
                                     className="w-full bg-[#25D366] hover:bg-[#128C7E] text-white font-black text-xs tracking-widest h-14 rounded-2xl uppercase shadow-xl shadow-emerald-500/10"
                                     onClick={() => {
                                       const leadObj: Lead = {
-                                        id: selectedClient.id,
+                                        id: selectedClient.id as string,
                                         client_name: selectedClient.client_name,
-                                        contact_info: { phone: selectedClient.phone }
+                                        phone: selectedClient.phone ?? undefined
                                       };
                                       openChat(leadObj);
                                     }}

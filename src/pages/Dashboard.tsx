@@ -11,6 +11,16 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/AuthContext";
 import { toast } from "sonner";
+import { 
+  Lead, 
+  Appointment, 
+  Category, 
+  Service,
+  safeFetch,
+  DashboardResponseSchema,
+  ServicesResponseSchema,
+  CategoriesResponseSchema
+} from "@/lib/validations";
 import { useChat } from "@/context/ChatContext";
 import { maskPhone } from "@/lib/utils";
 import ServicesManagement from "@/components/dashboard/ServicesManagement";
@@ -71,66 +81,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-interface Lead {
-  id: string;
-  client_name: string;
-  contact_info: {
-    email?: string;
-    phone?: string;
-  };
-  status: string;
-  intent_score: number;
-  created_at: string;
-  is_bot_enabled: boolean;
-  category_name?: string;
-  canManage?: boolean;
-  phone?: string; // Unified phone from API RBAC
-  updated_at?: string;
-  chat_history?: { role: string; content: string; media_url?: string; created_at?: string }[];
-}
-
-interface Appointment {
-  id: string;
-  lead_id?: string;
-  client_name?: string;
-  phone?: string;
-  service_type: string;
-  category_name?: string;
-  date_time: string;
-  status: string;
-  created_at: string;
-  canManage?: boolean;
-  selected_services?: Array<{
-    id: string;
-    title: string;
-    price: number | string;
-    duration: string;
-    category_name?: string;
-    category?: string;
-  }>;
-  total_price?: number;
-  total_duration?: number;
-  is_bot_enabled?: boolean;
-}
-
-interface Category {
-  id: string;
-  name: string;
-  description?: string;
-  image_url?: string;
-}
-
-export interface Service {
-  id: string;
-  title: string;
-  description: string;
-  price: string;
-  duration: string;
-  image_url: string;
-  active: boolean;
-  sort_order: number;
-}
-
 export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: 'dashboard' | 'appointments' | 'services' | 'leads' }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -178,14 +128,11 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
     return d.toLocaleDateString('sv-SE'); // YYYY-MM-DD in local time
   }, []);
 
+
   const { data: dashData, isLoading: dashLoading } = useQuery({
     queryKey: ['dashboard'],
-    queryFn: async () => {
-      const res = await fetch('/api/dashboard');
-      if (!res.ok) throw new Error('Failed to load dashboard');
-      return res.json();
-    },
-    refetchInterval: 15000, // Reduced refresh rate to avoid loop feel & flicker
+    queryFn: () => safeFetch('/api/dashboard', DashboardResponseSchema, { leads: [], appointments: [], stats: {} }),
+    refetchInterval: 30000, 
     refetchIntervalInBackground: true,
     staleTime: 60000,
     retry: 3,
@@ -193,13 +140,9 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
 
   const { data: timelineData } = useQuery({
     queryKey: ['timeline', todayStr],
-    queryFn: async () => {
-      const res = await fetch(`/api/dashboard?date=${todayStr}`);
-      if (!res.ok) throw new Error('Failed to load timeline');
-      return res.json();
-    },
+    queryFn: () => safeFetch(`/api/dashboard?date=${todayStr}`, DashboardResponseSchema, { leads: [], appointments: [], stats: {} }),
     enabled: currentTab === 'dashboard',
-    refetchInterval: 15000,
+    refetchInterval: 30000,
     refetchIntervalInBackground: true,
     staleTime: 60000,
     retry: 3,
@@ -207,31 +150,28 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
 
   const { data: servData } = useQuery({
     queryKey: ['services-list'],
-    queryFn: async () => {
-      const res = await fetch('/api/services');
-      if (!res.ok) throw new Error('Failed to load services');
-      return res.json();
-    },
-    staleTime: 60000,
+    queryFn: () => safeFetch('/api/services', ServicesResponseSchema, { services: [] }),
+    staleTime: 120000,
     retry: 3,
   });
 
   const { data: catData } = useQuery({
     queryKey: ['categories'],
-    queryFn: () => fetch('/api/categories').then(res => res.json()),
-    staleTime: 60000,
+    queryFn: () => safeFetch('/api/categories', CategoriesResponseSchema, { categories: [] }),
+    staleTime: 300000,
     retry: 3,
   });
 
   const { data: subServicesData } = useQuery({
     queryKey: ['sub-services', cartCategory],
-    queryFn: () => fetch(`/api/services?category_id=${cartCategory}`).then(res => res.json()),
+    queryFn: () => safeFetch(`/api/services?category_id=${cartCategory}`, ServicesResponseSchema, { services: [] }),
     enabled: !!cartCategory,
     staleTime: 60000,
     retry: 3,
   });
 
-  const services: Service[] = useMemo(() => servData?.services || [], [servData?.services]);
+
+  const services = useMemo(() => (servData?.services || []) as Service[], [servData?.services]);
 
   const updateAppointment = useMutation({
     mutationFn: async ({ id, status, date_time, service_type, client_name, phone, selected_services, total_price, total_duration }: { 
@@ -620,16 +560,16 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                   <div className="flex sm:flex-col items-center gap-2">
                                     <button 
                                       onClick={() => { 
-                                        const leadObj: Lead = {
+                                        const leadObj = {
                                           id: appt.lead_id!,
                                           client_name: appt.client_name!,
-                                          contact_info: { phone: appt.phone },
+                                          phone: appt.phone,
                                           status: appt.status,
                                           intent_score: 100,
                                           is_bot_enabled: appt.is_bot_enabled || false,
                                           created_at: appt.created_at,
                                           canManage: appt.canManage
-                                        };
+                                        } as Lead;
                                         openChat(leadObj);
                                       }}
                                       disabled={!appt.lead_id || (!appt.canManage && authUser?.role !== 'staff' && authUser?.role !== 'admin')}
@@ -887,17 +827,17 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                              {(a.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') && a.phone && (
                                <button 
                                  onClick={() => {
-                                   const leadObj: Lead = {
+                                   const leadObj = {
                                      id: a.lead_id!,
                                      client_name: a.client_name!,
-                                     contact_info: { phone: a.phone },
-                                    status: a.status,
-                                    intent_score: 100,
-                                    is_bot_enabled: a.is_bot_enabled || false,
-                                    created_at: a.created_at,
-                                    canManage: a.canManage
-                                  };
-                                  openChat(leadObj);
+                                     phone: a.phone,
+                                     status: a.status,
+                                     intent_score: 100,
+                                     is_bot_enabled: a.is_bot_enabled || false,
+                                     created_at: a.created_at,
+                                     canManage: a.canManage
+                                   } as Lead;
+                                   openChat(leadObj);
                                 }}
                                 className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-xs font-bold font-mono hover:bg-emerald-500/10 hover:border-emerald-500/40 transition-all group/wa whitespace-nowrap"
                               >
@@ -1061,16 +1001,16 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                           <TableCell className="px-4 py-6 text-center">
                               <button 
                                   onClick={() => { 
-                                    const leadObj: Lead = {
+                                    const leadObj = {
                                       id: a.lead_id!,
                                       client_name: a.client_name!,
-                                      contact_info: { phone: a.phone },
+                                      phone: a.phone,
                                       status: a.status,
                                       intent_score: 100,
                                       is_bot_enabled: a.is_bot_enabled || false,
                                       created_at: a.created_at,
                                       canManage: a.canManage
-                                    };
+                                    } as Lead;
                                     openChat(leadObj);
                                   }}
                                    disabled={!a.lead_id || (!(a.canManage || authUser?.role === 'staff' || authUser?.role === 'admin'))}
@@ -1125,16 +1065,16 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                     </DropdownMenuItem>
                                     <DropdownMenuSeparator className="bg-white/5" />
                                     <DropdownMenuItem className="focus:bg-emerald-500/10 focus:text-emerald-400 cursor-pointer" onClick={() => {
-                                      const leadObj: Lead = {
+                                      const leadObj = {
                                         id: a.lead_id!,
                                         client_name: a.client_name!,
-                                        contact_info: { phone: a.phone },
+                                        phone: a.phone,
                                         status: a.status,
                                         intent_score: 100,
                                         is_bot_enabled: a.is_bot_enabled || false,
                                         created_at: a.created_at,
                                         canManage: a.canManage
-                                      };
+                                      } as Lead;
                                       openChat(leadObj);
                                     }}>
                                       <MessageSquare className="w-4 h-4 mr-2" /> Abrir Chat de WhatsApp
@@ -1189,16 +1129,16 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                             {l.phone && (
                               <button 
                                 onClick={() => {
-                                  const leadObj: Lead = {
+                                  const leadObj = {
                                     id: l.id,
                                     client_name: l.client_name,
-                                    contact_info: { phone: l.phone },
+                                    phone: l.phone,
                                     status: l.status,
                                     intent_score: l.intent_score,
                                     is_bot_enabled: l.is_bot_enabled,
                                     created_at: l.created_at,
                                     canManage: l.canManage
-                                  };
+                                  } as Lead;
                                   openChat(leadObj);
                                 }}
                                 className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-xs font-bold font-mono hover:bg-emerald-500/10 hover:border-emerald-500/40 transition-all group/wa whitespace-nowrap"
@@ -1249,16 +1189,16 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                               <div className="flex justify-end gap-2">
                                   <button 
                                     onClick={() => {
-                                      const leadObj: Lead = {
+                                      const leadObj = {
                                         id: l.id,
                                         client_name: l.client_name,
-                                        contact_info: { phone: l.phone },
+                                        phone: l.phone,
                                         status: l.status,
                                         intent_score: l.intent_score,
                                         is_bot_enabled: l.is_bot_enabled,
                                         created_at: l.created_at,
                                         canManage: l.canManage
-                                      };
+                                      } as Lead;
                                       openChat(leadObj);
                                     }}
                                     disabled={!l.canManage}

@@ -19,19 +19,13 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-
-interface UserAccount {
-  id: string;
-  username: string;
-  email: string;
-  role: string;
-  category_ids: string[];
-}
-
-interface Category {
-  id: string;
-  name: string;
-}
+import { 
+  safeFetch, 
+  UsersResponseSchema, 
+  CategoriesResponseSchema,
+  UserAccount,
+  Category
+} from "@/lib/validations";
 
 export default function Settings() {
   const { user: authUser } = useAuth();
@@ -47,23 +41,18 @@ export default function Settings() {
 
   const { data: userData, isLoading: usersLoading } = useQuery({
     queryKey: ['admin-users'],
-    queryFn: async () => {
-      const res = await fetch('/api/users');
-      if (!res.ok) throw new Error('Acceso denegado');
-      return res.json();
-    }
+    queryFn: () => safeFetch('/api/users', UsersResponseSchema, { users: [] }),
+    staleTime: 60000,
   });
 
   const { data: catData } = useQuery({
     queryKey: ['categories'],
-    queryFn: async () => {
-      const res = await fetch('/api/categories');
-      return res.json();
-    }
+    queryFn: () => safeFetch('/api/categories', CategoriesResponseSchema, { categories: [] }),
+    staleTime: 300000,
   });
 
   const updateMutation = useMutation({
-    mutationFn: async (payload: any) => {
+    mutationFn: async (payload: { id: string; username?: string; password?: string; category_ids?: string[] }) => {
       const res = await fetch('/api/users', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -96,9 +85,8 @@ export default function Settings() {
   const handleEdit = (user: UserAccount) => {
     setSelectedUser(user);
     setUsername(user.username);
-    // User wants to pre-fill, but they are hashed. We set it if available, 
-    // but typically it remains blank for security unless the API provides it.
-    setPassword((user as any).password || ""); 
+    // User passwords are not sent from API for security
+    setPassword(""); 
     setSelectedCats(user.category_ids || []);
     setIsEditModalOpen(true);
     setShowPassword(false);
