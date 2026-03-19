@@ -21,8 +21,8 @@ export const ServiceSchema = z.object({
   category_id: z.string().optional().nullable(),
   title: z.string(),
   description: z.string().optional().nullable(),
-  price: z.coerce.string(),
-  duration: z.string().optional().nullable(),
+  price: z.coerce.number(),
+  duration: z.coerce.number().optional().nullable(),
   image_url: z.string().optional().nullable(),
   active: z.boolean().optional().default(true),
   sort_order: z.number().optional().default(0),
@@ -45,13 +45,13 @@ export const AppointmentSchema = z.object({
   date_time: z.string(),
   status: z.string().default('pending'),
   created_at: z.string().optional(),
-  total_price: z.number().optional().nullable(),
-  total_duration: z.number().optional().nullable(),
+  total_price: z.coerce.number().optional().nullable(),
+  total_duration: z.coerce.number().optional().nullable(),
   selected_services: z.array(z.object({
     id: z.string().optional(),
     title: z.string().optional(),
-    price: z.number().optional().nullable(),
-    duration: z.number().optional().nullable(),
+    price: z.coerce.number().optional().nullable(),
+    duration: z.coerce.number().optional().nullable(),
   })).optional().default([]),
   canManage: z.boolean().optional().default(true),
   is_bot_enabled: z.boolean().optional().default(false),
@@ -141,13 +141,13 @@ export const PaymentSchema = z.object({
 
 export const IncomeResponseSchema = z.object({
   stats: z.object({
-    revenue: z.number().default(0),
-    ticket: z.number().default(0),
-    count: z.number().default(0),
+    revenue: z.coerce.number().default(0),
+    ticket: z.coerce.number().default(0),
+    count: z.coerce.number().default(0),
   }).default({ revenue: 0, ticket: 0, count: 0 }),
   evolution: z.array(z.object({
     date: z.string(),
-    revenue: z.number(),
+    revenue: z.coerce.number(),
   })).default([]),
   payments: z.array(PaymentSchema).default([]),
 });
