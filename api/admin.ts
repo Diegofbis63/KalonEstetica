@@ -56,13 +56,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 const contactInfo = lead.contact_info || {};
                 
                 // SANITIZE selected_services: nested duration must be number
+                // CRITICAL: Avoid NaN at all costs. 
                 let services = Array.isArray(a.selected_services) ? a.selected_services : [];
-                services = services.map((s: any) => ({
-                    ...s,
-                    // Use parseInt(String(...)) to safely convert "60 min" -> 60 and avoid NaN causing Zod failures
-                    duration: parseInt(String(s.duration || s.duration_min || "0")) || 0,
-                    price: Number(s.price || 0)
-                }));
+                services = services.map((s: any) => {
+                    if (!s) return null;
+                    const rawDur = s.duration || s.duration_min || "0";
+                    const cleanDur = parseInt(String(rawDur)) || 0;
+                    const cleanPrice = Number(s.price || 0) || 0;
+                    return {
+                        ...s,
+                        duration: isNaN(cleanDur) ? 0 : cleanDur,
+                        price: isNaN(cleanPrice) ? 0 : cleanPrice
+                    };
+                }).filter(Boolean);
 
                 return {
                     ...a,
@@ -70,10 +76,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     phone: contactInfo.phone || null,
                     category_name: a.category?.name || a.service_type || 'Servicio',
                     is_bot_enabled: lead.is_bot_enabled ?? true,
-                    created_at: a.created_at?.toISOString(),
-                    date_time: a.date_time?.toISOString(),
+                    created_at: a.created_at?.toISOString() || null,
+                    date_time: a.date_time?.toISOString() || null,
                     total_price: Number(a.total_price) || 0,
-                    // Sanitizing root total_duration too
                     total_duration: parseInt(String(a.total_duration || "0")) || 0,
                     selected_services: services
                 };
@@ -86,18 +91,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     phone: contactInfo.phone || null,
                     category_name: l.category_id ? 'Tiene interés' : 'Interés General',
                     is_bot_enabled: l.is_bot_enabled ?? true,
-                    created_at: l.created_at?.toISOString(),
-                    updated_at: l.updated_at?.toISOString(),
-                    intent_score: Number(l.intent_score || 0)
+                    created_at: l.created_at?.toISOString() || null,
+                    updated_at: l.updated_at?.toISOString() || null,
+                    intent_score: Number(l.intent_score || 0) || 0
                 };
             });
 
             return res.status(200).json({ 
                 stats: {
-                     totalAppointments: Number(metrics?.total_appointments || 0),
-                     totalUsers: Number(metrics?.total_leads || 0),
-                     newToday: Number(metrics?.new_today || 0),
-                     total_revenue: Number(metrics?.total_revenue || 0)
+                     totalAppointments: Number(metrics?.total_appointments) || 0,
+                     totalUsers: Number(metrics?.total_leads) || 0,
+                     newToday: Number(metrics?.new_today) || 0,
+                     total_revenue: Number(metrics?.total_revenue) || 0
                 },
                 appointments: mappedAppointments,
                 leads: mappedLeads

@@ -12,8 +12,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { type, id, categoryId, category_id } = req.query;
     const catId = (categoryId || category_id) as string;
     
-    // Robust detection: if endpoint is called as /api/services or has type=service
-    const isService = req.url?.includes('services') || type === 'service' || req.body?.type === 'service';
+    // Robust detection: prioritize URL path which Vercel rewrites or original
+    const fullUrl = (req.url || '').toLowerCase();
+    const isService = fullUrl.includes('service') || type === 'service' || (req.body && req.body.type === 'service');
+    
     const table = isService ? schema.services : schema.categories;
     const key = isService ? 'services' : 'categories';
 
@@ -30,13 +32,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 });
                 
                 // SANITIZE: duration must be an actual Number for Zod
-                list = list.map((s: any) => ({
-                    ...s,
-                    // Use parseInt to strip " min" or other strings that cause NaN
-                    duration: parseInt(String(s.duration_min || s.duration || "0")) || 0,
-                    price: Number(s.price || 0),
-                    category_name: s.category?.name
-                }));
+                list = list.map((s: any) => {
+                    const cleanDur = parseInt(String(s.duration_min || s.duration || "0")) || 0;
+                    return {
+                        ...s,
+                        duration: isNaN(cleanDur) ? 0 : cleanDur,
+                        price: Number(s.price || 0) || 0,
+                        category_name: s.category?.name
+                    };
+                });
             } else {
                 list = await db.query.categories.findMany({
                     orderBy: [desc(schema.categories.sort_order), desc(schema.categories.created_at)]
