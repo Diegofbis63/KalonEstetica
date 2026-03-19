@@ -71,11 +71,13 @@ const SortableCategoryItem = ({
   category, 
   isActive, 
   onClick,
+  onDelete,
   isReadOnly = false
 }: { 
   category: Category; 
   isActive: boolean; 
   onClick: () => void;
+  onDelete: () => void;
   isReadOnly?: boolean;
 }) => {
   const {
@@ -110,6 +112,14 @@ const SortableCategoryItem = ({
         </div>
       )}
       <span className="flex-grow font-serif font-bold text-sm truncate">{category.name}</span>
+      {!isReadOnly && (
+        <button 
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          className="p-1 px-1.5 rounded-md hover:bg-rose/10 hover:text-rose transition-all opacity-0 group-hover:opacity-100"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      )}
       <ChevronRight className={`w-4 h-4 transition-transform ${isActive ? 'translate-x-1 opacity-100' : 'opacity-0 group-hover:opacity-40'}`} />
     </div>
   );
@@ -228,13 +238,17 @@ export default function ServicesManagement() {
   // Queries
   const { data: catData, isLoading: catsLoading } = useQuery<{ categories: Category[] }>({
     queryKey: ['categories'],
-    queryFn: () => fetch('/api/categories').then(res => res.json())
+    queryFn: () => fetch('/api/categories').then(res => res.json()),
+    staleTime: 60000,
+    retry: 3,
   });
 
   const { data: servData, isLoading: servsLoading } = useQuery<{ services: Service[] }>({
     queryKey: ['services', activeCategoryId],
     queryFn: () => fetch(`/api/services?category_id=${activeCategoryId}`).then(res => res.json()),
-    enabled: !!activeCategoryId
+    enabled: !!activeCategoryId,
+    staleTime: 60000,
+    retry: 3,
   });
 
   // Mutations
@@ -245,7 +259,28 @@ export default function ServicesManagement() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reorder })
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['categories'] })
+    onMutate: async (newOrder) => {
+      await queryClient.cancelQueries({ queryKey: ['categories'] });
+      const previousCats = queryClient.getQueryData<{ categories: Category[] }>(['categories']);
+      if (previousCats) {
+        // Optimistically update
+        const updatedCats = [...previousCats.categories];
+        newOrder.forEach(item => {
+          const idx = updatedCats.findIndex(c => c.id === item.id);
+          if (idx !== -1) updatedCats[idx].sort_order = item.sort_order;
+        });
+        updatedCats.sort((a, b) => a.sort_order - b.sort_order);
+        queryClient.setQueryData(['categories'], { categories: updatedCats });
+      }
+      return { previousCats };
+    },
+    onError: (err, newOrder, context) => {
+      if (context?.previousCats) {
+        queryClient.setQueryData(['categories'], context.previousCats);
+      }
+      toast.error('Error al reordenar');
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['categories'] })
   });
 
   const reorderServicesMutation = useMutation({
@@ -255,7 +290,27 @@ export default function ServicesManagement() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reorder })
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['services', activeCategoryId] })
+    onMutate: async (newOrder) => {
+      await queryClient.cancelQueries({ queryKey: ['services', activeCategoryId] });
+      const previousServs = queryClient.getQueryData<{ services: Service[] }>(['services', activeCategoryId]);
+      if (previousServs) {
+        const updatedServs = [...previousServs.services];
+        newOrder.forEach(item => {
+          const idx = updatedServs.findIndex(s => s.id === item.id);
+          if (idx !== -1) updatedServs[idx].sort_order = item.sort_order;
+        });
+        updatedServs.sort((a, b) => a.sort_order - b.sort_order);
+        queryClient.setQueryData(['services', activeCategoryId], { services: updatedServs });
+      }
+      return { previousServs };
+    },
+    onError: (err, newOrder, context) => {
+      if (context?.previousServs) {
+        queryClient.setQueryData(['services', activeCategoryId], context.previousServs);
+      }
+      toast.error('Error al reordenar servicios');
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['services', activeCategoryId] })
   });
 
   const saveCategoryMutation = useMutation({
@@ -283,6 +338,15 @@ export default function ServicesManagement() {
       queryClient.invalidateQueries({ queryKey: ['services', activeCategoryId] });
       setIsServiceModalOpen(false);
       toast.success("Servicio guardado");
+    }
+  });
+
+  const deleteCategoryMutation = useMutation({
+    mutationFn: (id: string) => fetch(`/api/categories?id=${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      toast.success("Categoría eliminada");
+      setActiveCategoryId(null);
     }
   });
 
@@ -373,6 +437,11 @@ export default function ServicesManagement() {
                     category={cat} 
                     isActive={activeCategoryId === cat.id}
                     onClick={() => setActiveCategoryId(cat.id)}
+                    onDelete={() => {
+                        if (confirm(`¿Estás seguro de eliminar la categoría "${cat.name}"? Se perderán todos sus servicios.`)) {
+                            deleteCategoryMutation.mutate(cat.id);
+                        }
+                    }}
                     isReadOnly={isReadOnly}
                   />
                 ))}

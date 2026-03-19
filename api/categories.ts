@@ -24,6 +24,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
 
             const categoriesRes = await categoriesQuery;
+            
+            if (id || slug) {
+                return res.status(200).json({ category: categoriesRes[0] || null });
+            }
+
             return res.status(200).json({ categories: categoriesRes });
         } catch (e) {
             console.error(e);

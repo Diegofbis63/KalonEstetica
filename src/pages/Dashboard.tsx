@@ -14,6 +14,8 @@ import { toast } from "sonner";
 import { useChat } from "@/context/ChatContext";
 import { maskPhone } from "@/lib/utils";
 import ServicesManagement from "@/components/dashboard/ServicesManagement";
+import { DashboardSkeleton } from "@/components/Skeletons";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import { Switch } from "@/components/ui/switch";
 import {
   Table,
@@ -185,6 +187,8 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
     },
     refetchInterval: 15000, // Reduced refresh rate to avoid loop feel & flicker
     refetchIntervalInBackground: true,
+    staleTime: 60000,
+    retry: 3,
   });
 
   const { data: timelineData } = useQuery({
@@ -195,8 +199,10 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
       return res.json();
     },
     enabled: currentTab === 'dashboard',
-    refetchInterval: 15000, 
+    refetchInterval: 15000,
     refetchIntervalInBackground: true,
+    staleTime: 60000,
+    retry: 3,
   });
 
   const { data: servData } = useQuery({
@@ -205,18 +211,24 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
       const res = await fetch('/api/services');
       if (!res.ok) throw new Error('Failed to load services');
       return res.json();
-    }
+    },
+    staleTime: 60000,
+    retry: 3,
   });
 
   const { data: catData } = useQuery({
     queryKey: ['categories'],
-    queryFn: () => fetch('/api/categories').then(res => res.json())
+    queryFn: () => fetch('/api/categories').then(res => res.json()),
+    staleTime: 60000,
+    retry: 3,
   });
 
   const { data: subServicesData } = useQuery({
     queryKey: ['sub-services', cartCategory],
     queryFn: () => fetch(`/api/services?category_id=${cartCategory}`).then(res => res.json()),
-    enabled: !!cartCategory
+    enabled: !!cartCategory,
+    staleTime: 60000,
+    retry: 3,
   });
 
   const services: Service[] = useMemo(() => servData?.services || [], [servData?.services]);
@@ -434,13 +446,14 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
 
   if (dashLoading) {
     return (
-        <div className="h-full flex items-center justify-center py-20">
-            <div className="w-8 h-8 border-4 border-gold border-t-transparent rounded-full animate-spin" />
+        <div className="h-full px-4 md:px-8 py-6 md:py-10 pb-20 max-w-[1600px] mx-auto">
+            <DashboardSkeleton />
         </div>
     );
   }
 
   return (
+    <ErrorBoundary>
     <div className="flex flex-col bg-noir">
       <div className="px-4 md:px-8 py-6 md:py-10">
         <div className="max-w-[1600px] mx-auto space-y-12 pb-20">
@@ -1310,7 +1323,13 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2">
                         <label className="text-[10px] uppercase tracking-widest text-cream/30 font-bold">Categoría</label>
-                        <Select value={cartCategory} onValueChange={setCartCategory}>
+                        <Select 
+                          value={cartCategory} 
+                          onValueChange={(val) => {
+                            setCartCategory(val);
+                            setCartService(""); // Clear sub-service when category changes
+                          }}
+                        >
                           <SelectTrigger className="bg-noir-light border-white/10 rounded-xl h-12">
                             <SelectValue placeholder="Categoría..." />
                           </SelectTrigger>
@@ -1338,7 +1357,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                   <button 
                     onClick={() => {
                       if (!cartService) return;
-                      const sObj = subServicesData.services.find((s: Service) => s.id === cartService);
+                      const sObj = subServicesData?.services?.find((s: Service) => s.id === cartService);
                       if (sObj) {
                         setSelectedServices(prev => [...prev!, {
                           id: sObj.id,
@@ -1373,7 +1392,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                               <p className="text-[10px] text-cream/40 whitespace-nowrap">{s.duration} • ${Number(s.price).toLocaleString('es-AR')}</p>
                             </div>
                             <button 
-                              onClick={() => setSelectedServices(prev => prev!.filter((_, i) => i !== idx))}
+                              onClick={() => setSelectedServices(prev => (prev || []).filter((_, i) => i !== idx))}
                               className="p-1.5 rounded-lg bg-rose/5 text-rose/40 hover:text-rose transition-colors"
                             >
                               <X className="w-4 h-4" />
@@ -1484,7 +1503,13 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                     <Info className="w-3.5 h-3.5 text-gold/40" />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <Select value={cartCategory} onValueChange={setCartCategory}>
+                    <Select 
+                      value={cartCategory} 
+                      onValueChange={(val) => {
+                        setCartCategory(val);
+                        setCartService(""); // Clear sub-service when category changes
+                      }}
+                    >
                       <SelectTrigger className="bg-noir-light border-white/10">
                         <SelectValue placeholder="Categoría" />
                       </SelectTrigger>
@@ -1509,7 +1534,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                   <button 
                     onClick={() => {
                       if (!cartService) return;
-                      const sObj = subServicesData.services.find((s: Service) => s.id === cartService);
+                      const sObj = subServicesData?.services?.find((s: Service) => s.id === cartService);
                       if (sObj) {
                         setSelectedServices(prev => [...prev!, {
                           id: sObj.id,
@@ -1539,7 +1564,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                             <span className="text-cream/30 mx-2">•</span>
                             <span className="text-cream/60 font-mono">${Number(s.price).toLocaleString('es-AR')}</span>
                           </div>
-                          <button onClick={() => setSelectedServices(prev => prev!.filter((_, i) => i !== idx))} className="text-rose/40 hover:text-rose transition-colors">
+                          <button onClick={() => setSelectedServices(prev => (prev || []).filter((_, i) => i !== idx))} className="text-rose/40 hover:text-rose transition-colors">
                             <X className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -1587,16 +1612,19 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
             <DialogFooter>
                 <button 
                     disabled={updateAppointment.isPending || !selectedServices?.length}
-                    onClick={() => updateAppointment.mutate({ 
-                        id: selectedAppointmentForEdit!.id,
-                        date_time: new Date(`${formDate}T${formTime}:00-03:00`).toISOString(),
-                        service_type: selectedServices![0].title + (selectedServices!.length > 1 ? "..." : ""),
-                        client_name: formClientName,
-                        phone: formPhone,
-                        selected_services: selectedServices,
-                        total_price: selectedServices?.reduce((acc, s) => acc + Number(s.price), 0),
-                        total_duration: selectedServices?.reduce((acc, s) => acc + parseInt(s.duration || "0"), 0)
-                    })} 
+                    onClick={() => {
+                        if (!selectedAppointmentForEdit || !selectedServices?.length) return;
+                        updateAppointment.mutate({ 
+                            id: selectedAppointmentForEdit.id,
+                            date_time: new Date(`${formDate}T${formTime}:00-03:00`).toISOString(),
+                            service_type: (selectedServices[0]?.title || "Servicio") + (selectedServices.length > 1 ? "..." : ""),
+                            client_name: formClientName,
+                            phone: formPhone,
+                            selected_services: selectedServices,
+                            total_price: selectedServices?.reduce((acc, s) => acc + Number(s.price), 0),
+                            total_duration: selectedServices?.reduce((acc, s) => acc + parseInt(s.duration || "0"), 0)
+                        });
+                    }} 
                     className="w-full py-4 bg-gradient-to-r from-gold to-[#d4af37] text-noir rounded-xl font-bold text-[10px] uppercase tracking-widest shadow-xl shadow-gold/10 hover:-translate-y-0.5 transition-all"
                 >
                     {updateAppointment.isPending ? 'Guardando...' : 'Aplicar Cambios en la Cita'}
@@ -1633,7 +1661,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
           </AlertDialogContent>
       </AlertDialog>
 
-
     </div>
+    </ErrorBoundary>
   );
 }

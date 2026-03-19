@@ -1,4 +1,4 @@
-
+import { relations } from 'drizzle-orm';
 import { pgTable, uuid, text, numeric, integer, boolean, timestamp, jsonb } from 'drizzle-orm/pg-core';
 
 export const admin_users = pgTable('admin_users', {
@@ -19,7 +19,7 @@ export const categories = pgTable('categories', {
   image_url: text('image_url'),
   active: boolean('active').default(true),
   sort_order: integer('sort_order').default(0),
-  organization_id: uuid('organization_id'),
+  organization_id: text('organization_id'),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
 
@@ -40,7 +40,7 @@ export const services = pgTable('services', {
 
 export const leads = pgTable('leads', {
   id: uuid('id').primaryKey().defaultRandom(),
-  organization_id: uuid('organization_id'),
+  organization_id: text('organization_id'),
   client_name: text('client_name').notNull(),
   contact_info: jsonb('contact_info'),
   intent_score: integer('intent_score').default(0),
@@ -56,7 +56,7 @@ export const leads = pgTable('leads', {
 export const appointments = pgTable('appointments', {
   id: uuid('id').primaryKey().defaultRandom(),
   lead_id: uuid('lead_id').references(() => leads.id, { onDelete: 'cascade' }),
-  organization_id: uuid('organization_id'),
+  organization_id: text('organization_id'),
   date_time: timestamp('date_time', { withTimezone: true }).notNull(),
   service_type: text('service_type').notNull(),
   status: text('status').default('confirmed'),
@@ -85,3 +85,60 @@ export const user_permissions = pgTable('user_permissions', {
   user_id: uuid('user_id').references(() => admin_users.id, { onDelete: 'cascade' }),
   category_id: uuid('category_id').references(() => categories.id, { onDelete: 'cascade' }),
 });
+
+// Relaciones
+export const adminUsersRelations = relations(admin_users, ({ many }) => ({
+  permissions: many(user_permissions),
+}));
+
+export const categoriesRelations = relations(categories, ({ many }) => ({
+  services: many(services),
+  leads: many(leads),
+  appointments: many(appointments),
+  user_permissions: many(user_permissions),
+}));
+
+export const servicesRelations = relations(services, ({ one }) => ({
+  category: one(categories, {
+    fields: [services.category_id],
+    references: [categories.id],
+  }),
+}));
+
+export const leadsRelations = relations(leads, ({ one, many }) => ({
+  category: one(categories, {
+    fields: [leads.category_id],
+    references: [categories.id],
+  }),
+  appointments: many(appointments),
+  chat_logs: many(chat_logs),
+}));
+
+export const appointmentsRelations = relations(appointments, ({ one }) => ({
+  lead: one(leads, {
+    fields: [appointments.lead_id],
+    references: [leads.id],
+  }),
+  category: one(categories, {
+    fields: [appointments.category_id],
+    references: [categories.id],
+  }),
+}));
+
+export const chatLogsRelations = relations(chat_logs, ({ one }) => ({
+  lead: one(leads, {
+    fields: [chat_logs.lead_id],
+    references: [leads.id],
+  }),
+}));
+
+export const userPermissionsRelations = relations(user_permissions, ({ one }) => ({
+  user: one(admin_users, {
+    fields: [user_permissions.user_id],
+    references: [admin_users.id],
+  }),
+  category: one(categories, {
+    fields: [user_permissions.category_id],
+    references: [categories.id],
+  }),
+}));

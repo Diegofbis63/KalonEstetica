@@ -198,8 +198,8 @@ export default function Clients() {
 
   const clients: Client[] = data?.clients || [];
 
-  const filteredClients = clients.filter(c => {
-    const matchesSearch = c.client_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  const filteredClients = (clients || []).filter(c => {
+    const matchesSearch = (c.client_name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
                           (c.phone && c.phone.includes(searchTerm));
 
     let matchesType = true;

@@ -3,6 +3,7 @@ import ScrollReveal from "./ScrollReveal";
 import CategoryCard from "./CategoryCard";
 import { ChevronRight, ChevronLeft, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
+import { SliderSkeleton } from "../Skeletons";
 
 import { useQuery } from "@tanstack/react-query";
 import { Swiper, SwiperSlide } from 'swiper/react';
@@ -72,8 +73,8 @@ const ServicesSection = () => {
         </ScrollReveal>
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="w-10 h-10 border-2 border-gold/20 border-t-gold rounded-full animate-spin" />
+          <div className="pb-16 mt-8">
+            <SliderSkeleton />
           </div>
         ) : (
           <Swiper
@@ -90,7 +91,7 @@ const ServicesSection = () => {
             breakpoints={{
               320: { slidesPerView: 1.2, spaceBetween: 20 },
               640: { slidesPerView: 2.2, spaceBetween: 25 },
-              1024: { slidesPerView: 3.5, spaceBetween: 30 },
+              1024: { slidesPerView: 3, spaceBetween: 30 },
             }}
           >
             {categories.map((cat, i) => (

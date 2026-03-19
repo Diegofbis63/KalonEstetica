@@ -13,6 +13,7 @@ import CategoryDetail from "./pages/CategoryDetail";
 import NotFound from "./pages/NotFound";
 import Clients from "./pages/Clients";
 import Incomes from "./pages/Incomes";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -65,33 +66,35 @@ const App = () => {
             <Toaster />
             <Sonner />
             <BrowserRouter>
-              <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/auth" element={<Auth />} />
-              <Route path="/servicios/:category" element={<CategoryDetail />} />
-              
-              {/* Rutas Protegidas de Administración */}
-              <Route
-                path="/dashboard"
-                element={
-                  <ProtectedRoute>
-                    <DashboardLayout />
-                  </ProtectedRoute>
-                }
-              >
-                <Route index element={<Dashboard />} />
-                <Route path="appointments" element={<Dashboard />} /> {/* For now reuse Dashboard */}
-                <Route path="clients" element={<Clients />} />
-                <Route path="income" element={<Incomes />} />
-                <Route path="services" element={<Dashboard defaultTab="services" />} />
-                <Route path="settings" element={<Settings />} />
-              </Route>
+              <ErrorBoundary>
+                <Routes>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/auth" element={<Auth />} />
+                  <Route path="/servicios/:category" element={<CategoryDetail />} />
+                  
+                  {/* Rutas Protegidas de Administración */}
+                  <Route
+                    path="/dashboard"
+                    element={
+                      <ProtectedRoute>
+                        <DashboardLayout />
+                      </ProtectedRoute>
+                    }
+                  >
+                    <Route index element={<Dashboard />} />
+                    <Route path="appointments" element={<Dashboard />} /> {/* For now reuse Dashboard */}
+                    <Route path="clients" element={<Clients />} />
+                    <Route path="income" element={<Incomes />} />
+                    <Route path="services" element={<Dashboard defaultTab="services" />} />
+                    <Route path="settings" element={<Settings />} />
+                  </Route>
 
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        </TooltipProvider>
+                  {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </ErrorBoundary>
+            </BrowserRouter>
+          </TooltipProvider>
         </ChatProvider>
       </AuthProvider>
     </QueryClientProvider>

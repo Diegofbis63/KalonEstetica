@@ -73,11 +73,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .leftJoin(schema.leads, eq(schema.appointments.lead_id, schema.leads.id))
         .leftJoin(schema.categories, eq(schema.appointments.category_id, schema.categories.id));
 
+        let finalApptsQuery = appointmentsQuery;
         if (date) {
-            appointmentsQuery.where(sql`DATE(${schema.appointments.date_time} AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Cordoba') = ${date}`);
+            finalApptsQuery = appointmentsQuery.where(sql`DATE(${schema.appointments.date_time} AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Cordoba') = ${date}`);
         }
 
-        const apptsRes = await appointmentsQuery.orderBy(desc(schema.appointments.date_time)).limit(100);
+        const apptsRes = await finalApptsQuery.orderBy(desc(schema.appointments.date_time)).limit(100);
 
         // 3. RBAC Processing Logic
         const processRBAC = (row: any) => {
