@@ -79,19 +79,29 @@ const ServicesSection = () => {
         ) : (
           <Swiper
             modules={[Navigation, Autoplay, Pagination]}
-            spaceBetween={30}
-            slidesPerView={'auto'}
+            spaceBetween={20}
+            slidesPerView={1.2}
+            grabCursor={true}
             navigation={{
               nextEl: '.swiper-button-next-custom',
               prevEl: '.swiper-button-prev-custom',
             }}
-            autoplay={{ delay: 4000, disableOnInteraction: false }}
+            autoplay={{ delay: 5000, disableOnInteraction: false }}
             pagination={{ clickable: true, dynamicBullets: true }}
             className="pb-16 !overflow-visible"
             breakpoints={{
-              320: { slidesPerView: 1.2, spaceBetween: 20 },
-              640: { slidesPerView: 2.2, spaceBetween: 25 },
-              1024: { slidesPerView: 3, spaceBetween: 30 },
+              640: { 
+                slidesPerView: 2.2, 
+                spaceBetween: 25 
+              },
+              1024: { 
+                slidesPerView: 3.2, 
+                spaceBetween: 30 
+              },
+              1440: { 
+                slidesPerView: 4.2, 
+                spaceBetween: 40 
+              },
             }}
           >
             {categories.map((cat, i) => (
@@ -127,8 +137,9 @@ const ServicesSection = () => {
       </div>
 
       <style>{`
-        .swiper-pagination-bullet { background: rgba(212, 175, 55, 0.2); opacity: 1; }
-        .swiper-pagination-bullet-active { background: #d4af37; }
+        .swiper-pagination { bottom: 0 !important; }
+        .swiper-pagination-bullet { background: rgba(212, 175, 55, 0.2); opacity: 1; border-radius: 2px; height: 3px; width: 12px; transition: all 0.3s; }
+        .swiper-pagination-bullet-active { background: #d4af37; width: 24px; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
       `}</style>
     </section>
