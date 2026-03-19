@@ -587,7 +587,7 @@ export default function Incomes() {
                       <Popover>
                         <PopoverTrigger asChild>
                           <button className="text-sm font-semibold text-cream/50 hover:text-gold transition-all flex items-center gap-2 group/btn bg-white/5 px-4 py-2 rounded-xl border border-transparent hover:border-gold/20 shadow-sm text-left">
-                            <span className="truncate max-w-[150px]">{payment.category_name || 'Servicio General'}</span>
+                            <span className="truncate max-w-[150px]">{payment.parent_service || 'Servicio General'}</span>
                             <ChevronDown className="w-4 h-4 shrink-0 text-gold/30 group-hover/btn:text-gold transition-colors" />
                           </button>
                         </PopoverTrigger>

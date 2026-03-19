@@ -56,7 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 a.id,
                 a.lead_id,
                 COALESCE(l.client_name, 'Sin registro') as client_name,
-                c.name as category_name,
+                c.name as parent_service,
                 a.selected_services,
                 a.date_time as date,
                 a.total_price as amount,
