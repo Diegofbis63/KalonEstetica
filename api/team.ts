@@ -1,8 +1,8 @@
 
-import { db } from './_services/db.js';
+import { db, sql } from './_services/db.js';
 import * as schema from './_services/schema.js';
 import { requireAuth } from '../utils/auth.js';
-import { eq, and, sql, desc } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -16,20 +16,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     if (!user) return;
 
-    const isStaffOperation = req.url?.includes('staff') || req.body?.type === 'staff';
+    const url = req.url || '';
+    const isStaffOperation = url.includes('staff') || req.body?.type === 'staff' || req.query?.type === 'staff';
 
     try {
-        // --- STAFF OPS ---
         if (isStaffOperation) {
             if (req.method === 'GET') {
-                const staffList = await sql`SELECT * FROM view_staff_full ORDER BY created_at DESC`;
+                // Map DATABASE 'category_ids' to FRONTEND 'specialties' to maintain UI consistency
+                const staffList = await sql`
+                    SELECT 
+                        id, name, phone, role, is_active, work_start, work_end, created_at,
+                        COALESCE(category_ids, '[]'::json) as specialties
+                    FROM view_staff_full 
+                    ORDER BY created_at DESC
+                `;
                 return res.status(200).json({ staff: staffList });
             }
 
             if (req.method === 'POST') {
                 const { name, phone, role, is_active, work_start, work_end, specialties } = req.body;
                 const [newStaff] = await db.insert(schema.staff).values({ name, phone, role: role || 'staff', is_active: is_active ?? true, work_start: work_start || '09:00', work_end: work_end || '18:00' }).returning();
-                if (specialties?.length > 0) {
+                if (specialties && Array.isArray(specialties) && specialties.length > 0) {
                     await db.insert(schema.staff_specialties).values(specialties.map(catId => ({ staff_id: newStaff.id, category_id: catId })));
                 }
                 return res.status(201).json({ staff: { ...newStaff, specialties: specialties || [] } });
@@ -51,16 +58,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             if (req.method === 'DELETE') {
                 const { id } = req.query;
                 if (!id) return res.status(400).json({ error: 'Missing ID' });
-                await db.delete(schema.staff).where(eq(schema.staff.id, id));
+                await db.delete(schema.staff).where(eq(schema.staff.id, id as string));
                 return res.status(200).json({ success: true });
             }
         } 
         
-        // --- USER ACCOUNT OPS (RBAC) ---
         else {
             if (req.method === 'GET') {
                 const users = await sql`
-                    SELECT u.*, COALESCE(json_agg(p.category_id), '[]') as category_ids
+                    SELECT 
+                        u.id, u.email, u.username, u.role, u.created_at,
+                        COALESCE(
+                            json_agg(p.category_id) FILTER (WHERE p.category_id IS NOT NULL), 
+                            '[]'::json
+                        ) as category_ids
                     FROM admin_users u
                     LEFT JOIN user_permissions p ON p.user_id = u.id
                     GROUP BY u.id
@@ -85,7 +96,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         return res.status(405).json({ error: 'Method not allowed' });
     } catch (e) {
-        console.error(`[TEAM API ERROR]`, e);
+        console.error(`[TEAM API ERROR]:`, e);
         return res.status(500).json({ error: 'Internal Server Error' });
     }
 }
