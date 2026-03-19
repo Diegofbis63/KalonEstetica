@@ -1,20 +1,15 @@
+
 {
-    "rewrites": [
-        {
-            "source": "/api/messages/pending",
-            "destination": "/api/leads/chat?action=pending"
-        },
-        {
-            "source": "/api/messages/mark-sent",
-            "destination": "/api/leads/chat?action=mark-sent"
-        },
-        {
-            "source": "/api/(.*)",
-            "destination": "/api/$1"
-        },
-        {
-            "source": "/(.*)",
-            "destination": "/index.html"
-        }
-    ]
+  "rewrites": [
+    { "source": "/api/categories", "destination": "/api/cms" },
+    { "source": "/api/services", "destination": "/api/cms" },
+    { "source": "/api/staff", "destination": "/api/team" },
+    { "source": "/api/users", "destination": "/api/team" },
+    { "source": "/api/logs", "destination": "/api/admin" },
+    { "source": "/api/dashboard", "destination": "/api/admin" },
+    { "source": "/api/messages/pending", "destination": "/api/leads/chat?action=pending" },
+    { "source": "/api/messages/mark-sent", "destination": "/api/leads/chat?action=mark-sent" },
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }
