@@ -36,44 +36,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (req.method === 'POST') {
             const { name, phone, role, is_active, work_start, work_end, specialties } = req.body;
             
-            // Insert staff member
             const [newStaff] = await db.insert(schema.staff)
                 .values({ name, phone, role, is_active: is_active ?? true, work_start, work_end })
                 .returning();
 
-            // Insert specialties
             if (Array.isArray(specialties) && specialties.length > 0) {
                 await db.insert(schema.staff_specialties)
                     .values(specialties.map(catId => ({ staff_id: newStaff.id, category_id: catId })));
             }
-
             return res.status(201).json({ success: true, id: newStaff.id });
         }
 
-        if (req.method === 'PATCH') {
+        if (req.method === 'PUT' || req.method === 'PATCH') {
             const { id } = req.query;
-            if (!id) return res.status(400).json({ error: 'Missing ID' });
+            const bodyId = req.body.id;
+            const targetId = (id || bodyId) as string;
+
+            if (!targetId) return res.status(400).json({ error: 'Missing ID' });
             
             const { name, phone, role, is_active, work_start, work_end, specialties } = req.body;
             
-            // Update staff
             await db.update(schema.staff)
                 .set({ name, phone, role, is_active, work_start, work_end })
-                .where(eq(schema.staff.id, id as string));
+                .where(eq(schema.staff.id, targetId));
 
-            // Sync specialties (delete current and re-insert)
-            await db.delete(schema.staff_specialties).where(eq(schema.staff_specialties.staff_id, id as string));
+            await db.delete(schema.staff_specialties).where(eq(schema.staff_specialties.staff_id, targetId));
             if (Array.isArray(specialties) && specialties.length > 0) {
-                await db.insert(schema.staff_specialties)
-                    .values(specialties.map(catId => ({ staff_id: id as string, category_id: catId })));
+                // Filter invalid UUIDs if necessary
+                const validSpecs = specialties.filter(sid => typeof sid === 'string' && sid.length === 36);
+                if (validSpecs.length > 0) {
+                    await db.insert(schema.staff_specialties)
+                        .values(validSpecs.map(catId => ({ staff_id: targetId, category_id: catId })));
+                }
             }
 
             return res.status(200).json({ success: true });
         }
 
+        if (req.method === 'DELETE') {
+            const { id } = req.query;
+            if (!id) return res.status(400).json({ error: 'Missing ID' });
+            await db.delete(schema.staff).where(eq(schema.staff.id, id as string));
+            return res.status(200).json({ success: true });
+        }
+
         return res.status(405).json({ error: 'Method not allowed' });
     } catch (e) {
-        console.error('[TEAM API ERROR]:', e);
+        console.error('[STAFF API ERROR]:', e);
         return res.status(500).json({ error: 'Internal Server Error', details: (e as Error).message });
     }
 }

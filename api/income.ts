@@ -2,8 +2,9 @@
 import { db, sql } from './_services/db.js';
 import * as schema from './_services/schema.js';
 import { requireAuth } from '../utils/auth.js';
-import { eq, and, desc, sql as drizzleSql } from 'drizzle-orm';
+import { eq, and, desc, gte, lte } from 'drizzle-orm';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { startOfDay, endOfDay, startOfWeek, startOfMonth, startOfYear, parseISO } from 'date-fns';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'OPTIONS') return res.status(200).end();
@@ -15,28 +16,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (req.method === 'GET') {
             const { period, startDate, endDate } = req.query;
             
-            // Build DATE filter (Argentina Time)
-            let timeframe = drizzleSql`1=1`;
+            // Use JS dates to avoid Postgres TZ issues with CURRENT_DATE
+            // We want the start of the period in Argentina time (approx by using local server time)
+            const now = new Date();
+            let start: Date = startOfMonth(now);
+            let end: Date = endOfDay(now);
+
             if (period === 'hoy') {
-                timeframe = drizzleSql`(${schema.appointments.date_time} AT TIME ZONE 'America/Argentina/Cordoba')::date = CURRENT_DATE`;
+                start = startOfDay(now);
             } else if (period === 'semana') {
-                timeframe = drizzleSql`(${schema.appointments.date_time} AT TIME ZONE 'America/Argentina/Cordoba') >= date_trunc('week', CURRENT_DATE)`;
+                start = startOfWeek(now, { weekStartsOn: 1 });
             } else if (period === 'mes') {
-                timeframe = drizzleSql`(${schema.appointments.date_time} AT TIME ZONE 'America/Argentina/Cordoba') >= date_trunc('month', CURRENT_DATE)`;
+                start = startOfMonth(now);
             } else if (period === 'año') {
-                timeframe = drizzleSql`(${schema.appointments.date_time} AT TIME ZONE 'America/Argentina/Cordoba') >= date_trunc('year', CURRENT_DATE)`;
+                start = startOfYear(now);
             } else if (period === 'personalizado' && startDate && endDate) {
-                timeframe = drizzleSql`(${schema.appointments.date_time} AT TIME ZONE 'America/Argentina/Cordoba')::date BETWEEN ${startDate} AND ${endDate}`;
+                start = startOfDay(parseISO(startDate as string));
+                end = endOfDay(parseISO(endDate as string));
             }
 
-            // 1. Fetch ALL payments (Appointments marked as REALIZADA)
+            // 1. Fetch payments
             const payments = await db.query.appointments.findMany({
-                where: and(eq(schema.appointments.status, 'REALIZADA'), timeframe),
+                where: and(
+                    eq(schema.appointments.status, 'REALIZADA'),
+                    gte(schema.appointments.date_time, start),
+                    lte(schema.appointments.date_time, end)
+                ),
                 orderBy: [desc(schema.appointments.date_time)],
                 with: { lead: true }
             });
 
-            // 2. Map Payments
             const mappedPayments = (payments as any[]).map(p => {
                 const lead = p.lead || {};
                 const contactInfo = lead.contact_info || {};
@@ -60,30 +69,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 };
             });
 
-            // 3. Stats calculation
             const revenue = mappedPayments.reduce((acc, p) => acc + p.amount, 0);
             const count = mappedPayments.length;
             const ticket = count > 0 ? (revenue / count) : 0;
 
-            // 4. Evolution (Days/Months depending on period)
-            const evolutionRaw = await sql`
-                SELECT 
-                    date_trunc('day', ${schema.appointments.date_time} AT TIME ZONE 'America/Argentina/Cordoba')::date as day,
-                    SUM(total_price)::numeric as total
-                FROM appointments
-                WHERE status = 'REALIZADA' AND ${timeframe}
-                GROUP BY day
-                ORDER BY day ASC
-            `;
+            // Evolution
+            const evolutionMap: Record<string, number> = {};
+            mappedPayments.forEach(p => {
+                const day = p.date.split('T')[0];
+                evolutionMap[day] = (evolutionMap[day] || 0) + p.amount;
+            });
 
-            const evolution = evolutionRaw.map((e: any) => ({
-                date: e.day.toISOString(),
-                revenue: Number(e.total) || 0
-            }));
+            const evolution = Object.entries(evolutionMap)
+                .map(([date, amount]) => ({ date, revenue: amount }))
+                .sort((a, b) => a.date.localeCompare(b.date));
 
             return res.status(200).json({ 
                 stats: { revenue, ticket, count },
-                evolution: evolution,
+                evolution,
                 payments: mappedPayments
             });
         }
