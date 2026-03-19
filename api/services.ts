@@ -101,17 +101,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!id) return res.status(200).json({ error: 'Missing ID', service: {} });
 
         try {
+            const updatePayload = req.body.data || req.body;
             const result = await db.update(schema.services)
                 .set({
-                    category_id: data.category_id,
-                    title: data.title,
-                    description: data.description,
-                    price: data.price?.toString(),
-                    duration: data.duration,
-                    duration_min: data.duration_min,
-                    image_url: data.image_url,
-                    active: data.active,
-                    sort_order: data.sort_order
+                    category_id: updatePayload.category_id,
+                    title: updatePayload.title,
+                    description: updatePayload.description,
+                    price: updatePayload.price?.toString(),
+                    duration: updatePayload.duration,
+                    duration_min: updatePayload.duration_min || 0,
+                    image_url: updatePayload.image_url,
+                    active: updatePayload.active,
+                    sort_order: updatePayload.sort_order
                 })
                 .where(eq(schema.services.id, id as string))
                 .returning();

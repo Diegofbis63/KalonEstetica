@@ -174,10 +174,22 @@ export default function Incomes() {
   const payments = data?.payments || [];
 
   const chartData = useMemo(() => {
-    return (data?.evolution || []).map(d => ({
-      ...d,
-      formattedDate: new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: 'short', timeZone: 'America/Argentina/Cordoba' }).format(new Date(d.date))
-    }));
+    return (data?.evolution || []).map(d => {
+      let formattedDate = 'N/A';
+      try {
+        const dDate = new Date(d.date);
+        if (!isNaN(dDate.getTime())) {
+          formattedDate = new Intl.DateTimeFormat('es-AR', { 
+            day: '2-digit', 
+            month: 'short', 
+            timeZone: 'America/Argentina/Cordoba' 
+          }).format(dDate);
+        }
+      } catch (e) {
+        console.error("Date formatting error in chart:", e);
+      }
+      return { ...d, formattedDate };
+    });
   }, [data?.evolution]);
 
   const handleOpenEdit = (payment: Payment) => {
@@ -191,7 +203,7 @@ export default function Incomes() {
     const text = `*COMPROBANTE DE PAGO - KÂLON*\n\n` +
       `*Cliente:* ${payment.client_name}\n` +
       `*Fecha:* ${new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Cordoba' }).format(new Date(payment.date))}hs\n` +
-      `*Servicios:* ${payment.parent_service}\n` +
+      `*Servicios:* ${payment.category_name}\n` +
       `*Monto:* ${formatCurrency(payment.amount)}\n` +
       `*Método:* ${payment.payment_method}\n\n` +
       `¡Gracias por elegir Kâlon Estética! ✨`;
@@ -220,7 +232,7 @@ export default function Incomes() {
         pixelRatio: 3, // Very high quality for professional look
       });
       
-      const text = `Hola ${payment.client_name}, te enviamos el comprobante de tu pago en KÂLON por el servicio de ${payment.parent_service}. ✨`;
+      const text = `Hola ${payment.client_name}, te enviamos el comprobante de tu pago en KÂLON por el servicio de ${payment.category_name}. ✨`;
       
       const lead: Lead = {
         id: (payment.lead_id || payment.id) as string,
@@ -243,7 +255,7 @@ export default function Incomes() {
 
     const exportData = payments.map(p => ({
       Cliente: p.client_name,
-      Servicio: p.parent_service,
+      Servicio: p.category_name,
       Fecha: new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Cordoba' }).format(new Date(p.date)),
       Monto: p.amount,
       Método: p.payment_method,
@@ -294,7 +306,7 @@ export default function Incomes() {
     // Table
     const tableData = payments.map(p => [
       p.client_name,
-      p.parent_service,
+      p.category_name,
       new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Cordoba' }).format(new Date(p.date)),
       formatCurrency(p.amount),
       p.payment_method,
@@ -575,7 +587,7 @@ export default function Incomes() {
                       <Popover>
                         <PopoverTrigger asChild>
                           <button className="text-sm font-semibold text-cream/50 hover:text-gold transition-all flex items-center gap-2 group/btn bg-white/5 px-4 py-2 rounded-xl border border-transparent hover:border-gold/20 shadow-sm text-left">
-                            <span className="truncate max-w-[150px]">{payment.parent_service || 'Servicio General'}</span>
+                            <span className="truncate max-w-[150px]">{payment.category_name || 'Servicio General'}</span>
                             <ChevronDown className="w-4 h-4 shrink-0 text-gold/30 group-hover/btn:text-gold transition-colors" />
                           </button>
                         </PopoverTrigger>

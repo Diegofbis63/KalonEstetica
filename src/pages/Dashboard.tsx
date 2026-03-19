@@ -516,22 +516,22 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                           >
                                             <Badge 
                                               variant="outline" 
+                                              variant="outline"
                                               className={`
-                                                text-[10px] font-black tracking-[0.2em] px-4 py-2 rounded-xl border shadow-lg transition-all uppercase h-[56px] sm:h-[64px] flex flex-col justify-center items-center gap-1 min-w-full sm:min-w-[120px]
-                                                ${authUser?.role !== 'staff' ? 'cursor-pointer hover:brightness-125' : 'cursor-default'}
-                                                ${ (appt.status === 'scheduled' || appt.status === 'confirmed')
-                                                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' 
-                                                  : (appt.status === 'completed' || appt.status === 'REALIZADA')
-                                                  ? 'border-sky-500/30 bg-sky-500/10 text-sky-400'
-                                                  : appt.status === 'canceled'
-                                                  ? 'border-rose-500/30 bg-rose-500/10 text-rose-400'
-                                                  : 'border-gold/30 bg-gold/10 text-gold'}
+                                                flex flex-col items-center justify-center h-10 w-24 border-0
+                                                ${(appt.status === 'completed' || appt.status === 'REALIZADA') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 
+                                                  appt.status === 'confirmed' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                                                  appt.status === 'canceled' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+                                                  'bg-amber-500/10 text-amber-500 border-amber-500/20'}
                                               `}
                                             >
-                                              <span className="text-[8px] opacity-50 font-sans tracking-widest">ESTADO</span>
-                                              { (appt.status === 'scheduled' || appt.status === 'confirmed') ? 'CONFIRMADA' : 
-                                                (appt.status === 'completed' || appt.status === 'REALIZADA') ? 'REALIZADA' : 
-                                                appt.status === 'canceled' ? 'CANCELADA' : 'PENDIENTE'}
+                                              <span className="text-[8px] opacity-50 font-sans tracking-widest uppercase">ESTADO</span>
+                                              <span className="text-[10px] font-black uppercase tracking-wider">
+                                                {appt.status === 'completed' || appt.status === 'REALIZADA' ? 'Realizada' : 
+                                                 appt.status === 'confirmed' ? 'Confirmado' :
+                                                 appt.status === 'canceled' ? 'Anulado' :
+                                                 'Pendiente'}
+                                              </span>
                                             </Badge>
                                           </button>
                                         </DropdownMenuTrigger>
@@ -918,12 +918,16 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                             <div className="text-sm font-bold text-cream/70 flex items-center justify-center gap-2 whitespace-nowrap">
                               <Clock className="w-3.5 h-3.5 text-gold/60" />
                               {(() => {
-                                const dur = (a.selected_services && a.selected_services.length > 0)
-                                  ? a.selected_services.reduce((total, s) => {
-                                      const match = s.duration?.match(/(\d+)/);
-                                      return total + (match ? parseInt(match[1]) : 60);
-                                    }, 0)
-                                  : a.total_duration;
+                                  const dur = (a.selected_services && a.selected_services.length > 0)
+                                    ? a.selected_services.reduce((total, s) => {
+                                        if (typeof s.duration === 'number') return total + s.duration;
+                                        if (typeof s.duration === 'string') {
+                                          const match = s.duration.match(/(\d+)/);
+                                          return total + (match ? parseInt(match[1]) : 0);
+                                        }
+                                        return total;
+                                      }, 0)
+                                    : Number(a.total_duration || 0);
                                   
                                 if (!dur) return "-";
                                 return dur >= 60 

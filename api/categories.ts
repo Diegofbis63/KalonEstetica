@@ -26,9 +26,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
             const categoriesRes = await categoriesQuery;
             
-            // Single Item Fetch: Return {} if not found, never null
+            // Single Item Fetch: Return [item] to match the schema's 'categories' array expectation
             if (id || slug) {
-                return res.status(200).json({ category: categoriesRes[0] || {} });
+                return res.status(200).json({ 
+                    categories: categoriesRes[0] ? [categoriesRes[0]] : [],
+                    category: categoriesRes[0] || {} // Keep legacy 'category' for compatibility if needed elsewhere
+                });
             }
 
             // List Fetch: Always return array

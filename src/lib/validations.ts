@@ -138,7 +138,7 @@ export const PaymentSchema = z.object({
   lead_id: z.string().optional().nullable(),
   client_name: z.string(),
   is_bot_enabled: z.boolean().optional().default(false),
-  parent_service: z.string().optional().nullable(),
+  category_name: z.string().optional().nullable(),
   selected_services: z.array(z.object({
     title: z.string(),
     price: coerceNumber,

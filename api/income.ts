@@ -19,19 +19,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     try {
         const { period = 'mes', startDate, endDate } = req.query;
-        let whereClause = eq(schema.appointments.status, 'REALIZADA');
 
+        let dateFilter;
         if (period === 'hoy') {
-            whereClause = and(whereClause, sql`${schema.appointments.date_time} >= CURRENT_DATE`, sql`${schema.appointments.date_time} < CURRENT_DATE + INTERVAL '1 day'`) as any;
+            dateFilter = and(sql`${schema.appointments.date_time} >= CURRENT_DATE`, sql`${schema.appointments.date_time} < CURRENT_DATE + INTERVAL '1 day'`);
         } else if (period === 'semana') {
-            whereClause = and(whereClause, sql`${schema.appointments.date_time} >= date_trunc('week', CURRENT_DATE)`) as any;
+            dateFilter = sql`${schema.appointments.date_time} >= date_trunc('week', CURRENT_DATE)`;
         } else if (period === 'mes') {
-            whereClause = and(whereClause, sql`${schema.appointments.date_time} >= date_trunc('month', CURRENT_DATE)`) as any;
+            dateFilter = sql`${schema.appointments.date_time} >= date_trunc('month', CURRENT_DATE)`;
         } else if (period === 'año') {
-            whereClause = and(whereClause, sql`${schema.appointments.date_time} >= date_trunc('year', CURRENT_DATE)`) as any;
+            dateFilter = sql`${schema.appointments.date_time} >= date_trunc('year', CURRENT_DATE)`;
         } else if (period === 'personalizado' && startDate && endDate) {
-            whereClause = and(whereClause, gte(schema.appointments.date_time, new Date(startDate as string)), lt(schema.appointments.date_time, new Date(`${endDate} 23:59:59`))) as any;
+            dateFilter = and(gte(schema.appointments.date_time, new Date(startDate as string)), lt(schema.appointments.date_time, new Date(`${endDate} 23:59:59`)));
         }
+
+        let whereClause = and(
+            or(
+                eq(schema.appointments.status, 'completed'),
+                eq(schema.appointments.status, 'REALIZADA')
+            ),
+            dateFilter
+        ) as any;
 
         // 1. KPI Stats
         const stats = await db.select({
@@ -60,7 +68,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             lead_id: schema.appointments.lead_id,
             client_name: schema.leads.client_name,
             is_bot_enabled: schema.leads.is_bot_enabled,
-            parent_service: schema.categories.name,
+            category_name: schema.categories.name,
             selected_services: schema.appointments.selected_services,
             date: schema.appointments.date_time,
             amount: schema.appointments.total_price,
