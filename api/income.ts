@@ -2,7 +2,7 @@
 import { db } from './_services/db.js';
 import * as schema from './_services/schema.js';
 import { requireAuth } from '../utils/auth.js';
-import { eq, desc, and, sql, gte, lt, asc } from 'drizzle-orm';
+import { eq, desc, and, or, sql, gte, lt, asc } from 'drizzle-orm';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 
