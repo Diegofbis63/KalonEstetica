@@ -36,10 +36,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const [metrics] = await sql`SELECT * FROM view_system_metrics`;
 
             // 2. Fetch DATA (Appointments & Leads)
-            // Use AT TIME ZONE for reliable date filtering in Argentina
             const timeframe = date ? drizzleSql`(${schema.appointments.date_time} AT TIME ZONE 'America/Argentina/Cordoba')::date = ${date}` : undefined;
 
-            // Increase limit significantly to avoid UI counting errors
             const appointments = await db.query.appointments.findMany({
                 where: timeframe,
                 orderBy: [desc(schema.appointments.date_time)],
@@ -52,21 +50,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 limit: 100
             });
 
-            // 3. Map for Frontend (Align with Naming Dictionary and UI Expectations)
+            // 3. Map for Frontend (Sanitization of Types for Zod)
             const mappedAppointments = appointments.map(a => {
                 const lead = a.lead || {};
                 const contactInfo = lead.contact_info || {};
+                
+                // SANITIZE selected_services: nested duration must be number
+                let services = Array.isArray(a.selected_services) ? a.selected_services : [];
+                services = services.map((s: any) => ({
+                    ...s,
+                    duration: Number(s.duration || (s.duration_min || 0)) || 0,
+                    price: Number(s.price || 0)
+                }));
+
                 return {
                     ...a,
                     client_name: lead.client_name || 'Sin Nombre',
                     phone: contactInfo.phone || null,
                     category_name: a.category?.name || a.service_type || 'Servicio',
                     is_bot_enabled: lead.is_bot_enabled ?? true,
-                    // Extra properties required by some UI parts
                     created_at: a.created_at?.toISOString(),
                     date_time: a.date_time?.toISOString(),
-                    total_price: a.total_price ? Number(a.total_price) : 0,
-                    total_duration: a.total_duration ? Number(a.total_duration) : 0
+                    total_price: Number(a.total_price) || 0,
+                    total_duration: Number(a.total_duration) || 0,
+                    selected_services: services
                 };
             });
 
@@ -97,7 +104,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(405).json({ error: 'Method not allowed' });
     } catch (e) {
         console.error('[ADMIN DASHBOARD ERROR]:', e);
-        // Ensure we don't return 500 which is swallowed by safeFetch
         return res.status(200).json({ 
             leads: [], 
             appointments: [], 
