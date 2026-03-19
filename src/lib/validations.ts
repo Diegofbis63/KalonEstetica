@@ -1,5 +1,16 @@
 import { z } from "zod";
 
+// Helper for robust numeric coercion (handles strings like "30 min" or "$1500")
+const coerceNumber = z.union([
+  z.number(),
+  z.string().transform(v => {
+    const n = parseFloat(v.replace(/[^0-9.-]/g, ''));
+    return isNaN(n) ? 0 : n;
+  }),
+  z.null().transform(() => 0),
+  z.undefined().transform(() => 0)
+]).pipe(z.number());
+
 // --- CATEGORIES ---
 export const CategorySchema = z.object({
   id: z.string(),
@@ -8,7 +19,7 @@ export const CategorySchema = z.object({
   description: z.string().optional().nullable(),
   image_url: z.string().optional().nullable(),
   active: z.boolean().optional().default(true),
-  sort_order: z.number().optional().default(0),
+  sort_order: coerceNumber.optional().default(0),
 });
 
 export const CategoriesResponseSchema = z.object({
@@ -21,11 +32,11 @@ export const ServiceSchema = z.object({
   category_id: z.string().optional().nullable(),
   title: z.string(),
   description: z.string().optional().nullable(),
-  price: z.coerce.number(),
-  duration: z.coerce.number().optional().nullable(),
+  price: coerceNumber,
+  duration: coerceNumber.optional().nullable(),
   image_url: z.string().optional().nullable(),
   active: z.boolean().optional().default(true),
-  sort_order: z.number().optional().default(0),
+  sort_order: coerceNumber.optional().default(0),
   category_name: z.string().optional().nullable(),
 });
 
@@ -45,13 +56,13 @@ export const AppointmentSchema = z.object({
   date_time: z.string(),
   status: z.string().default('pending'),
   created_at: z.string().optional(),
-  total_price: z.coerce.number().optional().nullable(),
-  total_duration: z.coerce.number().optional().nullable(),
+  total_price: coerceNumber.optional().nullable(),
+  total_duration: coerceNumber.optional().nullable(),
   selected_services: z.array(z.object({
     id: z.string().optional(),
     title: z.string().optional(),
-    price: z.coerce.number().optional().nullable(),
-    duration: z.coerce.number().optional().nullable(),
+    price: coerceNumber.optional().nullable(),
+    duration: coerceNumber.optional().nullable(),
   })).optional().default([]),
   canManage: z.boolean().optional().default(true),
   is_bot_enabled: z.boolean().optional().default(false),
@@ -130,10 +141,10 @@ export const PaymentSchema = z.object({
   parent_service: z.string().optional().nullable(),
   selected_services: z.array(z.object({
     title: z.string(),
-    price: z.coerce.number(),
+    price: coerceNumber,
   })).optional().default([]),
   date: z.string(),
-  amount: z.coerce.number(),
+  amount: coerceNumber,
   status: z.string(),
   payment_method: z.string(),
   phone: z.string().optional().nullable(),
@@ -141,13 +152,13 @@ export const PaymentSchema = z.object({
 
 export const IncomeResponseSchema = z.object({
   stats: z.object({
-    revenue: z.coerce.number().default(0),
-    ticket: z.coerce.number().default(0),
-    count: z.coerce.number().default(0),
+    revenue: coerceNumber.default(0),
+    ticket: coerceNumber.default(0),
+    count: coerceNumber.default(0),
   }).default({ revenue: 0, ticket: 0, count: 0 }),
   evolution: z.array(z.object({
     date: z.string(),
-    revenue: z.coerce.number(),
+    revenue: coerceNumber,
   })).default([]),
   payments: z.array(PaymentSchema).default([]),
 });
