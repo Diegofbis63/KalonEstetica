@@ -35,7 +35,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         const statusFilter = or(
             eq(schema.appointments.status, 'completed'),
-            eq(schema.appointments.status, 'REALIZADA')
+            eq(schema.appointments.status, 'REALIZADA'),
+            eq(schema.appointments.status, 'realizada'),
+            eq(schema.appointments.status, 'REALIZADO'),
+            eq(schema.appointments.status, 'realizado')
         );
 
         let whereClause = dateFilter ? and(statusFilter, dateFilter) : statusFilter;

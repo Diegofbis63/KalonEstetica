@@ -9,10 +9,11 @@ import {
     insertChatLog, 
     createLead, 
     findLeadByFlexiblePhone,
-    getAppointmentsForDate, 
     createAppointment, 
     markLeadAsConverted,
     updateLeadState,
+    getStaffBySpecialty,
+    getAvailableSlotsFromDB,
     db,
     sql as neonSql
 } from './_services/db.js';
@@ -26,6 +27,11 @@ import {
     extractState, 
     generateResponse 
 } from './_services/stateMachine.js';
+import { getNlpManager } from './_services/nlp.js';
+
+// WARM-UP PATTERN: Pre-load the NLP Manager at module startup
+// This ensures that while Vercel instance is 'hot', the model is ready in memory.
+getNlpManager().then(() => console.log("[chat.ts] NLP Manager warmed up")).catch(e => console.error("[chat.ts] NLP Warmup failed:", e));
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log(`[chat.ts] --- Incoming Request: ${req.method} ---`);
@@ -153,74 +159,63 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // 7. AVAILABILITY SEARCH
-        const foundSlots: any[] = [];
+        const foundSlots: { date: string, time: string }[] = [];
         let timeWasAdjusted = false;
+        let eligibleStaff: { id: string, work_start: string | null, work_end: string | null }[] = [];
+
         if (state.stage === 'availability_proposal' && state.selectedServiceIds.length > 0) {
             const selectedSvcObjs = services.filter(s => state.selectedServiceIds.includes(s.id));
-            const totalDur = selectedSvcObjs.reduce((a, b) => a + parseDuration(b.duration), 0);
+            const currentCatId = selectedSvcObjs[0]?.category_id;
             
-            const nowArg = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Argentina/Cordoba"}));
-            const todayStr = nowArg.getFullYear() + "-" + String(nowArg.getMonth() + 1).padStart(2, '0') + "-" + String(nowArg.getDate()).padStart(2, '0');
-            
-            let baseDate = state.requestedDate ? new Date(state.requestedDate + "T12:00:00Z") : new Date(nowArg.getTime());
-            
-            const requestedDateStr = baseDate.toISOString().split('T')[0];
-            if (requestedDateStr < todayStr) baseDate = new Date(nowArg);
+            if (currentCatId) {
+                // 1. Check if ANY staff is assigned to this category (Source of Truth)
+                const assignedStaff = await getStaffBySpecialty(currentCatId);
+                eligibleStaff = assignedStaff; // Keep for the generateResponse logic
 
-            if (!state.requestedDate) {
-                baseDate.setDate(baseDate.getDate() + 1); 
-            } else if (requestedDateStr === todayStr && nowArg.getHours() >= 20) {
-                baseDate.setDate(baseDate.getDate() + 1);
-            }
-
-            const limit = state.requestedAllOptions ? 3 : 1;
-
-            for (let d = 0; d < 30 && foundSlots.length < limit; d++) {
-                const searchDate = new Date(baseDate);
-                searchDate.setDate(baseDate.getDate() + d);
-                
-                if (searchDate.getDay() === 0) continue; 
-                const dateStr = searchDate.toISOString().split('T')[0];
-                if (dateStr < todayStr) continue;
-
-                const taken = await getAppointmentsForDate(dateStr);
-                const takenIntervals = taken.map((r: any) => {
-                    const start = new Date(r.date_time);
-                    const argTime = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Argentina/Cordoba', hour: '2-digit', minute: '2-digit', hour12: false }).format(start);
-                    const [h, m] = argTime.split(':').map(Number);
-                    const startMin = h * 60 + m;
-                    return { start: startMin, end: startMin + 60 };
-                });
-
-                let startSearch = 9 * 60;
-                if (dateStr === todayStr) {
-                    const currentMinutes = nowArg.getHours() * 60 + nowArg.getMinutes(); 
-                    startSearch = Math.max(9 * 60, currentMinutes + 30);
-                }
-
-                if (state.requestedTime && d === 0 && dateStr === requestedDateStr) {
-                    const [rh, rm] = state.requestedTime.split(':').map(Number);
-                    startSearch = Math.max(startSearch, rh * 60 + rm);
-                }
-
-                for (let totalMin = startSearch; totalMin <= 1200 - totalDur; totalMin += 30) {
-                    const potentialStart = totalMin;
-                    const potentialEnd = totalMin + totalDur;
-                    const h = Math.floor(potentialStart / 60);
-                    const m = potentialStart % 60;
-                    const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-
-                    if (state.rejectedDates.includes(`${dateStr} ${timeStr}`)) continue;
+                if (assignedStaff.length > 0) {
+                    const nowArg = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Argentina/Cordoba"}));
+                    const todayStr = nowArg.getFullYear() + "-" + String(nowArg.getMonth() + 1).padStart(2, '0') + "-" + String(nowArg.getDate()).padStart(2, '0');
                     
-                    let overlaps = false;
-                    for (const interval of takenIntervals) {
-                        if (potentialStart < interval.end && potentialEnd > interval.start) {
-                            overlaps = true;
-                            break;
+                    // 2. Define search range (Today/Requested -> +14 days)
+                    const searchStart = state.requestedDate ? new Date(state.requestedDate + "T00:00:00") : new Date(nowArg);
+                    searchStart.setHours(0,0,0,0);
+                    
+                    const searchEnd = new Date(searchStart);
+                    searchEnd.setDate(searchEnd.getDate() + 14);
+
+                    // 3. FETCH PRE-CALCULATED SLOTS FROM NEON (Cerebro en Neon)
+                    const slots = await getAvailableSlotsFromDB(currentCatId, searchStart, searchEnd);
+                    
+                    // 4. POST-FILTER (Time logic, business rules)
+                    const limit = state.requestedAllOptions ? 3 : 1;
+                    
+                    for (const s of slots) {
+                        const slotDate = new Date(s.slot_time);
+                        const dateStr = slotDate.toISOString().split('T')[0];
+                        
+                        // Use consistent Argentina timezone for time string and comparisons
+                        const timeStr = new Intl.DateTimeFormat('en-US', { 
+                            timeZone: 'America/Argentina/Cordoba', 
+                            hour: '2-digit', 
+                            minute: '2-digit', 
+                            hour12: false 
+                        }).format(slotDate);
+                        
+                        // Rule: Don't propose past times today
+                        if (dateStr === todayStr) {
+                            const [sh, sm] = timeStr.split(':').map(Number);
+                            const currentMinutes = nowArg.getHours() * 60 + nowArg.getMinutes();
+                            const slotMinutes = sh * 60 + sm;
+                            if (slotMinutes < currentMinutes + 30) continue;
                         }
-                    }
-                    
-                    if (!overlaps && potentialEnd <= 1200) {
+
+                        // Rule: Respect requested time if first match
+                        if (state.requestedTime && foundSlots.length === 0 && dateStr === state.requestedDate) {
+                             if (timeStr < state.requestedTime) continue;
+                        }
+
+                        if (state.rejectedDates.includes(`${dateStr} ${timeStr}`)) continue;
+
                         foundSlots.push({ date: dateStr, time: timeStr });
                         if (foundSlots.length >= limit) break;
                     }
@@ -275,7 +270,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // 9. GENERATE RESPONSE
-        const responseText = generateResponse(state, categories, services, foundSlots, !!userId, !!(incomingMediaUrl || body.mediaData), timeWasAdjusted);
+        const noStaff = (state.stage === 'availability_proposal' && (!eligibleStaff || eligibleStaff.length === 0));
+        const responseText = generateResponse(
+            state, 
+            categories, 
+            services, 
+            foundSlots, 
+            !!userId, 
+            !!(incomingMediaUrl || body.mediaData), 
+            timeWasAdjusted,
+            noStaff
+        );
         
         if (leadId) {
             await updateLeadState(leadId, state);
@@ -306,7 +311,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             res.write('data: [DONE]\n\n');
             res.end();
         }
-    } catch (e: any) {
+    } catch (e: unknown) {
         console.error("[chat.ts] CRITICAL ERROR:", e);
         if (!res.writableEnded) {
             return res.status(200).json({ 

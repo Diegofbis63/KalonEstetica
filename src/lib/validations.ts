@@ -1,15 +1,7 @@
 import { z } from "zod";
 
 // Helper for robust numeric coercion (handles strings like "30 min" or "$1500")
-const coerceNumber = z.union([
-  z.number(),
-  z.string().transform(v => {
-    const n = parseFloat(v.replace(/[^0-9.-]/g, ''));
-    return isNaN(n) ? 0 : n;
-  }),
-  z.null().transform(() => 0),
-  z.undefined().transform(() => 0)
-]).pipe(z.number());
+const coerceNumber = z.coerce.number();
 
 // --- CATEGORIES ---
 export const CategorySchema = z.object({
@@ -163,6 +155,21 @@ export const IncomeResponseSchema = z.object({
   payments: z.array(PaymentSchema).default([]),
 });
 
+// --- STAFF ---
+export const StaffSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  phone: z.string().optional().nullable(),
+  role: z.string().optional().default('staff'),
+  is_active: z.boolean().optional().default(true),
+  work_start: z.string().optional().default('09:00'),
+  work_end: z.string().optional().default('18:00'),
+  specialties: z.array(z.string()).default([]), // Array of category_id strings
+});
+
+export const StaffResponseSchema = z.object({
+  staff: z.array(StaffSchema).default([]),
+});
 
 export type Category = z.infer<typeof CategorySchema>;
 export type Service = z.infer<typeof ServiceSchema>;
@@ -177,6 +184,8 @@ export type CategoriesResponse = z.infer<typeof CategoriesResponseSchema>;
 export type ServicesResponse = z.infer<typeof ServicesResponseSchema>;
 export type ClientsResponse = z.infer<typeof ClientsResponseSchema>;
 export type IncomeResponse = z.infer<typeof IncomeResponseSchema>;
+export type Staff = z.infer<typeof StaffSchema>;
+export type StaffResponse = z.infer<typeof StaffResponseSchema>;
 
 /**
  * Robust fetch wrapper with Zod validation

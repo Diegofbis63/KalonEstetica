@@ -1,6 +1,7 @@
+
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Users, Shield, Save, Key, ChevronRight, Lock, Eye, EyeOff } from "lucide-react";
+import { Users, Shield, Save, Key, ChevronRight, Lock, Eye, EyeOff, UserCog, Contact2 } from "lucide-react";
 import { useAuth } from "@/components/AuthContext";
 import { toast } from "sonner";
 import {
@@ -19,6 +20,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   safeFetch, 
   UsersResponseSchema, 
@@ -26,6 +28,7 @@ import {
   UserAccount,
   Category
 } from "@/lib/validations";
+import { StaffManagement } from "@/components/dashboard/StaffManagement";
 
 export default function Settings() {
   const { user: authUser } = useAuth();
@@ -85,7 +88,6 @@ export default function Settings() {
   const handleEdit = (user: UserAccount) => {
     setSelectedUser(user);
     setUsername(user.username);
-    // User passwords are not sent from API for security
     setPassword(""); 
     setSelectedCats(user.category_ids || []);
     setIsEditModalOpen(true);
@@ -111,7 +113,7 @@ export default function Settings() {
   const categories: Category[] = catData?.categories || [];
 
   return (
-    <div className="p-8 space-y-10 animate-in fade-in duration-700">
+    <div className="p-8 space-y-8 animate-in fade-in duration-700">
       <header className="space-y-2">
         <div className="flex items-center gap-3">
           <Shield className="w-5 h-5 text-gold" />
@@ -120,71 +122,88 @@ export default function Settings() {
         <p className="text-cream/30 font-sans text-sm italic">Gestión de equipo y control de acceso premium (RBAC)</p>
       </header>
 
-      <section className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Users className="w-4 h-4 text-gold/60" />
-            <h3 className="text-lg font-serif font-bold">Gestión de Equipo</h3>
-          </div>
-        </div>
+      <Tabs defaultValue="team" className="w-full space-y-8">
+        <TabsList className="bg-noir-light/30 border border-white/5 p-1 rounded-2xl">
+          <TabsTrigger value="team" className="flex items-center gap-2 rounded-xl text-[10px] uppercase tracking-widest font-bold data-[state=active]:bg-gold data-[state=active]:text-noir transition-all py-2.5 px-6">
+            <Contact2 className="w-4 h-4" />
+            Control Center de Staff
+          </TabsTrigger>
+          <TabsTrigger value="access" className="flex items-center gap-2 rounded-xl text-[10px] uppercase tracking-widest font-bold data-[state=active]:bg-gold data-[state=active]:text-noir transition-all py-2.5 px-6">
+            <UserCog className="w-4 h-4" />
+            Acceso al Sistema (Admin)
+          </TabsTrigger>
+        </TabsList>
 
-        <div className="rounded-2xl border border-cream/5 bg-noir-light/20 overflow-hidden shadow-2xl backdrop-blur-md">
-          <Table>
-            <TableHeader>
-              <TableRow className="border-b border-cream/5 hover:bg-transparent">
-                <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Usuario</TableHead>
-                <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Rol</TableHead>
-                <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Servicios Asignados</TableHead>
-                <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12 text-right">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {userData?.users?.map((u: UserAccount) => (
-                <TableRow key={u.id} className="border-b border-cream/5 hover:bg-cream/[0.02] transition-colors group">
-                  <TableCell className="px-6 py-4">
-                    <div className="font-serif font-bold text-cream">{u.username}</div>
-                    <div className="text-[10px] text-cream/20 font-sans">{u.email}</div>
-                  </TableCell>
-                  <TableCell className="px-6 py-4">
-                    <Badge variant="outline" className={`
-                      uppercase text-[9px] tracking-widest font-bold
-                      ${u.role === 'admin' ? 'border-gold/30 text-gold bg-gold/5' : 'border-cream/10 text-cream/40'}
-                    `}>
-                      {u.role}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="px-6 py-4">
-                    <div className="flex flex-wrap gap-1">
-                      {u.role === 'admin' ? (
-                        <span className="text-[10px] text-gold italic font-serif">Acceso Total</span>
-                      ) : (
-                        u.category_ids?.length > 0 ? (
-                           categories
-                            .filter(c => u.category_ids.includes(c.id))
-                            .map(c => (
-                              <span key={c.id} className="text-[9px] px-2 py-0.5 rounded-full bg-cream/5 text-cream/50 border border-cream/10">
-                                {c.name}
-                              </span>
-                            ))
-                        ) : <span className="text-[10px] text-cream/10 italic">Sin permisos</span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="px-6 py-4 text-right">
-                    <button 
-                      onClick={() => handleEdit(u)}
-                      className="p-2 rounded-lg bg-cream/5 text-cream/40 hover:text-gold transition-colors inline-flex items-center gap-2 group/btn"
-                    >
-                      <Save className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
-                      <span className="text-[10px] font-bold uppercase tracking-tight">Gestionar</span>
-                    </button>
-                  </TableCell>
+        <TabsContent value="team" className="mt-0">
+          <StaffManagement />
+        </TabsContent>
+
+        <TabsContent value="access" className="mt-0 space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Users className="w-4 h-4 text-gold/60" />
+              <h3 className="text-lg font-serif font-bold">Cuentas de Usuarios</h3>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-cream/5 bg-noir-light/20 overflow-hidden shadow-2xl backdrop-blur-md">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-b border-cream/5 hover:bg-transparent">
+                  <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Usuario</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Rol</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Permisos de Visualización</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12 text-right">Acciones</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </section>
+              </TableHeader>
+              <TableBody>
+                {userData?.users?.map((u: UserAccount) => (
+                  <TableRow key={u.id} className="border-b border-cream/5 hover:bg-white/[0.02] transition-colors group">
+                    <TableCell className="px-6 py-4">
+                      <div className="font-serif font-bold text-cream">{u.username}</div>
+                      <div className="text-[10px] text-cream/20 font-sans">{u.email}</div>
+                    </TableCell>
+                    <TableCell className="px-6 py-4">
+                      <Badge variant="outline" className={`
+                        uppercase text-[9px] tracking-widest font-bold
+                        ${u.role === 'admin' ? 'border-gold/30 text-gold bg-gold/5' : 'border-cream/10 text-cream/40'}
+                      `}>
+                        {u.role}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="px-6 py-4">
+                      <div className="flex flex-wrap gap-1">
+                        {u.role === 'admin' ? (
+                          <span className="text-[10px] text-gold italic font-serif">Acceso Total</span>
+                        ) : (
+                          u.category_ids?.length > 0 ? (
+                             categories
+                              .filter(c => u.category_ids.includes(c.id))
+                              .map(c => (
+                                <span key={c.id} className="text-[9px] px-2 py-0.5 rounded-full bg-cream/5 text-cream/50 border border-cream/10">
+                                  {c.name}
+                                </span>
+                              ))
+                          ) : <span className="text-[10px] text-cream/10 italic">Sin permisos</span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="px-6 py-4 text-right">
+                      <button 
+                        onClick={() => handleEdit(u)}
+                        className="p-2 rounded-lg bg-cream/5 text-cream/40 hover:text-gold transition-colors inline-flex items-center gap-2 group/btn"
+                      >
+                        <Save className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+                        <span className="text-[10px] font-bold uppercase tracking-tight">Gestionar</span>
+                      </button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </TabsContent>
+      </Tabs>
 
       {/* Edit User Modal */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>

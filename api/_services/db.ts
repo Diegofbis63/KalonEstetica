@@ -96,8 +96,26 @@ export async function createLead(orgId: string, name: string, contactInfo: any) 
 
 export async function getAppointmentsForDate(dateStr: string) {
     console.log(`[db.ts] Checking appointments for date: ${dateStr}`);
-    // Using raw SQL for date_time casting for simplicity with current structure
-    return await sql`SELECT date_time FROM appointments WHERE date_time::date = ${dateStr} AND status != 'canceled'`;
+    return await sql`SELECT date_time, staff_id FROM appointments WHERE date_time::date = ${dateStr} AND status != 'canceled'`;
+}
+
+export async function getStaffBySpecialty(categoryId: string) {
+    console.log(`[db.ts] Fetching active staff for category: ${categoryId}`);
+    const results = await db.query.staff.findMany({
+        where: eq(schema.staff.is_active, true),
+        with: {
+            specialties: true
+        }
+    });
+    // Filter in JS to ensure they have the specialty
+    return results.filter(s => s.specialties.some(spec => spec.category_id === categoryId));
+}
+
+export async function getAllStaff() {
+    return await db.query.staff.findMany({
+        where: eq(schema.staff.is_active, true),
+        with: { specialties: true }
+    });
 }
 
 export async function createAppointment(leadId: string, orgId: string, dateTime: string, catNames: string, price: number, duration: number, selectedServices: Service[]) {
@@ -122,4 +140,15 @@ export async function markLeadAsConverted(leadId: string) {
 export async function updateLeadState(leadId: string, state: ConvState) {
     console.log(`[db.ts] Updating lead ${leadId} current_state`);
     return await db.update(schema.leads).set({ current_state: state, updated_at: new Date() }).where(eq(schema.leads.id, leadId));
+}
+
+export async function getAvailableSlotsFromDB(categoryId: string, startDate: Date, endDate: Date) {
+    console.log(`[db.ts] Calling get_available_slots in DB for category: ${categoryId}`);
+    // Use raw query for custom PG function
+    const results = await sql`
+        SELECT slot_time as "slot_time", professional_id as "staff_id"
+        FROM get_available_slots(${categoryId}, ${startDate.toISOString()}, ${endDate.toISOString()}, 30)
+        ORDER BY slot_time ASC
+    `;
+    return results as { slot_time: Date, staff_id: string }[];
 }

@@ -130,7 +130,7 @@ export async function extractState(
     console.log(`[stateMachine.ts] Extracting state. InitialName: ${initialName}, InitialPhone: ${initialPhone}, HasInitialState: ${!!initialState}, Reset: ${resetCause || 'no'}`);
     
     // --- 0. STATE MIGRATION & SANITY CHECK ---
-    const migrateState = (oldState: any): ConvState => {
+    const migrateState = (oldState: Partial<ConvState>): ConvState => {
         const out: ConvState = {
             // Rule #2: Neon as Source of Truth - Prioritize initialName/initialPhone from DB
             clientName: (initialName && initialName !== 'Cliente') ? initialName : (oldState?.clientName || null),
@@ -817,7 +817,8 @@ export function generateResponse(
     availableSlots: Slot[],
     isFromWhatsApp: boolean,
     hasMediaInLastMsg: boolean,
-    isTimeAdjusted?: boolean
+    isTimeAdjusted?: boolean,
+    noStaffAvailable?: boolean
 ): string {
     console.log(`[stateMachine.ts] Generating response for stage: ${state.stage}. hasMediaInLastMsg: ${hasMediaInLastMsg}`);
     
@@ -963,6 +964,9 @@ export function generateResponse(
                         const adjustmentNote2 = isTimeAdjusted ? "No encontré exactamente lo que buscabas, pero aquí tenés las mejores alternativas cercanas:\n\n" : "";
                         return `¡Claro que sí! 😊 ${adjustmentNote2}Para que elijas con tranquilidad, aquí tenés las opciones más cercanas para tu sesión de *${serviceList}*:\n\n${options}\n\n¿Cuál de estos horarios te resulta más cómodo?`;
                     }
+                }
+                if (noStaffAvailable) {
+                    return "Uy, por el momento no tenemos turnos disponibles para esta categoría. 🗓️ Estamos trabajando para ampliar el equipo y abrir nuevas vacantes pronto. ¡Disculpas! 😊";
                 }
                 return "Uy, parece que tengo la agenda completa para esa duración esta semana. 🗓️ ¿Te gustaría que busquemos un lugar para la semana que viene así te aseguro un espacio para vos? 😊";
             }

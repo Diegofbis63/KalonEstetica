@@ -21,8 +21,27 @@ class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
-  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+  public async componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("Uncaught error:", error, errorInfo);
+    
+    // Log to DB via API (Blindaje)
+    try {
+      await fetch('/api/logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          level: 'critical',
+          message: error.message || 'Frontend Crash',
+          context: {
+            stack: error.stack,
+            componentStack: errorInfo.componentStack,
+          },
+          url: window.location.href
+        })
+      });
+    } catch (e) {
+      console.error("Failed to ship log to DB:", e);
+    }
   }
 
   public render() {

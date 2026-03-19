@@ -122,7 +122,7 @@ export default function ChatModal({ open, onOpenChange, lead, initialMessage = "
 
   const sendReplyMutation = useMutation({
     mutationFn: async ({ leadId, message, mediaData }: { leadId: string, message?: string, mediaData?: string }) => {
-      const res = await fetch('/api/leads/reply', {
+      const res = await fetch(`/api/leads/chat?leadId=${leadId}&action=reply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
         body: JSON.stringify({ leadId, message, mediaData })
