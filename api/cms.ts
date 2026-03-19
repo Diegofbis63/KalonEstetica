@@ -26,11 +26,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             let list;
             if (isService) {
                 // Return services filtered by category (ID or Slug) if requested
-                const where = catId 
-                    ? eq(schema.services.category_id, catId) 
-                    : catSlug 
-                        ? drizzleSql`${schema.services.category_id} IN (SELECT id FROM categories WHERE slug = ${catSlug})`
-                        : undefined;
+                let targetId = catId;
+                if (!targetId && catSlug) {
+                    const cat = await db.query.categories.findFirst({
+                        where: eq(schema.categories.slug, catSlug)
+                    });
+                    if (cat) targetId = cat.id;
+                }
+                
+                const where = targetId ? eq(schema.services.category_id, targetId) : undefined;
                 
                 list = await db.query.services.findMany({
                     where,
