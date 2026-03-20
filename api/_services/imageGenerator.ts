@@ -61,12 +61,15 @@ export async function generateMenuImage(title: string, items: { label: string, p
     const logoBase64 = getLogoData();
     if (!font) throw new Error("No font for Satori!");
 
+    const calculatedHeight = 250 + (items.length * 80); // Adjusted from 70 to 80 for slightly more breathing room per item
+    const finalHeight = Math.max(calculatedHeight, 600); // Minimum height to maintain branding layout
+
     const satoriConfig: any = {
         type: 'div',
         props: {
             style: {
-                height: '100%',
-                width: '100%',
+                height: `${finalHeight}px`,
+                width: '600px',
                 display: 'flex',
                 flexDirection: 'column',
                 backgroundColor: '#0a0a0a',
@@ -293,7 +296,7 @@ export async function generateMenuImage(title: string, items: { label: string, p
 
     const svg = await satori(satoriConfig, {
         width: 600,
-        height: 850,
+        height: finalHeight,
         fonts: [
             {
                 name: 'Inter',

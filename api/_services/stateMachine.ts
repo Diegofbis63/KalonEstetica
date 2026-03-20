@@ -855,7 +855,7 @@ export function generateResponse(
                 state.optionMap = Object.fromEntries(visualItems.map((v, i) => [(i + 1).toString(), v.id]));
 
                 return response(
-                    `${welcome}¡Qué lindo tenerte acá, *${state.clientName.split(' ')[0]}*! 💖\n\n¡Excelente elección! Te preparé una carta visual con nuestras opciones principales. Por favor, respondé con el número de la opción que más te guste (ejemplo: '1'). 👇`,
+                    `${welcome}¡Un gusto, *${state.clientName.split(' ')[0]}*! Qué lindo tenerte en *KÂLON* ✨. Para empezar, acá te dejo nuestras especialidades. Podés elegir una o armar tu propio combo: simplemente respondé con el número o los números de lo que buscás (ej: 1, o 1 y 4). 👇`,
                     { title: 'Nuestras Categorías', items: visualItems }
                 );
             }
@@ -884,7 +884,7 @@ export function generateResponse(
                 } else if (state.selectedServiceIds.length > 0) {
                     prefix = `¡Qué buena elección! Ya te sumé lo anterior. 💖 Ahora de *${cat?.name}*, ¿cuál te gustaría?\n\n`;
                 } else {
-                    prefix = `¡Excelente! Te preparé la lista de tratamientos para *${cat?.name}*. Por favor, respondé con el número de la opción que más te guste (ejemplo: '1'). 👇`;
+                    prefix = `¡Excelente elección! Estos son los tratamientos que tenemos para esa especialidad. Respondé con el número o los números de los que quieras agendar. 👇`;
                 }
                 
                 return response(

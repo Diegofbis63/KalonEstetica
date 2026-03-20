@@ -34,6 +34,7 @@ export default function KalonChat() {
   const [currentStage, setCurrentStage] = useState<string>("initial");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [zoomImage, setZoomImage] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -365,7 +366,8 @@ export default function KalonChat() {
                     <img 
                       src={m.mediaUrl || m.media_url} 
                       alt="Adjunto" 
-                      className="max-w-full h-auto max-h-[500px] object-contain mx-auto rounded-md"
+                      className="max-w-full h-auto max-h-[500px] object-contain mx-auto rounded-md cursor-pointer hover:opacity-90 transition-opacity"
+                      onClick={() => setZoomImage(m.mediaUrl || m.media_url || null)}
                       onError={(e) => {
                         (e.target as HTMLImageElement).style.display = 'none';
                       }}
@@ -471,6 +473,32 @@ export default function KalonChat() {
           </button>
         </form>
       </div>
+      {/* Image Zoom Modal */}
+      {zoomImage && (
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          onClick={() => setZoomImage(null)}
+        >
+          <button 
+            className="absolute top-6 right-6 p-2 rounded-full bg-cream/10 hover:bg-cream/20 text-cream transition-colors z-10"
+            onClick={(e) => {
+              e.stopPropagation();
+              setZoomImage(null);
+            }}
+          >
+            <X className="w-6 h-6" />
+          </button>
+          
+          <div className="relative max-w-5xl w-full h-full flex items-center justify-center p-4">
+            <img 
+              src={zoomImage} 
+              alt="Zoom" 
+              className="max-w-full max-h-full object-contain rounded-lg shadow-2xl animate-in zoom-in-95 duration-300"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
