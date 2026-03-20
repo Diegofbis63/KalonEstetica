@@ -74,7 +74,9 @@ export async function generateMenuImage(title: string, items: { label: string, p
     const templateBase64 = getTemplateData();
     if (!font) throw new Error("No font for Satori!");
 
-    const calculatedHeight = 250 + (items.length * 80); 
+    // Adjust height and item density based on whether we use a template
+    const itemHeight = templateBase64 ? 65 : 80; // More compact if using template
+    const calculatedHeight = 280 + (items.length * itemHeight); 
     const finalHeight = Math.max(calculatedHeight, 600); 
 
     const satoriConfig: any = {
@@ -87,7 +89,7 @@ export async function generateMenuImage(title: string, items: { label: string, p
                 flexDirection: 'column',
                 backgroundColor: '#0a0a0a',
                 color: '#fff',
-                padding: '60px 50px',
+                padding: templateBase64 ? '200px 55px 50px 55px' : '60px 50px', // Large top padding for template header
                 fontFamily: 'Inter',
                 backgroundImage: templateBase64 ? `url(${templateBase64})` : 'radial-gradient(circle at 50% 10%, #1a1a1a 0%, #050505 100%)',
                 backgroundSize: '100% 100%',
@@ -110,8 +112,8 @@ export async function generateMenuImage(title: string, items: { label: string, p
                         }
                     }
                 } : null,
-                // Header with Logo
-                {
+                // Header with Logo - ONLY if NO template (Template already has it)
+                !templateBase64 && logoBase64 ? {
                     type: 'div',
                     props: {
                         style: {
@@ -121,7 +123,7 @@ export async function generateMenuImage(title: string, items: { label: string, p
                             marginBottom: '40px',
                         },
                         children: [
-                            logoBase64 ? {
+                            {
                                 type: 'img',
                                 props: {
                                     src: logoBase64,
@@ -132,7 +134,7 @@ export async function generateMenuImage(title: string, items: { label: string, p
                                         filter: 'drop-shadow(0 4px 10px rgba(197, 163, 99, 0.2))',
                                     }
                                 }
-                            } : null,
+                            },
                             {
                                 type: 'div',
                                 props: {
@@ -150,9 +152,9 @@ export async function generateMenuImage(title: string, items: { label: string, p
                             }
                         ]
                     }
-                },
-                // Title Section
-                {
+                } : null,
+                // Title Section - ONLY if NO template or if we want a subtler subtitle
+                !templateBase64 ? {
                     type: 'div',
                     props: {
                         style: {
@@ -189,7 +191,7 @@ export async function generateMenuImage(title: string, items: { label: string, p
                             }
                         ]
                     }
-                },
+                } : null,
                 // Items List
                 {
                     type: 'div',
@@ -208,13 +210,13 @@ export async function generateMenuImage(title: string, items: { label: string, p
                                         display: 'flex',
                                         justifyContent: 'space-between',
                                         alignItems: 'center',
-                                        fontSize: '20px',
-                                        padding: '16px 22px',
-                                        backgroundColor: 'rgba(0, 0, 0, 0.4)', // Slightly more opaque for custom background contrast
+                                        fontSize: '19px',
+                                        padding: '12px 18px',
+                                        backgroundColor: 'rgba(0, 0, 0, 0.45)', 
                                         border: '1px solid rgba(197, 163, 99, 0.25)',
                                         borderRadius: '12px',
                                         boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                                        backdropFilter: 'blur(10px)', // Glass effect over template
+                                        backdropFilter: 'blur(10px)', 
                                     },
                                     children: [
                                         {
