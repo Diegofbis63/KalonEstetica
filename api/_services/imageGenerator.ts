@@ -7,6 +7,7 @@ import path from 'path';
 
 let fontData: Buffer | null = null;
 let logoData: string | null = null;
+let templateData: string | null = null;
 
 
 // Function to get the font as a buffer
@@ -56,13 +57,25 @@ function getLogoData() {
     return logoData;
 }
 
+// Function to get the background template as a base64 string
+function getTemplateData() {
+    if (templateData) return templateData;
+    const templatePath = path.join(process.cwd(), 'public', 'template_chatbot.png');
+    if (fs.existsSync(templatePath)) {
+        const templateBuffer = fs.readFileSync(templatePath);
+        templateData = `data:image/png;base64,${templateBuffer.toString('base64')}`;
+    }
+    return templateData;
+}
+
 export async function generateMenuImage(title: string, items: { label: string, price?: string | number }[]) {
     const font = await getFontData();
     const logoBase64 = getLogoData();
+    const templateBase64 = getTemplateData();
     if (!font) throw new Error("No font for Satori!");
 
-    const calculatedHeight = 250 + (items.length * 80); // Adjusted from 70 to 80 for slightly more breathing room per item
-    const finalHeight = Math.max(calculatedHeight, 600); // Minimum height to maintain branding layout
+    const calculatedHeight = 250 + (items.length * 80); 
+    const finalHeight = Math.max(calculatedHeight, 600); 
 
     const satoriConfig: any = {
         type: 'div',
@@ -74,16 +87,17 @@ export async function generateMenuImage(title: string, items: { label: string, p
                 flexDirection: 'column',
                 backgroundColor: '#0a0a0a',
                 color: '#fff',
-                padding: '50px',
+                padding: '60px 50px',
                 fontFamily: 'Inter',
-                border: '4px solid #c5a363',
-                backgroundImage: 'radial-gradient(circle at 50% 10%, #1a1a1a 0%, #050505 100%)',
+                backgroundImage: templateBase64 ? `url(${templateBase64})` : 'radial-gradient(circle at 50% 10%, #1a1a1a 0%, #050505 100%)',
+                backgroundSize: '100% 100%',
                 position: 'relative',
                 overflow: 'hidden',
+                borderRadius: '0px',
             },
             children: [
-                // Top accent design
-                {
+                // Top accent design (Omitted if template has its own border)
+                !templateBase64 ? {
                     type: 'div',
                     props: {
                         style: {
@@ -95,7 +109,7 @@ export async function generateMenuImage(title: string, items: { label: string, p
                             background: 'linear-gradient(90deg, transparent, #c5a363, transparent)',
                         }
                     }
-                },
+                } : null,
                 // Header with Logo
                 {
                     type: 'div',
@@ -196,10 +210,11 @@ export async function generateMenuImage(title: string, items: { label: string, p
                                         alignItems: 'center',
                                         fontSize: '20px',
                                         padding: '16px 22px',
-                                        backgroundColor: 'rgba(255, 255, 255, 0.03)',
-                                        border: '1px solid rgba(197, 163, 99, 0.15)',
+                                        backgroundColor: 'rgba(0, 0, 0, 0.4)', // Slightly more opaque for custom background contrast
+                                        border: '1px solid rgba(197, 163, 99, 0.25)',
                                         borderRadius: '12px',
                                         boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                                        backdropFilter: 'blur(10px)', // Glass effect over template
                                     },
                                     children: [
                                         {
