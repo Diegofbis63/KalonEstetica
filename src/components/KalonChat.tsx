@@ -80,6 +80,13 @@ export default function KalonChat() {
       clientPhone: phone || undefined,
       onDelta: (chunk) => upsertAssistant(chunk),
       onStage: (s) => setCurrentStage(s),
+      onMedia: (url) => setMessages(prev => {
+        const last = prev[prev.length-1];
+        if (last?.role === 'assistant') {
+          return prev.map((m, idx) => idx === prev.length-1 ? { ...m, media_url: url } : m);
+        }
+        return [...prev, { role: 'assistant', content: '', media_url: url }];
+      }),
       onDone: () => setIsLoading(false),
       onError: (err) => {
         setError(err);
@@ -169,6 +176,13 @@ export default function KalonChat() {
       mediaUrl: mediaToSend,
       onDelta: (chunk) => upsertAssistant(chunk),
       onStage: (s) => setCurrentStage(s),
+      onMedia: (url) => setMessages(prev => {
+        const last = prev[prev.length-1];
+        if (last?.role === 'assistant') {
+          return prev.map((m, idx) => idx === prev.length-1 ? { ...m, media_url: url } : m);
+        }
+        return [...prev, { role: 'assistant', content: '', media_url: url }];
+      }),
       onDone: () => {
         setIsLoading(false);
         initialized.current = true;

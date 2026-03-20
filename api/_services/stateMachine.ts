@@ -36,6 +36,7 @@ export interface ConvState {
     isBotEnabled: boolean;
     currentFlow?: 'none' | 'booking_funnel';
     errorType?: 'service_not_found' | 'category_not_found' | 'unrecognized_cart_action' | 'ask_what_to_remove' | 'ask_what_to_modify' | 'ask_what_to_add';
+    optionMap?: Record<string, string>; // Mapping numbers (1, 2, 3) to IDs (Category/Service)
 }
 
 export interface Category {
@@ -145,7 +146,8 @@ export async function extractState(
             requestedTime: oldState?.requestedTime || null,
             rejectedDates: Array.isArray(oldState?.rejectedDates) ? [...new Set(oldState.rejectedDates as string[])] : [],
             requestedAllOptions: !!oldState?.requestedAllOptions,
-            isBotEnabled: oldState?.isBotEnabled !== false && defaultIsBotEnabled
+            isBotEnabled: oldState?.isBotEnabled !== false && defaultIsBotEnabled,
+            optionMap: oldState?.optionMap || {}
         };
         return out;
     };
@@ -255,7 +257,22 @@ export async function extractState(
         for (let i = 0; i < messagesToProcess.length; i++) {
             const msg = messagesToProcess[i];
             if (!msg.content && !msg.media_url && !msg.media_data) continue;
-            const normalizedContent = normalizeText(msg.content || "");
+            // Translate number selection from map if exists
+            const rawContent = msg.content || "";
+            const isNumberSelection = /^\d+$/.test(rawContent.trim());
+            let normalizedContent = normalizeText(rawContent);
+
+            if (isNumberSelection && state.optionMap && state.optionMap[rawContent.trim()]) {
+                const targetId = state.optionMap[rawContent.trim()];
+                // Case 1: ID is a category
+                const cat = categories.find(c => c.id === targetId);
+                if (cat) normalizedContent = normalizeText(cat.name);
+                // Case 2: ID is a service
+                const svc = services.find(s => s.id === targetId);
+                if (svc) normalizedContent = normalizeText(svc.title);
+
+                console.log(`[stateMachine] Translated number ${rawContent.trim()} -> ${normalizedContent} (ID: ${targetId})`);
+            }
 
             // Skip bot messages in processing loop (already handled context)
             if (msg.role === 'assistant' || msg.role === 'bot') continue;
@@ -819,79 +836,61 @@ export function generateResponse(
     hasMediaInLastMsg: boolean,
     isTimeAdjusted?: boolean,
     noStaffAvailable?: boolean
-): string {
+): { text: string, visualMenu?: { title: string, items: { label: string, price?: string | number }[] } } {
     console.log(`[stateMachine.ts] Generating response for stage: ${state.stage}. hasMediaInLastMsg: ${hasMediaInLastMsg}`);
     
-    // 1. TERMINAL CONFIRMATION & COURTESY (Top priority)
-    // The 'done' stage is now handled within the switch statement for better organization.
-    // The 'waiting_for_receipt' stage with hasMediaInLastMsg is handled within its case.
-
+    const response = (text: string, visualMenu?: any) => ({ text, visualMenu });
+    
     const welcome = isFromWhatsApp 
         ? (state.clientName ? `¡Hola ${state.clientName.split(' ')[0]}! Qué lindo saludarte de nuevo. ` : "¡Hola! Qué lindo saludarte. ")
         : "";
     
-    const isNew = state.selectedServiceIds.length === 0 && !state.currentCategoryId;
-
     try {
         switch (state.stage) {
             case 'greeting': {
-                // NEW FLOW: Ask for name first before showing categories
                 if (!state.clientName || state.clientName === 'Cliente') {
-                    return `Bienvenida a *KÂLON Estética* ✨\n\nSoy tu asistente virtual y estoy acá para ayudarte a reservar un momento especial para vos.\n\nPara empezar, ¿me decís tu *nombre y apellido*? 😊`;
+                    return response(`Bienvenida a *KÂLON Estética* ✨\n\nSoy tu asistente virtual y estoy acá para ayudarte a reservar un momento especial para vos.\n\nPara empezar, ¿me decís tu *nombre y apellido*? 😊`);
                 }
-                // If name is already known, show categories
-                const categoryEmojis: Record<string, string> = {
-                    'masajes': '💆', 'cejas': '✨', 'depilacion': '🪒', 
-                    'pestanas': '👁️', 'corporal': '🧖', 'facial': '🌸', 'unas': '💅'
-                };
-                const list = categories.map(c => {
-                    const emoji = categoryEmojis[normalizeText(c.name)] || '✨';
-                    return `${emoji}  *${c.name}*`;
-                }).join('\n');
-                return `${welcome}¡Qué lindo tenerte acá, *${state.clientName.split(' ')[0]}*! 💖\n\nContame, ¿qué servicios te interesan hoy?\n\n${list}\n\nEscribí el nombre de la categoría para ver los tratamientos.`;
+                const visualItems = categories.map(c => ({ id: c.id, label: c.name }));
+                state.optionMap = Object.fromEntries(visualItems.map((v, i) => [(i + 1).toString(), v.id]));
+
+                return response(
+                    `${welcome}¡Qué lindo tenerte acá, *${state.clientName.split(' ')[0]}*! 💖\n\nContame, ¿qué servicios te interesan hoy?\n\n_He preparado un menú visual para vos 👇_`,
+                    { title: 'Nuestras Categorías', items: visualItems }
+                );
             }
             case 'parent_selection': {
-                const categoryEmojis: Record<string, string> = {
-                    'masajes': '💆', 'cejas': '✨', 'depilacion': '🪒', 
-                    'pestanas': '👁️', 'corporal': '🧖', 'facial': '🌸', 'unas': '💅'
-                };
-                const list = categories.map(c => {
-                    const emoji = categoryEmojis[normalizeText(c.name)] || '✨';
-                    return `${emoji}  *${c.name}*`;
-                }).join('\n');
+                const visualItems = categories.map(c => ({ id: c.id, label: c.name }));
+                state.optionMap = Object.fromEntries(visualItems.map((v, i) => [(i + 1).toString(), v.id]));
 
-                let intro;
-                if (state.errorType === 'ask_what_to_add') {
-                    intro = "¿De qué categoría te gustaría agregar otro servicio?";
-                } else {
-                    intro = "Decime de qué categoría te gustaría ver los servicios:";
-                }
+                let intro = state.errorType === 'ask_what_to_add' 
+                    ? "¿De qué categoría te gustaría agregar otro servicio?" 
+                    : "Decime de qué categoría te gustaría ver los servicios:";
                 
-                return `${welcome}${intro}\n\n${list}\n\nEscribí el nombre de la categoría para ver los tratamientos.`;
+                return response(
+                    `${welcome}${intro}\n\n_Elegí una opción del menú 👇_`,
+                    { title: 'Elige una Categoría', items: visualItems }
+                );
             }
             case 'sub_service_selection': {
                 const cat = categories.find(c => c.id === state.currentCategoryId);
                 const subServices = services.filter(s => s.category_id === state.currentCategoryId);
-                
-                const list = subServices.map(s => {
-                    const cleanDur = s.duration.toString().replace(/min/gi, '').replace(/minutos/gi, '').trim();
-                    return `✨ *${s.title}*\n    💰 $${formatPrice(s.price)}  ·  ⏱️ ${cleanDur} min`;
-                }).join('\n\n');
-                
-                const selectedCount = state.selectedServiceIds.length;
+                const visualItems = subServices.map(s => ({ id: s.id, label: s.title, price: formatPrice(s.price) }));
+                state.optionMap = Object.fromEntries(visualItems.map((v, i) => [(i + 1).toString(), v.id]));
+
                 let prefix = "";
-                
                 if (state.errorType === 'service_not_found') {
-                    prefix = `Perdón, no encontré ese tratamiento. 😕 ¿Podrías escribir el nombre tal como aparece en la lista?\n\nRevisemos de nuevo los servicios de *${cat?.name}*:\n\n`;
-                } else if (selectedCount > 0) {
-                    prefix = `¡Qué buena elección! Ya te sumé lo anterior. 💖 Ahora contame, de *${cat?.name}*, ¿cuál te gustaría realizarte?\n\n`;
-                } else if (state.pendingCategoryIds.length > 0) {
-                    prefix = `¡Perfecto! Vamos por partes. Primero contame de *${cat?.name}*, ¿cuál te gustaría? (Después vemos las otras categorías que pediste) 😊\n\n`;
+                    prefix = `Perdón, no encontré ese tratamiento. 😕 ¿Podrías elegir el número correcto?\n\n`;
+                } else if (state.selectedServiceIds.length > 0) {
+                    prefix = `¡Qué buena elección! Ya te sumé lo anterior. 💖 Ahora de *${cat?.name}*, ¿cuál te gustaría?\n\n`;
                 } else {
-                    prefix = `¡Excelente! Estos son los tratamientos que tenemos en *${cat?.name}*:\n\n`;
+                    prefix = `¡Excelente! Estos son los tratamientos de *${cat?.name}*:\n\n`;
                 }
                 
-                return `${prefix}${list}\n\n_Escribí el nombre del tratamiento y lo agrego a tu plan_ 💅`;
+                return response(
+                    `${prefix}_Elegí una opción del menú 👇_`,
+                    { title: `Servicios de ${cat?.name || 'Kalon'}`, items: visualItems }
+                );
             }
             case 'cart_review': {
                 const selectedServices = state.selectedServiceIds.map(id => services.find(s => s.id === id)).filter(Boolean) as Service[];
@@ -905,22 +904,22 @@ export function generateResponse(
                 const durText = formatDurationHuman(totalDur);
 
                 if (state.errorType === 'ask_what_to_remove') {
-                    return `📝 *Tu carrito actual:*\n\n${list}\n\n¿Qué servicio puntual de la lista te gustaría eliminar?`;
+                    return response(`📝 *Tu carrito actual:*\n\n${list}\n\n¿Qué servicio puntual de la lista te gustaría eliminar?`);
                 }
                 
                 if (state.errorType === 'ask_what_to_modify') {
-                    return `📝 *Tu carrito actual:*\n\n${list}\n\n¿Qué servicio te gustaría modificar y por cuál?`;
+                    return response(`📝 *Tu carrito actual:*\n\n${list}\n\n¿Qué servicio te gustaría modificar y por cuál?`);
                 }
 
                 if (state.errorType === 'unrecognized_cart_action') {
-                    return `Perdón, no te entendí del todo. 🧐 ¿Te gustaría confirmar este pedido, o preferís agregar / modificar algo?\n\n*Resumen actual:*\n${list}\n\n💰 *Total:* $${formatPrice(totalPrice)}`;
+                    return response(`Perdón, no te entendí del todo. 🧐 ¿Te gustaría confirmar este pedido, o preferís agregar / modificar algo?\n\n*Resumen actual:*\n${list}\n\n💰 *Total:* $${formatPrice(totalPrice)}`);
                 }
 
-                return `¡Excelente! 🎉 Revisemos tu pedido para que esté todo perfecto:\n\n${list}\n\n💰 *Total:* $${formatPrice(totalPrice)}\n⏳ *Duración estimada:* ${durText}\n\n¿Es correcto o te gustaría agregar o modificar algo?`;
+                return response(`¡Excelente! 🎉 Revisemos tu pedido para que esté todo perfecto:\n\n${list}\n\n💰 *Total:* $${formatPrice(totalPrice)}\n⏳ *Duración estimada:* ${durText}\n\n¿Es correcto o te gustaría agregar o modificar algo?`);
             }
             case 'cart_confirmation': {
                  const selectedNames = services.filter(s => state.selectedServiceIds.includes(s.id)).map(s => s.title).join(', ');
-                 return `¡Qué lindo lo que elegiste! 😍 Actualmente tenés en tu carrito: *${selectedNames}*.\n\n¿Te gustaría sumar algo más o ya buscamos un lugarcito en nuestra agenda para vos?`;
+                 return response(`¡Qué lindo lo que elegiste! 😍 Actualmente tenés en tu carrito: *${selectedNames}*.\n\n¿Te gustaría sumar algo más o ya buscamos un lugarcito en nuestra agenda para vos?`);
             }
             case 'name_collection': {
                 const selectedServices = services.filter(s => state.selectedServiceIds.includes(s.id));
@@ -929,17 +928,17 @@ export function generateResponse(
                 const durText = formatDurationHuman(totalDur);
 
                 if (state.pendingDate && state.pendingTime) {
-                    return `¡Perfecto! Ya reservé el lugar para vos. 😍 Para ultimar los detalles y guardarlo definitivamente a tu nombre, ¿cómo es tu nombre completo? 😊`;
+                    return response(`¡Perfecto! Ya reservé el lugar para vos. 😍 Para ultimar los detalles y guardarlo definitivamente a tu nombre, ¿cómo es tu nombre completo? 😊`);
                 }
                 
-                return `¡Perfecto! Todo confirmado. ✨ Entonces, el total es de *$${formatPrice(totalPrice)}* por una sesión de *${durText}*.\n\nPara ir agendándote, ¿cómo es tu nombre completo? 😊`;
+                return response(`¡Perfecto! Todo confirmado. ✨ Entonces, el total es de *$${formatPrice(totalPrice)}* por una sesión de *${durText}*.\n\nPara ir agendándote, ¿cómo es tu nombre completo? 😊`);
             }
             case 'phone_collection': {
                 const greeting = `¡Un gusto conocerte, *${state.clientName}*! 😊 `;
                 if (isFromWhatsApp) {
-                    return `${greeting}¿Te registro con este mismo número de WhatsApp o preferís usar otro para los recordatorios?`;
+                    return response(`${greeting}¿Te registro con este mismo número de WhatsApp o preferís usar otro para los recordatorios?`);
                 }
-                return `${greeting}Por favor, decime tu número de WhatsApp así te mando el comprobante de reserva y no te olvidás de nada. 📱`;
+                return response(`${greeting}Por favor, decime tu número de WhatsApp así te mando el comprobante de reserva y no te olvidás de nada. 📱`);
             }
             case 'availability_proposal': {
                 if (availableSlots.length > 0) {
@@ -958,17 +957,17 @@ export function generateResponse(
                                 : "Como tu sesión es larga y cerramos a las 20hs, te busqué el horario más cercano disponible en el día: ") 
                             : "";
 
-                        return `${greeting}${adjustmentNote}Tengo disponibilidad para tu sesión de *${serviceList}* (Duración: *${durText}*) el día *${formatDateHuman(slot.date)}* a las *${slot.time}hs*. 🗓️\n\n¿Te queda bien este horario o preferís que busquemos otro?`;
+                        return response(`${greeting}${adjustmentNote}Tengo disponibilidad para tu sesión de *${serviceList}* (Duración: *${durText}*) el día *${formatDateHuman(slot.date)}* a las *${slot.time}hs*. 🗓️\n\n¿Te queda bien este horario o preferís que busquemos otro?`);
                     } else {
                         const options = availableSlots.map(s => `📅 *${formatDateHuman(s.date)}* a las *${s.time}hs*`).join('\n');
                         const adjustmentNote2 = isTimeAdjusted ? "No encontré exactamente lo que buscabas, pero aquí tenés las mejores alternativas cercanas:\n\n" : "";
-                        return `¡Claro que sí! 😊 ${adjustmentNote2}Para que elijas con tranquilidad, aquí tenés las opciones más cercanas para tu sesión de *${serviceList}*:\n\n${options}\n\n¿Cuál de estos horarios te resulta más cómodo?`;
+                        return response(`¡Claro que sí! 😊 ${adjustmentNote2}Para que elijas con tranquilidad, aquí tenés las opciones más cercanas para tu sesión de *${serviceList}*:\n\n${options}\n\n¿Cuál de estos horarios te resulta más cómodo?`);
                     }
                 }
                 if (noStaffAvailable) {
-                    return "Uy, por el momento no tenemos turnos disponibles para esta categoría. 🗓️ Estamos trabajando para ampliar el equipo y abrir nuevas vacantes pronto. ¡Disculpas! 😊";
+                    return response("Uy, por el momento no tenemos turnos disponibles para esta categoría. 🗓️ Estamos trabajando para ampliar el equipo y abrir nuevas vacantes pronto. ¡Disculpas! 😊");
                 }
-                return "Uy, parece que tengo la agenda completa para esa duración esta semana. 🗓️ ¿Te gustaría que busquemos un lugar para la semana que viene así te aseguro un espacio para vos? 😊";
+                return response("Uy, parece que tengo la agenda completa para esa duración esta semana. 🗓️ ¿Te gustaría que busquemos un lugar para la semana que viene así te aseguro un espacio para vos? 😊");
             }
             case 'payment_request': {
                 const selectedSvc = state.selectedServiceIds.map(id => services.find(s => s.id === id)).filter(Boolean) as Service[];
@@ -982,17 +981,17 @@ export function generateResponse(
                 const webNote = !isFromWhatsApp ? "\n\nPodés subir el comprobante haciendo clic en el 📎 aquí abajo. ¡Yo lo voy a recibir! 📸" : "";
                 const mainMsg = `${personalGreeting}Tu sesión de *${serviceList}* durará aproximadamente *${durText}* y el valor total es de *$${formatPrice(totalPrice)}*.\n\nPara confirmar definitivamente tu lugar el día *${formatDateHuman(state.pendingDate || '')}* a las *${state.pendingTime || '(por confirmar)'}hs*, necesitamos una seña del 50% (*$${formatPrice(deposit)}*).\n\nTransferí al alias: *KALON.ESTETICA.OK* y enviame el comprobante por aquí. ¡Ya casi estamos! 📸`;
                 
-                return `${mainMsg}${webNote}`;
+                return response(`${mainMsg}${webNote}`);
             }
             case 'waiting_for_receipt': {
                 const note = !isFromWhatsApp ? " Recordá que podés subirlo con el clip de abajo o mandarlo por WhatsApp. 📸" : "";
-                return `Quedo atenta a tu comprobante de transferencia para terminar de confirmar tu turno.${note} ¡Cualquier duda decime! 😊`;
+                return response(`Quedo atenta a tu comprobante de transferencia para terminar de confirmar tu turno.${note} ¡Cualquier duda decime! 😊`);
             }
             default:
-                return "¡Hola! ¿En qué más puedo ayudarte hoy para que te sientas radiante? ✨";
+                return response("¡Hola! ¿En qué más puedo ayudarte hoy para que te sientas radiante? ✨");
         }
     } catch (error) {
         console.error("[stateMachine.ts] Error in generateResponse:", error);
-        return "Hubo un pequeño error procesando tu solicitud, ¿podrías repetirlo? 😊";
+        return response("Hubo un pequeño error procesando tu solicitud, ¿podrías repetirlo? 😊");
     }
 }

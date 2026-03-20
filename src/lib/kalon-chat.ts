@@ -8,6 +8,7 @@ export async function streamKalonChat({
   onDone,
   onError,
   onStage,
+  onMedia,
   clientPhone,
   mediaUrl,
 }: {
@@ -16,6 +17,7 @@ export async function streamKalonChat({
   onDone: () => void;
   onError: (error: string) => void;
   onStage?: (stage: string) => void;
+  onMedia?: (url: string) => void;
   clientPhone?: string;
   mediaUrl?: string;
 }) {
@@ -88,6 +90,7 @@ export async function streamKalonChat({
         try {
           const parsed = JSON.parse(jsonStr);
           if (parsed.stage && onStage) onStage(parsed.stage);
+          if (parsed.media_url && onMedia) onMedia(parsed.media_url);
           const content = parsed.choices?.[0]?.delta?.content as string | undefined;
           if (content) onDelta(content);
         } catch {
@@ -109,6 +112,7 @@ export async function streamKalonChat({
         try {
           const parsed = JSON.parse(jsonStr);
           if (parsed.stage && onStage) onStage(parsed.stage);
+          if (parsed.media_url && onMedia) onMedia(parsed.media_url);
           const content = parsed.choices?.[0]?.delta?.content as string | undefined;
           if (content) onDelta(content);
         } catch {
