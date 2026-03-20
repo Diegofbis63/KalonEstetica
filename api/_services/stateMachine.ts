@@ -855,7 +855,7 @@ export function generateResponse(
                 state.optionMap = Object.fromEntries(visualItems.map((v, i) => [(i + 1).toString(), v.id]));
 
                 return response(
-                    `${welcome}¡Un gusto, *${state.clientName.split(' ')[0]}*! Qué lindo tenerte en *KÂLON* ✨. Para empezar, acá te dejo nuestras especialidades. Podés elegir una o armar tu propio combo: simplemente respondé con el número o los números de lo que buscás (ej: 1, o 1 y 4). 👇`,
+                    `${welcome}¡Un gusto, *${state.clientName.split(' ')[0]}*! Qué lindo tenerte en *KÂLON* ✨.\n\nPara empezar, acá te dejo nuestras especialidades. Podés elegir una o armar tu propio combo: simplemente respondé con el número o los números de lo que buscás (ej: 1, o 1 y 4). 👇`,
                     { title: 'Nuestras Categorías', items: visualItems }
                 );
             }
@@ -863,12 +863,18 @@ export function generateResponse(
                 const visualItems = categories.map(c => ({ id: c.id, label: c.name }));
                 state.optionMap = Object.fromEntries(visualItems.map((v, i) => [(i + 1).toString(), v.id]));
 
-                let intro = state.errorType === 'ask_what_to_add' 
-                    ? "¿De qué categoría te gustaría agregar otro servicio?" 
-                    : "¡Excelente elección! Te preparé una carta visual con nuestras categorías principales. Por favor, respondé con el número de la opción que más te guste (ejemplo: '1'). 👇";
+                let introText = "";
+                if (state.errorType === 'ask_what_to_add') {
+                    introText = "¿De qué categoría te gustaría agregar otro servicio?";
+                } else if (state.clientName && state.clientName !== 'Cliente') {
+                    // Normal transition after name input or return to categories
+                    introText = `¡Un gusto, *${state.clientName.split(' ')[0]}*! Qué lindo tenerte en *KÂLON* ✨.\n\nPara empezar, acá te dejo nuestras especialidades. Podés elegir una o armar tu propio combo: simplemente respondé con el número o los números de lo que buscás (ej: 1, o 1 y 4). 👇`;
+                } else {
+                    introText = "¡Perfecto! Te preparé una carta visual con nuestras categorías principales. Podés elegir los números que más te gusten (ejemplo: '1 y 4'). 👇";
+                }
                 
                 return response(
-                    `${welcome}${intro}`,
+                    `${welcome}${introText}`,
                     { title: 'Nuestras Categorías', items: visualItems }
                 );
             }
