@@ -244,7 +244,7 @@ export default function ServicesManagement() {
       fetch('/api/categories', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reorder })
+        body: JSON.stringify({ reorder, type: 'category' })
       }),
     onMutate: async (newOrder) => {
       await queryClient.cancelQueries({ queryKey: ['categories'] });
@@ -275,7 +275,7 @@ export default function ServicesManagement() {
       fetch('/api/services', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reorder })
+        body: JSON.stringify({ reorder, type: 'service' })
       }),
     onMutate: async (newOrder) => {
       await queryClient.cancelQueries({ queryKey: ['services', activeCategoryId] });
@@ -347,7 +347,11 @@ export default function ServicesManagement() {
 
   // DND Handlers
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
