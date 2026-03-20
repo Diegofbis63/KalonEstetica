@@ -227,7 +227,7 @@ export default function KalonChat() {
 
   return (
     <div
-      className="flex flex-col h-[650px] w-full max-w-3xl mx-auto bg-noir-light/80 backdrop-blur-xl border border-cream/10 rounded-2xl overflow-hidden shadow-2xl"
+      className="flex flex-col h-[720px] w-full max-w-[850px] mx-auto bg-noir-light/80 backdrop-blur-xl border border-cream/10 rounded-2xl overflow-hidden shadow-2xl"
       role="region"
       aria-label="Chat de agendamiento KÂLON"
     >
@@ -346,7 +346,7 @@ export default function KalonChat() {
             className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
           >
             <div
-              className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed font-sans ${m.role === "user"
+            className={`max-w-[95%] px-4 py-3 rounded-2xl text-sm leading-relaxed font-sans ${m.role === "user"
                 ? "bg-gold/15 border border-gold/20 text-cream rounded-tr-sm"
                 : `bg-cream/5 border border-cream/8 text-cream/70 rounded-tl-sm ${m.content.includes('\n*') || m.content.includes('\n-') ? 'chat-bubble-list-container' : ''}`
                 }`}
@@ -365,7 +365,7 @@ export default function KalonChat() {
                     <img 
                       src={m.mediaUrl || m.media_url} 
                       alt="Adjunto" 
-                      className="max-w-full h-auto max-h-64 object-contain mx-auto rounded-md"
+                      className="max-w-full h-auto max-h-[500px] object-contain mx-auto rounded-md"
                       onError={(e) => {
                         (e.target as HTMLImageElement).style.display = 'none';
                       }}

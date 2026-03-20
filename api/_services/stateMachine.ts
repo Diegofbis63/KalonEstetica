@@ -855,7 +855,7 @@ export function generateResponse(
                 state.optionMap = Object.fromEntries(visualItems.map((v, i) => [(i + 1).toString(), v.id]));
 
                 return response(
-                    `${welcome}¡Qué lindo tenerte acá, *${state.clientName.split(' ')[0]}*! 💖\n\nContame, ¿qué servicios te interesan hoy?\n\n_He preparado un menú visual para vos 👇_`,
+                    `${welcome}¡Qué lindo tenerte acá, *${state.clientName.split(' ')[0]}*! 💖\n\n¡Excelente elección! Te preparé una carta visual con nuestras opciones principales. Por favor, respondé con el número de la opción que más te guste (ejemplo: '1'). 👇`,
                     { title: 'Nuestras Categorías', items: visualItems }
                 );
             }
@@ -865,11 +865,11 @@ export function generateResponse(
 
                 let intro = state.errorType === 'ask_what_to_add' 
                     ? "¿De qué categoría te gustaría agregar otro servicio?" 
-                    : "Decime de qué categoría te gustaría ver los servicios:";
+                    : "¡Excelente elección! Te preparé una carta visual con nuestras categorías principales. Por favor, respondé con el número de la opción que más te guste (ejemplo: '1'). 👇";
                 
                 return response(
-                    `${welcome}${intro}\n\n_Elegí una opción del menú 👇_`,
-                    { title: 'Elige una Categoría', items: visualItems }
+                    `${welcome}${intro}`,
+                    { title: 'Nuestras Categorías', items: visualItems }
                 );
             }
             case 'sub_service_selection': {
@@ -884,11 +884,11 @@ export function generateResponse(
                 } else if (state.selectedServiceIds.length > 0) {
                     prefix = `¡Qué buena elección! Ya te sumé lo anterior. 💖 Ahora de *${cat?.name}*, ¿cuál te gustaría?\n\n`;
                 } else {
-                    prefix = `¡Excelente! Estos son los tratamientos de *${cat?.name}*:\n\n`;
+                    prefix = `¡Excelente! Te preparé la lista de tratamientos para *${cat?.name}*. Por favor, respondé con el número de la opción que más te guste (ejemplo: '1'). 👇`;
                 }
                 
                 return response(
-                    `${prefix}_Elegí una opción del menú 👇_`,
+                    `${prefix}`,
                     { title: `Servicios de ${cat?.name || 'Kalon'}`, items: visualItems }
                 );
             }

@@ -69,14 +69,30 @@ export async function generateMenuImage(title: string, items: { label: string, p
                 width: '100%',
                 display: 'flex',
                 flexDirection: 'column',
-                backgroundColor: '#0a0a0a', // Deeper background for premium feel
+                backgroundColor: '#0a0a0a',
                 color: '#fff',
-                padding: '45px',
+                padding: '50px',
                 fontFamily: 'Inter',
-                border: '3px solid #c5a363', // Premium Gold Border
-                backgroundImage: 'radial-gradient(circle at 50% 50%, #1a1a1a 0%, #0a0a0a 100%)',
+                border: '4px solid #c5a363',
+                backgroundImage: 'radial-gradient(circle at 50% 10%, #1a1a1a 0%, #050505 100%)',
+                position: 'relative',
+                overflow: 'hidden',
             },
             children: [
+                // Top accent design
+                {
+                    type: 'div',
+                    props: {
+                        style: {
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            height: '6px',
+                            background: 'linear-gradient(90deg, transparent, #c5a363, transparent)',
+                        }
+                    }
+                },
                 // Header with Logo
                 {
                     type: 'div',
@@ -85,7 +101,7 @@ export async function generateMenuImage(title: string, items: { label: string, p
                             display: 'flex',
                             flexDirection: 'column',
                             alignItems: 'center',
-                            marginBottom: '35px',
+                            marginBottom: '40px',
                         },
                         children: [
                             logoBase64 ? {
@@ -93,23 +109,26 @@ export async function generateMenuImage(title: string, items: { label: string, p
                                 props: {
                                     src: logoBase64,
                                     style: {
-                                        width: '120px',
+                                        width: '160px',
                                         height: 'auto',
                                         marginBottom: '10px',
-                                        opacity: 0.9,
+                                        filter: 'drop-shadow(0 4px 10px rgba(197, 163, 99, 0.2))',
                                     }
                                 }
-                            } : {
-                                type: 'span',
+                            } : null,
+                            {
+                                type: 'div',
                                 props: {
                                     style: {
-                                        fontSize: '32px',
-                                        fontWeight: 'bold',
+                                        fontSize: '12px',
                                         color: '#c5a363',
                                         textTransform: 'uppercase',
-                                        letterSpacing: '2px',
+                                        letterSpacing: '5px',
+                                        fontWeight: 700,
+                                        marginTop: '10px',
+                                        opacity: 0.8,
                                     },
-                                    children: 'KÂLON'
+                                    children: 'ESTÉTICA & BIENESTAR'
                                 }
                             }
                         ]
@@ -123,22 +142,32 @@ export async function generateMenuImage(title: string, items: { label: string, p
                             display: 'flex',
                             flexDirection: 'column',
                             alignItems: 'center',
-                            marginBottom: '35px',
+                            marginBottom: '40px',
                         },
                         children: [
                             {
                                 type: 'div',
                                 props: {
                                     style: {
-                                        fontSize: '26px',
+                                        fontSize: '28px',
                                         color: '#fff',
                                         fontWeight: 600,
-                                        borderBottom: '1px solid rgba(197, 163, 99, 0.4)',
-                                        paddingBottom: '12px',
-                                        minWidth: '200px',
                                         textAlign: 'center',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '1px',
                                     },
                                     children: title
+                                }
+                            },
+                            {
+                                type: 'div',
+                                props: {
+                                    style: {
+                                        width: '60px',
+                                        height: '2px',
+                                        backgroundColor: '#c5a363',
+                                        marginTop: '15px',
+                                    }
                                 }
                             }
                         ]
@@ -151,7 +180,7 @@ export async function generateMenuImage(title: string, items: { label: string, p
                         style: {
                             display: 'flex',
                             flexDirection: 'column',
-                            gap: '14px',
+                            gap: '16px',
                         },
                         children: items.map((item, index) => {
                             const isService = item.price !== undefined;
@@ -163,24 +192,32 @@ export async function generateMenuImage(title: string, items: { label: string, p
                                         justifyContent: 'space-between',
                                         alignItems: 'center',
                                         fontSize: '20px',
-                                        padding: '12px 18px',
-                                        backgroundColor: 'rgba(197, 163, 99, 0.03)',
-                                        border: '1px solid rgba(197, 163, 99, 0.08)',
-                                        borderRadius: '8px',
+                                        padding: '16px 22px',
+                                        backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                                        border: '1px solid rgba(197, 163, 99, 0.15)',
+                                        borderRadius: '12px',
+                                        boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
                                     },
                                     children: [
                                         {
                                             type: 'div',
                                             props: {
-                                                style: { display: 'flex', alignItems: 'center', gap: '12px' },
+                                                style: { display: 'flex', alignItems: 'center', gap: '16px' },
                                                 children: [
                                                     {
-                                                        type: 'span',
+                                                        type: 'div',
                                                         props: {
                                                             style: { 
-                                                                color: '#c5a363', 
+                                                                width: '36px',
+                                                                height: '36px',
+                                                                borderRadius: '18px',
+                                                                backgroundColor: '#c5a363',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                color: '#000',
                                                                 fontWeight: 'bold',
-                                                                width: '24px'
+                                                                fontSize: '18px',
                                                             },
                                                             children: `${index + 1}`
                                                         }
@@ -188,7 +225,10 @@ export async function generateMenuImage(title: string, items: { label: string, p
                                                     {
                                                         type: 'span',
                                                         props: { 
-                                                            style: { color: 'rgba(255,255,255,0.95)' },
+                                                            style: { 
+                                                                color: 'rgba(255,255,255,0.95)',
+                                                                fontWeight: 500,
+                                                            },
                                                             children: item.label 
                                                         }
                                                     }
@@ -201,11 +241,17 @@ export async function generateMenuImage(title: string, items: { label: string, p
                                                 style: { 
                                                     color: '#c5a363', 
                                                     fontWeight: 'bold',
-                                                    fontSize: '18px'
+                                                    fontSize: '22px'
                                                 },
                                                 children: item.price ? `$${item.price}` : 'Consultar'
                                             }
-                                        } : null
+                                        } : {
+                                            type: 'div',
+                                            props: {
+                                                style: { color: 'rgba(197, 163, 99, 0.4)' },
+                                                children: '→'
+                                            }
+                                        }
                                     ]
                                 }
                             };
@@ -218,18 +264,26 @@ export async function generateMenuImage(title: string, items: { label: string, p
                     props: {
                         style: {
                             marginTop: 'auto',
+                            paddingTop: '30px',
                             display: 'flex',
-                            justifyContent: 'center',
-                            opacity: 0.6,
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            gap: '5px',
+                            borderTop: '1px solid rgba(197, 163, 99, 0.1)',
                         },
                         children: [
                             {
                                 type: 'span',
                                 props: {
-                                    style: { fontSize: '15px' },
-                                    children: 'Por favor, respondé con el número de tu opción.'
+                                    style: { 
+                                        fontSize: '16px', 
+                                        color: '#c5a363',
+                                        fontWeight: 600,
+                                        letterSpacing: '1px',
+                                    },
+                                    children: 'Respondé con el número'
                                 }
-                            }
+                            },
                         ]
                     }
                 }
@@ -238,8 +292,8 @@ export async function generateMenuImage(title: string, items: { label: string, p
     };
 
     const svg = await satori(satoriConfig, {
-        width: 500,
-        height: 700,
+        width: 600,
+        height: 850,
         fonts: [
             {
                 name: 'Inter',
