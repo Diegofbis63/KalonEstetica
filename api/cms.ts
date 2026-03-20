@@ -80,13 +80,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             
             // BATCH REORDER SUPPORT
             if (body.reorder && Array.isArray(body.reorder)) {
-                await db.transaction(async (tx) => {
-                    for (const item of body.reorder) {
-                        await tx.update(table)
-                                .set({ sort_order: item.sort_order })
-                                .where(eq(table.id, item.id));
-                    }
-                });
+                if (!table) return res.status(400).json({ error: 'Directiva de tabla no detectada' });
+                
+                // For neon-http, we'll do sequential updates to be safe
+                for (const item of body.reorder) {
+                    await db.update(table)
+                            .set({ sort_order: item.sort_order })
+                            .where(eq(table.id, item.id));
+                }
+                
                 return res.status(200).json({ success: true, message: 'Orden actualizado' });
             }
 
