@@ -11,22 +11,44 @@ import {
   ServicesResponseSchema,
 } from "@/lib/validations";
 
-interface Service {
-  id: string;
-  title: string;
-  description: string;
-  price: string;
-  duration: string;
-  image_url: string;
-}
+const ServiceRow = ({ service, isLast }: { service: any; isLast: boolean }) => {
+  return (
+    <div className={`group/row relative flex items-center justify-between p-6 md:p-8 transition-all duration-300 hover:bg-white/[0.02] ${!isLast ? 'border-b border-white/5' : ''}`}>
+      <div className="flex-grow pr-8">
+        <h3 className="text-lg md:text-xl font-sans font-medium text-white mb-1 group-hover/row:text-gold transition-colors">
+          {service.title}
+        </h3>
+        <div className="flex items-center gap-3 text-[11px] text-cream/40 uppercase tracking-widest font-sans">
+          <span className="flex items-center gap-1.5">
+            <Clock className="w-3 h-3 text-gold/40" /> {service.duration} min
+          </span>
+          {service.description && (
+            <>
+              <span className="w-1 h-1 rounded-full bg-white/10" />
+              <span className="line-clamp-1 italic normal-case tracking-normal">{service.description}</span>
+            </>
+          )}
+        </div>
+      </div>
 
-interface Category {
-  id: string;
-  name: string;
-  description: string;
-  image_url: string;
-  slug: string;
-}
+      <div className="flex items-center gap-6 md:gap-12 shrink-0">
+        <div className="text-right">
+          <div className="text-xl md:text-2xl font-serif font-bold text-gold">
+            ${Number(service.price).toLocaleString('es-AR')}
+          </div>
+          <p className="text-[9px] text-white/20 uppercase tracking-widest mt-0.5">ARS</p>
+        </div>
+
+        <Link 
+          to="/#chat"
+          className="px-6 py-2.5 rounded-full border border-gold/20 text-gold text-[10px] font-sans font-bold uppercase tracking-widest hover:bg-gold hover:text-noir transition-all active:scale-95 whitespace-nowrap"
+        >
+          Reservar
+        </Link>
+      </div>
+    </div>
+  );
+};
 
 const CategoryDetail = () => {
   const { category: slug } = useParams();
@@ -54,7 +76,7 @@ const CategoryDetail = () => {
   }, [slug]);
 
   const category = catData;
-  const services = svcData || [];
+  const services = (svcData || []) as any[];
   const loading = catLoading || svcLoading;
 
   if (!loading && !category) {
@@ -110,72 +132,73 @@ const CategoryDetail = () => {
           </ScrollReveal>
 
           {loading ? (
-             <div className="flex items-center justify-center py-20">
-                <div className="w-10 h-10 border-2 border-gold/20 border-t-gold rounded-full animate-spin" />
+             <div className="max-w-4xl mx-auto space-y-4">
+                {[1,2,3,4,5,6,7,8].map(i => (
+                  <div key={i} className="h-24 w-full bg-white/[0.02] rounded-3xl animate-pulse border border-white/5" />
+                ))}
              </div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
+            <div className="max-w-4xl mx-auto space-y-12 pb-20">
               {services.length > 0 ? (
-                services.map((s, i) => (
-                  <ScrollReveal key={s.id} delay={i * 0.1}>
-                    <div className="group relative p-8 md:p-10 rounded-[2rem] border border-cream/5 bg-noir-light/40 backdrop-blur-md hover:border-gold/30 hover:bg-noir-light/60 transition-all duration-500 shadow-2xl shadow-black/50 overflow-hidden">
-                      {/* Decorative elements */}
-                      <div className="absolute top-0 right-0 w-32 h-32 bg-gold/5 rounded-full -mr-16 -mt-16 blur-3xl group-hover:bg-gold/10 transition-colors" />
-                      
-                      <div className="relative z-10 flex flex-col md:flex-row md:items-start justify-between gap-6 mb-8">
-                        <div className="flex-grow">
-                          <div className="flex items-center gap-2 mb-3">
-                            <Star className="w-3 h-3 text-gold fill-gold opacity-50" />
-                            <span className="text-[9px] uppercase tracking-[0.3em] text-gold/40 font-bold">Recommended</span>
-                          </div>
-                          <h3 className="text-2xl font-serif font-bold text-cream mb-3 group-hover:text-gold transition-colors tracking-wide">
-                            {s.title}
-                          </h3>
-                          <div className="flex items-center gap-4 text-[10px] font-sans text-gold/60 uppercase tracking-widest">
-                            <span className="flex items-center gap-2 bg-noir/40 px-3 py-1.5 rounded-full border border-gold/10">
-                              <Clock className="w-3 h-3" /> {s.duration}
-                            </span>
-                          </div>
+                (() => {
+                  const shouldGroup = services.length > 10;
+                  
+                  if (!shouldGroup) {
+                    return (
+                      <ScrollReveal>
+                        <div className="bg-noir-light/30 backdrop-blur-xl rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
+                          {services.map((s, i) => (
+                            <ServiceRow key={s.id} service={s} isLast={i === services.length - 1} />
+                          ))}
                         </div>
-                        <div className="flex flex-col items-end">
-                          <div className="text-3xl md:text-4xl font-serif font-bold text-gold shrink-0 whitespace-nowrap mb-1">
-                            ${Number(s.price).toLocaleString('es-AR')}
-                          </div>
-                          <span className="text-[9px] text-cream/20 uppercase tracking-widest">ARS Final</span>
-                        </div>
-                      </div>
-                      
-                      <p className="relative z-10 text-[15px] text-cream/45 leading-relaxed mb-10 font-sans max-w-xl">
-                        {s.description}
-                      </p>
+                      </ScrollReveal>
+                    );
+                  }
 
-                      <div className="relative z-10 flex items-center justify-between">
-                         <div className="flex -space-x-2">
-                           {[1,2,3].map(i => (
-                             <div key={i} className="w-8 h-8 rounded-full border-2 border-noir bg-noir-light flex items-center justify-center overflow-hidden">
-                               <img src={`https://i.pravatar.cc/100?img=${i+10}`} alt="User" className="w-full h-full object-cover grayscale opacity-50" />
-                             </div>
-                           ))}
-                           <div className="px-3 flex items-center text-[10px] text-cream/30 font-sans">
-                             +150 turnos este mes
-                           </div>
-                         </div>
-                         <Link 
-                           to="/#chat"
-                           className="group/btn relative px-8 py-4 overflow-hidden rounded-full transition-all duration-300 transform active:scale-95"
-                         >
-                            <div className="absolute inset-0 bg-gold translate-y-[101%] group-hover/btn:translate-y-0 transition-transform duration-300" />
-                            <div className="absolute inset-0 bg-gold/10 group-hover/btn:bg-transparent border border-gold/20 transition-all rounded-full" />
-                            <span className="relative z-10 text-gold group-hover/btn:text-noir text-xs font-sans font-bold uppercase tracking-widest">
-                               Reservar Turno
-                            </span>
-                         </Link>
-                      </div>
-                    </div>
-                  </ScrollReveal>
-                ))
+                  // Advanced Dynamic Grouping
+                  const groupDefinitions = [
+                    { name: "Tratamientos Femeninos", keywords: ['fem', 'mujer', 'dama'] },
+                    { name: "Tratamientos Masculinos", keywords: ['masc', 'hombre', 'caballero'] },
+                    { name: "Promociones & Combos", keywords: ['combo', 'pack', 'promo', 'clásico'] }
+                  ];
+
+                  const categorizedIds = new Set<string>();
+                  const groupedData = groupDefinitions.map(def => {
+                    const items = services.filter(s => {
+                      const match = def.keywords.some(k => s.title.toLowerCase().includes(k));
+                      if (match) categorizedIds.add(s.id);
+                      return match;
+                    });
+                    return { name: def.name, items };
+                  });
+
+                  // Catch-all group
+                  const others = services.filter(s => !categorizedIds.has(s.id));
+                  if (others.length > 0) {
+                    groupedData.push({ name: "Otros Servicios", items: others });
+                  }
+
+                  return groupedData.map((group, idx) => {
+                    if (group.items.length === 0) return null;
+                    return (
+                      <ScrollReveal key={group.name} delay={idx * 0.1}>
+                        <div className="space-y-6">
+                          <div className="flex items-center gap-4 px-4">
+                            <h2 className="text-xl font-serif font-bold text-gold/80 italic tracking-wide">{group.name}</h2>
+                            <div className="h-[1px] flex-grow bg-gradient-to-r from-gold/20 via-gold/5 to-transparent" />
+                          </div>
+                          <div className="bg-noir-light/30 backdrop-blur-xl rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
+                            {group.items.map((s, i) => (
+                              <ServiceRow key={s.id} service={s} isLast={i === group.items.length - 1} />
+                            ))}
+                          </div>
+                        </div>
+                      </ScrollReveal>
+                    );
+                  });
+                })()
               ) : (
-                <div className="col-span-full py-24 text-center bg-noir-light/20 backdrop-blur-md rounded-3xl border border-cream/5">
+                <div className="py-24 text-center bg-noir-light/20 backdrop-blur-md rounded-3xl border border-cream/5">
                    <div className="w-16 h-16 bg-gold/5 rounded-full flex items-center justify-center mx-auto mb-6 border border-gold/10">
                      <Sparkles className="w-8 h-8 text-gold-light opacity-30" />
                    </div>
