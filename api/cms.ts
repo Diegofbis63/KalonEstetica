@@ -38,7 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 
                 list = await db.query.services.findMany({
                     where,
-                    orderBy: [desc(schema.services.sort_order), desc(schema.services.created_at)],
+                    orderBy: [schema.services.sort_order, schema.services.created_at],
                     with: { category: true }
                 });
                 
@@ -57,7 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 const where = itemSlug ? eq(schema.categories.slug, itemSlug) : undefined;
                 list = await db.query.categories.findMany({
                     where,
-                    orderBy: [desc(schema.categories.sort_order), desc(schema.categories.created_at)]
+                    orderBy: [schema.categories.sort_order, schema.categories.created_at]
                 });
             }
             
@@ -76,7 +76,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         if (req.method === 'PUT') {
-            const { id: itemId, ...data } = req.body.data || req.body;
+            const body = req.body.data || req.body;
+            
+            // BATCH REORDER SUPPORT
+            if (body.reorder && Array.isArray(body.reorder)) {
+                await db.transaction(async (tx) => {
+                    for (const item of body.reorder) {
+                        await tx.update(table)
+                                .set({ sort_order: item.sort_order })
+                                .where(eq(table.id, item.id));
+                    }
+                });
+                return res.status(200).json({ success: true, message: 'Orden actualizado' });
+            }
+
+            const { id: itemId, ...data } = body;
             if (!itemId) return res.status(400).json({ error: 'Missing ID' });
             if (isService && data.duration) data.duration_min = parseInt(String(data.duration)) || 0;
             const [updated] = await db.update(table).set(data).where(eq(table.id, itemId as string)).returning();
@@ -84,8 +98,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         if (req.method === 'DELETE') {
-            if (!id) return res.status(400).json({ error: 'Missing ID' });
-            await db.delete(table).where(eq(table.id, id as string));
+            const deleteId = (id || req.body.id || req.query.id) as string;
+            if (!deleteId) return res.status(400).json({ error: 'Missing ID' });
+            await db.delete(table).where(eq(table.id, deleteId));
             return res.status(200).json({ success: true });
         }
 
