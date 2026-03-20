@@ -89,7 +89,7 @@ const ServicesSection = () => {
             }}
             autoplay={{ delay: 3500, disableOnInteraction: false }}
             pagination={{ clickable: true, dynamicBullets: true }}
-            className="pb-16 !overflow-visible"
+            className="pb-16"
             breakpoints={{
               640: { 
                 slidesPerView: 2.2, 
