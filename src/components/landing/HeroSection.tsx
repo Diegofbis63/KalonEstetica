@@ -71,7 +71,7 @@ const HeroSection = () => {
                     whileHover={{ scale: 1.05, boxShadow: "0 0 35px rgba(212, 175, 55, 0.6)" }}
                     whileTap={{ scale: 0.97 }}
                   >
-                    Agendar Cita
+                    Reservar Cita
                     <ChevronRight className="w-5 h-5" />
                   </motion.a>
                   <motion.a

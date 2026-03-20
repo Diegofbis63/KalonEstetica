@@ -39,6 +39,20 @@ const Index = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  // Handle scrolling to hash if navigating from other pages (e.g., from /servicios/masajes to /#chat)
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash === '#chat') {
+      // Small delay to ensure everything is rendered
+      setTimeout(() => {
+        const element = document.getElementById('chat');
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 100);
+    }
+  }, []);
+
   return (
     <div className="min-h-screen bg-noir text-cream relative overflow-hidden">
       {/* Subtle warm ambient */}
@@ -80,7 +94,7 @@ const Index = () => {
                 Resultados
               </a>
               <a href="#chat" className="text-[11px] text-cream/50 hover:text-gold transition-colors font-sans uppercase tracking-[0.15em]">
-                Agendar
+                Reservar
               </a>
             </div>
             <Link
@@ -128,7 +142,7 @@ const Index = () => {
                 className="text-2xl font-serif text-cream hover:text-gold transition-colors border-b border-cream/5 pb-4"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                Agendar
+                Reservar
               </a>
               <Link
                 to="/auth"
