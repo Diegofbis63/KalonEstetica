@@ -37,6 +37,7 @@ export interface ConvState {
     currentFlow?: 'none' | 'booking_funnel';
     errorType?: 'service_not_found' | 'category_not_found' | 'unrecognized_cart_action' | 'ask_what_to_remove' | 'ask_what_to_modify' | 'ask_what_to_add';
     optionMap?: Record<string, string>; // Mapping numbers (1, 2, 3) to IDs (Category/Service)
+    justSelectedCategoryIds?: string[]; // Store for feedback in current turn
 }
 
 export interface Category {
@@ -168,8 +169,9 @@ export async function extractState(
         isBotEnabled: defaultIsBotEnabled
     };
 
-    // Clear previous errors
+    // Clear previous errors and feedback
     delete state.errorType;
+    delete state.justSelectedCategoryIds;
 
     // --- 1. SPECIAL CASE: RE-BOOKING OR START OVER ---
     const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
@@ -262,16 +264,22 @@ export async function extractState(
             const isNumberSelection = /^\d+$/.test(rawContent.trim());
             let normalizedContent = normalizeText(rawContent);
 
-            if (isNumberSelection && state.optionMap && state.optionMap[rawContent.trim()]) {
-                const targetId = state.optionMap[rawContent.trim()];
-                // Case 1: ID is a category
-                const cat = categories.find(c => c.id === targetId);
-                if (cat) normalizedContent = normalizeText(cat.name);
-                // Case 2: ID is a service
-                const svc = services.find(s => s.id === targetId);
-                if (svc) normalizedContent = normalizeText(svc.title);
-
-                console.log(`[stateMachine] Translated number ${rawContent.trim()} -> ${normalizedContent} (ID: ${targetId})`);
+            const numbersInMsg = rawContent.match(/\b\d+\b/g);
+            if (numbersInMsg && state.optionMap) {
+                const foundNames: string[] = [];
+                numbersInMsg.forEach(num => {
+                    const targetId = state.optionMap![num];
+                    if (targetId) {
+                        const cat = categories.find(c => c.id === targetId);
+                        if (cat) foundNames.push(normalizeText(cat.name));
+                        const svc = services.find(s => s.id === targetId);
+                        if (svc) foundNames.push(normalizeText(svc.title));
+                    }
+                });
+                if (foundNames.length > 0) {
+                    normalizedContent = normalizedContent + " " + foundNames.join(" ");
+                    console.log(`[stateMachine] Translated numbers ${numbersInMsg.join(',')} -> ${foundNames.join(', ')}`);
+                }
             }
 
             // Skip bot messages in processing loop (already handled context)
@@ -394,10 +402,11 @@ export async function extractState(
                         }
                     }
                 }
+                
                 // --- Multi-Category Detection ---
                 const isAlreadyBooking = ['name_collection', 'phone_collection', 'availability_proposal', 'payment_request', 'waiting_for_receipt', 'done'].includes(state.stage);
                 const hasExplicitCategoryIntent = intent === 'listar_servicios' || intent === 'saludo';
-                
+
                 const catsInFoundOrder = (!isAlreadyBooking || hasExplicitCategoryIntent) 
                     ? categories
                         .filter(c => normalizedContent.includes(normalizeText(c.name)))
@@ -405,18 +414,26 @@ export async function extractState(
                         .sort((a, b) => a.pos - b.pos)
                     : [];
                 
-                let categoriesRequestedInThisTurn = false;
+                const newlySelectedIds: string[] = [];
                 catsInFoundOrder.forEach(c => {
                     if (!state.pendingCategoryIds.includes(c.id) && state.currentCategoryId !== c.id) {
                         const hasSvcFromCat = state.selectedServiceIds.some(sid => services.find(s => s.id === sid)?.category_id === c.id);
                         if (!hasSvcFromCat) {
                             state.pendingCategoryIds.push(c.id);
-                            categoriesRequestedInThisTurn = true;
+                            newlySelectedIds.push(c.id);
                         }
                     }
                 });
 
-                if (!state.currentCategoryId && state.pendingCategoryIds.length > 0) {
+                if (newlySelectedIds.length > 0) {
+                    state.justSelectedCategoryIds = newlySelectedIds;
+                }
+
+                if (state.stage === 'parent_selection' && state.pendingCategoryIds.length > 0) {
+                    state.currentCategoryId = state.pendingCategoryIds.shift() || null;
+                    state.stage = 'sub_service_selection';
+                    console.log(`[stateMachine] Transition from parent_selection to sub_service_selection for ${state.currentCategoryId}`);
+                } else if (!state.currentCategoryId && state.pendingCategoryIds.length > 0) {
                     state.currentCategoryId = state.pendingCategoryIds.shift() || null;
                     state.stage = 'sub_service_selection';
                 }
@@ -571,10 +588,10 @@ export async function extractState(
                             console.log(`[stateMachine.ts] Turn ${i}: Finished sub_service_selection. Breaking loop to prevent double jump.`);
                             continue; 
                         } else {
-                            // Clear error if navigated elsewhere, else set if ambiguous or not found
                             const isAffirmation = intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("si") || normalizedContent.includes("dale") || normalizedContent.includes("perfecto") || normalizedContent.includes("adelante") || normalizedContent.includes("asi esta bien") || normalizedContent.includes("listo");
                             const isNav = isAffirmation || intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("ningun") || normalizedContent.includes("nada") || normalizedContent.includes("no gracias") || normalizedContent.includes("bastante");
-                            if (!isNav && !categoriesRequestedInThisTurn) {
+                            
+                            if (isNav && (state.stage !== 'sub_service_selection' || !newlySelectedIds.length)) {
                                 state.errorType = 'service_not_found';
                             }
                         }
@@ -839,7 +856,7 @@ export function generateResponse(
 ): { text: string, visualMenu?: { title: string, items: { label: string, price?: string | number }[] } } {
     console.log(`[stateMachine.ts] Generating response for stage: ${state.stage}. hasMediaInLastMsg: ${hasMediaInLastMsg}`);
     
-    const response = (text: string, visualMenu?: any) => ({ text, visualMenu });
+    const response = (text: string, visualMenu?: { title: string, items: { label: string, price?: string | number }[] }) => ({ text, visualMenu });
     
     const welcome = isFromWhatsApp 
         ? (state.clientName ? `¡Hola ${state.clientName.split(' ')[0]}! Qué lindo saludarte de nuevo. ` : "¡Hola! Qué lindo saludarte. ")
@@ -884,18 +901,23 @@ export function generateResponse(
                 const visualItems = subServices.map(s => ({ id: s.id, label: s.title, price: formatPrice(s.price) }));
                 state.optionMap = Object.fromEntries(visualItems.map((v, i) => [(i + 1).toString(), v.id]));
 
-                let prefix = "";
-                if (state.errorType === 'service_not_found') {
-                    prefix = `Perdón, no encontré ese tratamiento. 😕 ¿Podrías elegir el número correcto?\n\n`;
-                } else if (state.selectedServiceIds.length > 0) {
-                    prefix = `¡Qué buena elección! Ya te sumé lo anterior. 💖 Ahora de *${cat?.name}*, ¿cuál te gustaría?\n\n`;
-                } else {
-                    prefix = `¡Excelente elección! Estos son los tratamientos que tenemos para esa especialidad. Respondé con el número o los números de los que quieras agendar. 👇`;
-                }
+                let intro = `AQUÍ tenés los tratamientos de *${cat?.name || 'la categoría'}*. Respondé con el número o los números de los que quieras agendar. 👇`;
                 
+                if (state.justSelectedCategoryIds && state.justSelectedCategoryIds.length > 0) {
+                    const allJustSelected = [state.currentCategoryId!, ...state.pendingCategoryIds];
+                    const names = allJustSelected.map(id => categories.find(c => c.id === id)?.name || id);
+                    const formattedNames = names.length > 1 
+                        ? names.slice(0, -1).join(', ') + ' y ' + names[names.length - 1]
+                        : names[0];
+                    
+                    intro = `¡Buenísimo! Anoté *${formattedNames}*. 📝\n\nEmpecemos por los tratamientos de *${cat?.name || 'esta categoría'}:*`;
+                } else if (state.errorType === 'service_not_found') {
+                    intro = `No encontramos ese tratamiento en *${cat?.name || 'esta especialidad'}*. Por favor, elegí uno de la lista respondiendo con su número. 👇`;
+                }
+
                 return response(
-                    `${prefix}`,
-                    { title: `Servicios de ${cat?.name || 'Kalon'}`, items: visualItems }
+                    intro,
+                    { title: `Servicios: ${cat?.name || 'Kalon'}`, items: visualItems }
                 );
             }
             case 'cart_review': {
