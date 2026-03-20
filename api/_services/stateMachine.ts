@@ -403,43 +403,51 @@ export async function extractState(
                     }
                 }
                 
-                // --- Multi-Category Detection ---
+                // --- Multi-Category Detection (Numbers & Names) ---
                 const isAlreadyBooking = ['name_collection', 'phone_collection', 'availability_proposal', 'payment_request', 'waiting_for_receipt', 'done'].includes(state.stage);
                 const hasExplicitCategoryIntent = intent === 'listar_servicios' || intent === 'saludo';
+                
+                // 1. Extract numbers using Regex (e.g., "1 y 5", "la 1")
+                const numberMatches = normalizedContent.match(/\b\d+\b/g) || [];
+                const idsFromNumbers = numberMatches
+                    .map(num => state.optionMap?.[num])
+                    .filter(Boolean) as string[];
 
-                const catsInFoundOrder = (!isAlreadyBooking || hasExplicitCategoryIntent) 
+                // 2. Extract by Name
+                const idsFromNames = (!isAlreadyBooking || hasExplicitCategoryIntent) 
                     ? categories
                         .filter(c => normalizedContent.includes(normalizeText(c.name)))
                         .map(c => ({ id: c.id, name: c.name, pos: normalizedContent.indexOf(normalizeText(c.name)) }))
                         .sort((a, b) => a.pos - b.pos)
+                        .map(c => c.id)
                     : [];
                 
-                const newlySelectedIds: string[] = [];
-                catsInFoundOrder.forEach(c => {
-                    if (!state.pendingCategoryIds.includes(c.id) && state.currentCategoryId !== c.id) {
-                        const hasSvcFromCat = state.selectedServiceIds.some(sid => services.find(s => s.id === sid)?.category_id === c.id);
+                // 3. Combine and Deduplicate (preserving order)
+                const newlySelectedIds: string[] = Array.from(new Set([...idsFromNumbers, ...idsFromNames]));
+                
+                newlySelectedIds.forEach(id => {
+                    if (!state.pendingCategoryIds.includes(id) && state.currentCategoryId !== id) {
+                        const hasSvcFromCat = state.selectedServiceIds.some(sid => services.find(s => s.id === sid)?.category_id === id);
                         if (!hasSvcFromCat) {
-                            state.pendingCategoryIds.push(c.id);
-                            newlySelectedIds.push(c.id);
+                            state.pendingCategoryIds.push(id);
                         }
                     }
                 });
 
                 if (newlySelectedIds.length > 0) {
                     state.justSelectedCategoryIds = newlySelectedIds;
+                    // IMMEDIATE TRANSITION: If we were in parent_selection or greeting, jump to sub_service_selection
+                    if (['greeting', 'parent_selection'].includes(state.stage) || !state.currentCategoryId) {
+                        if (!state.currentCategoryId && state.pendingCategoryIds.length > 0) {
+                            state.currentCategoryId = state.pendingCategoryIds.shift() || null;
+                            state.stage = 'sub_service_selection';
+                            console.log(`[stateMachine] Transitioning to sub_service_selection for ${state.currentCategoryId}`);
+                        }
+                    }
                 }
 
-                if (state.stage === 'parent_selection' && state.pendingCategoryIds.length > 0) {
-                    state.currentCategoryId = state.pendingCategoryIds.shift() || null;
-                    state.stage = 'sub_service_selection';
-                    console.log(`[stateMachine] Transition from parent_selection to sub_service_selection for ${state.currentCategoryId}`);
-                } else if (!state.currentCategoryId && state.pendingCategoryIds.length > 0) {
-                    state.currentCategoryId = state.pendingCategoryIds.shift() || null;
-                    state.stage = 'sub_service_selection';
-                }
-
-                if (!state.clientName || state.clientName === 'Cliente') {
-                    const isNamePrompt = currentBotAsked === 'name' || state.stage === 'name_collection';
+                if (!state.clientName || state.clientName === 'Cliente' || state.clientName === 'null') {
+                    const isNamePrompt = currentBotAsked === 'name' || state.stage === 'name_collection' || state.stage === 'greeting';
                     const hasIntro = normalizedContent.includes("mi nombre es") || normalizedContent.includes("soy ");
                     // SEAL: If we are in scheduling flow, don't try to capture name unless explicitly asked
                     const isSchedulingIntent = (relDate || timeMatch) && state.stage === 'availability_proposal';
@@ -456,7 +464,7 @@ export async function extractState(
                                 ...confirmWords, ...catWords, ...svcWords
                             ];
                             
-                            const isServiceSelectionTurn = catsInFoundOrder.length > 0;
+                            const isServiceSelectionTurn = newlySelectedIds.length > 0;
                             const isBlockedCommand = notNames.some(word => 
                                 normalizedContent === word || 
                                 normalizedContent.startsWith(word + " ") || 
@@ -469,14 +477,14 @@ export async function extractState(
                                     const lowerN = normalizeText(cleanName);
                                     if (!services.some(s => normalizeText(s.title).includes(lowerN)) && !categories.some(c => normalizeText(c.name).includes(lowerN))) {
                                         state.clientName = cleanName;
-                                        if (state.selectedServiceIds.length === 0 && !state.currentCategoryId) {
+                                        if (state.selectedServiceIds.length === 0 && !state.currentCategoryId && state.pendingCategoryIds.length === 0) {
                                             state.stage = 'parent_selection';
+                                        } else if (newlySelectedIds.length > 0 || state.currentCategoryId) {
+                                            state.stage = 'sub_service_selection';
                                         } else if (!state.clientPhone) {
                                             state.stage = 'phone_collection';
-                                        } else if (state.pendingDate && state.pendingTime) {
-                                            state.stage = 'payment_request';
                                         } else {
-                                            state.stage = 'availability_proposal';
+                                            state.stage = 'cart_review';
                                         }
                                     }
                                 }
@@ -497,8 +505,8 @@ export async function extractState(
                 if (currentBotAsked === 'sub_service' || state.stage === 'sub_service_selection') {
                     // Detect if the user is AGAIN naming categories they already requested
                     // or if they are naming NEW categories.
-                    const isNewCategoryRequest = catsInFoundOrder.some(c => !state.selectedServiceIds.some(sid => services.find(s => s.id === sid)?.category_id === c.id) && state.currentCategoryId !== c.id);
-                    const isOnlyNamingCategories = isNewCategoryRequest && normalizedContent.length < (catsInFoundOrder.reduce((acc, c) => acc + c.name.length, 0) + 12);
+                    const isNewCategoryRequest = newlySelectedIds.some(cid => !state.selectedServiceIds.some(sid => services.find(s => s.id === sid)?.category_id === cid) && state.currentCategoryId !== cid);
+                    const isOnlyNamingCategories = isNewCategoryRequest && normalizedContent.length < (newlySelectedIds.reduce((acc, cid) => acc + (categories.find(cx => cx.id === cid)?.name.length || 0), 0) + 12);
 
                     if (!isOnlyNamingCategories && !isRemoval) {
                         const singularize = (w: string) => (w.endsWith('s') && w.length > 3 ? w.slice(0, -1) : w);
@@ -591,7 +599,7 @@ export async function extractState(
                             const isAffirmation = intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("si") || normalizedContent.includes("dale") || normalizedContent.includes("perfecto") || normalizedContent.includes("adelante") || normalizedContent.includes("asi esta bien") || normalizedContent.includes("listo");
                             const isNav = isAffirmation || intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("ningun") || normalizedContent.includes("nada") || normalizedContent.includes("no gracias") || normalizedContent.includes("bastante");
                             
-                            if (isNav && (state.stage !== 'sub_service_selection' || !newlySelectedIds.length)) {
+                            if (isNav && state.stage !== 'sub_service_selection') {
                                 state.errorType = 'service_not_found';
                             }
                         }
@@ -904,8 +912,7 @@ export function generateResponse(
                 let intro = `AQUÍ tenés los tratamientos de *${cat?.name || 'la categoría'}*. Respondé con el número o los números de los que quieras agendar. 👇`;
                 
                 if (state.justSelectedCategoryIds && state.justSelectedCategoryIds.length > 0) {
-                    const allJustSelected = [state.currentCategoryId!, ...state.pendingCategoryIds];
-                    const names = allJustSelected.map(id => categories.find(c => c.id === id)?.name || id);
+                    const names = state.justSelectedCategoryIds.map(id => categories.find(c => c.id === id)?.name || id);
                     const formattedNames = names.length > 1 
                         ? names.slice(0, -1).join(', ') + ' y ' + names[names.length - 1]
                         : names[0];
