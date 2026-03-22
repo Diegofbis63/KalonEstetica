@@ -1,38 +1,17 @@
-
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { 
-    getCategories, 
-    getActiveServices, 
-    getLeadByPhone, 
     getChatHistory, 
-    updateLeadName, 
     insertChatLog, 
     createLead, 
     findLeadByFlexiblePhone,
-    createAppointment, 
-    markLeadAsConverted,
     updateLeadState,
-    getStaffBySpecialty,
-    getAvailableSlotsFromDB,
-    db,
-    sql as neonSql
+    db
 } from './_services/db.js';
-import * as schema from './_services/schema.js';
-import { eq, or, sql as drizzleSql } from 'drizzle-orm';
-import { 
-    parseDuration, 
-    formatForWhatsApp 
-} from './_services/utils.js';
-import { 
-    extractState, 
-    generateResponse 
-} from './_services/stateMachine.js';
-import { generateMenuImage } from './_services/imageGenerator.js';
-import { getNlpManager } from './_services/nlp.js';
-
-// WARM-UP PATTERN: Pre-load the NLP Manager at module startup
-// This ensures that while Vercel instance is 'hot', the model is ready in memory.
-getNlpManager().then(() => console.log("[chat.ts] NLP Manager warmed up")).catch(e => console.error("[chat.ts] NLP Warmup failed:", e));
+import { sql as drizzleSql } from 'drizzle-orm';
+import { formatForWhatsApp } from './_services/utils.js';
+import { streamText, generateText, CoreMessage } from 'ai';
+import { kalonModel, getSystemPrompt } from './_services/ai.js';
+import { buildTools } from './_services/ai_tools.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log(`[chat.ts] --- Incoming Request: ${req.method} ---`);
@@ -45,7 +24,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'OPTIONS') return res.status(200).end();
 
     const DEFAULT_ORG_ID = 'kalon-estetica';
-
 
     try {
         const body = req.body || {};
@@ -71,25 +49,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         } 
         
         if (!incomingMessage.trim() && incomingMediaUrl) {
-            incomingMessage = ""; 
+            incomingMessage = "He enviado una imagen o comprobante."; 
         }
 
-        // 2. FETCH DATA
-        console.log("[chat.ts] Stage 2: Fetching categories/services");
-        const [categories, services] = await Promise.all([
-            getCategories(),
-            getActiveServices()
-        ]);
-        
-        // 3. IDENTIFY/CREATE LEAD
-        console.log("[chat.ts] Stage 3: Identifying lead");
+        // 2. IDENTIFY/CREATE LEAD
+        console.log("[chat.ts] Stage 2: Identifying lead");
         const identificationId = userId || (body.identificationId || body.userId || (body.clientPhone?.length > 5 ? body.clientPhone : null));
-        let leadId = null;
+        let leadId: string | null = null;
         let isBotEnabled = true;
-        let leadName = null;
-        let leadPhone = null;
-        let savedState = null;
-        let lastUpdate = null;
 
         if (identificationId) {
             const idStr = identificationId.toString();
@@ -107,20 +74,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             if (lead) {
                 leadId = lead.id;
                 isBotEnabled = lead.is_bot_enabled !== false;
-                leadName = lead.client_name;
-                
-                let contact: any = lead.contact_info;
-                if (typeof contact === 'string') {
-                    try {
-                        contact = JSON.parse(contact);
-                    } catch {
-                        contact = {};
-                    }
-                }
-                
-                leadPhone = contact?.phone;
-                savedState = lead.current_state;
-                lastUpdate = lead.updated_at;
             } else {
                 const contactInfo = /^\d+$/.test(idStr) && idStr.length < 15 ? { phone: idStr } : { uuid: idStr };
                 const newLead = await createLead(DEFAULT_ORG_ID, 'Cliente', contactInfo);
@@ -128,90 +81,92 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
         }
 
-        // 4. EXTRACT STATE
-        console.log("[chat.ts] Stage 4: Extracting state");
-        const messages = body.messages || [];
-        if (!messages.length && incomingMessage) messages.push({ role: 'user', content: incomingMessage, media_url: incomingMediaUrl });
-        const state = await extractState(messages, categories, services, isBotEnabled, leadName, leadPhone, savedState, lastUpdate);
-
-        if (leadId) {
-            await updateLeadState(leadId, state);
-            await insertChatLog(leadId, 'user', incomingMessage, incomingMediaUrl, !!userId, body.mediaData);
-        }
-
         if (!isBotEnabled) return res.status(200).json({ status: 'bot_disabled' });
 
-        // 5. AVAILABILITY
-        console.log("[chat.ts] Stage 5: Availability Search");
-        const foundSlots: { date: string, time: string }[] = [];
-        let timeWasAdjusted = false;
-        let eligibleStaff: any[] = [];
-
-        if (state.stage === 'availability_proposal' && state.selectedServiceIds.length > 0) {
-            const currentCatId = services.find(s => state.selectedServiceIds.includes(s.id))?.category_id;
-            if (currentCatId) {
-                eligibleStaff = await getStaffBySpecialty(currentCatId);
-                if (eligibleStaff.length > 0) {
-                    const nowArg = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Argentina/Cordoba"}));
-                    const searchStart = state.requestedDate ? new Date(state.requestedDate + "T00:00:00") : new Date(nowArg);
-                    const searchEnd = new Date(searchStart); searchEnd.setDate(searchEnd.getDate() + 14);
-                    const slots = await getAvailableSlotsFromDB(currentCatId, searchStart, searchEnd);
-                    
-                    for (const s of slots) {
-                        const slotDate = new Date(s.slot_time);
-                        const dateStr = slotDate.toISOString().split('T')[0];
-                        const timeStr = slotDate.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Cordoba', hour12: false });
-                        if (state.rejectedDates.includes(`${dateStr} ${timeStr}`)) continue;
-                        foundSlots.push({ date: dateStr, time: timeStr });
-                        if (foundSlots.length >= 1) break;
-                    }
-                }
-            }
-            if (foundSlots.length > 0) {
-                state.pendingDate = foundSlots[0].date;
-                state.pendingTime = foundSlots[0].time;
-            }
+        // Save USER message to DB immediately
+        if (leadId) {
+            await insertChatLog(leadId, 'user', incomingMessage, incomingMediaUrl, !!userId);
         }
 
-        // 6. GENERATE RESPONSE
-        console.log("[chat.ts] Stage 6: Generating Response");
-        const responseData = generateResponse(state, categories, services, foundSlots, !!userId, !!(incomingMediaUrl || body.mediaData), timeWasAdjusted, (state.stage === 'availability_proposal' && !eligibleStaff.length));
-        const responseText = responseData.text;
-        let mediaData: string | undefined;
-
-        if (responseData.visualMenu) {
-            console.log("[chat.ts] Stage 7: Visual Menu Generation Started");
-            try {
-                const imgBuffer = await generateMenuImage(responseData.visualMenu.title, responseData.visualMenu.items);
-                mediaData = `data:image/png;base64,${imgBuffer.toString('base64')}`;
-                console.log("[chat.ts] Stage 7: Visual Menu Generation Success");
-            } catch (err) {
-                console.error("[chat.ts] Stage 7: Visual Menu Generation Failed:", err);
-            }
-        }
+        // 3. FETCH CONVERSATION HISTORY
+        console.log("[chat.ts] Stage 3: Fetching history & AI generation");
+        let coreMessages: CoreMessage[] = [];
         
         if (leadId) {
-            await updateLeadState(leadId, state);
-            await insertChatLog(leadId, 'bot', responseText, null, !!userId, mediaData);
+            const history = await getChatHistory(leadId, 25); // get last 25 messages context
+            
+            // Format DB logs to CoreMessages compatible with Vercel AI SDK
+            coreMessages = history.map(h => ({
+                role: h.sender === 'user' ? 'user' : 'assistant',
+                content: h.message_text || '' // We omit images in context to save cost right now
+            }));
         }
 
-        // 7. RETURN
-        console.log(`[chat.ts] Finalizing response. Stage: ${state.stage}`);
-        if (userId) {
-            return res.status(200).json({ 
-                responseText: formatForWhatsApp(responseText), 
-                botResponse: formatForWhatsApp(responseText),
-                media_link: mediaData, 
-                mediaData: mediaData, 
-                stage: state.stage 
+        // Push current message
+        coreMessages.push({ role: 'user', content: incomingMessage });
+
+        // 4. CALL VERCEL AI SDK (GEMINI 1.5 FLASH)
+        const systemPrompt = getSystemPrompt();
+        const tools = buildTools(leadId, DEFAULT_ORG_ID);
+
+        if (userId) { 
+            // WHATSAPP (Synchronous Generation)
+            // By awaiting generateText with maxSteps, AI SDK automatically handles the tool call loop!
+            console.log("[chat.ts] Starting Omnicanal GenAI Generate...");
+            const result = await generateText({
+                model: kalonModel,
+                system: systemPrompt,
+                messages: coreMessages,
+                tools,
+                maxSteps: 5
             });
-        } else {
+
+            if (leadId) {
+                await insertChatLog(leadId, 'bot', result.text, null, true);
+            }
+
+            return res.status(200).json({ 
+                responseText: formatForWhatsApp(result.text), 
+                botResponse: formatForWhatsApp(result.text),
+                stage: 'chatting' 
+            });
+
+        } else { 
+            // WEB WIDGET (Streaming Generation)
+            console.log("[chat.ts] Starting Web GenAI Stream...");
+            const result = streamText({
+                model: kalonModel,
+                system: systemPrompt,
+                messages: coreMessages,
+                tools,
+                maxSteps: 5,
+                // Only save when the entire stream and tool execution loop completes
+                onFinish: async ({ text }) => {
+                    if (leadId) {
+                        await insertChatLog(leadId, 'bot', text, null, false);
+                    }
+                }
+            });
+
+            // Set up compatible headers for existing KalonChat frontend
             res.setHeader('Content-Type', 'text/event-stream');
-            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: responseText } }], botResponse: responseText, media_url: mediaData, stage: state.stage })}\n\n`);
-            res.write('data: [DONE]\n\n');
-            res.end();
-            return;
+            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('Connection', 'keep-alive');
+
+            try {
+                for await (const delta of result.textStream) {
+                    // Send chunk mapped exactly to what KalonChat.tsx parser expects
+                    // Expects: data: {"choices":[{"delta":{"content":"chunk"}}], "stage":"..."}\n\n
+                    res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: delta } }], stage: 'chatting' })}\n\n`);
+                }
+            } catch (streamError) {
+                console.error("[chat.ts] Stream error:", streamError);
+            } finally {
+                res.write('data: [DONE]\n\n');
+                res.end();
+            }
         }
+
     } catch (e: any) {
         console.error("[chat.ts] CRITICAL ERROR IN HANDLER:", e);
         if (!res.writableEnded) {
