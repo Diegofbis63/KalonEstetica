@@ -305,6 +305,25 @@ export async function extractState(
                 const nlpResult = msg.content ? await nlp.process('es', msg.content) : null;
                 const intent = nlpResult?.intent;
                 if (isLastMessage) state.lastIntent = intent;
+                
+                // --- CLEAN STATE FOR NEW INPUT ---
+                state.errorType = undefined;
+                state.justSelectedCategoryIds = [];
+
+                // --- 1. OPTION MAP SELF-HEALING ---
+                // Ensure numbers always map to something valid based on current stage list
+                if (state.stage === 'greeting' || state.stage === 'parent_selection') {
+                    categories.forEach((c, i) => {
+                        state.optionMap = state.optionMap || {};
+                        state.optionMap[(i + 1).toString()] = c.id;
+                    });
+                } else if (state.stage === 'sub_service_selection' && state.currentCategoryId) {
+                    const catServices = services.filter(s => s.category_id === state.currentCategoryId);
+                    catServices.forEach((s, i) => {
+                        state.optionMap = state.optionMap || {};
+                        state.optionMap[(i + 1).toString()] = s.id;
+                    });
+                }
 
                 // --- HIGH PRIORITY MEDIA INTERCEPTOR ---
                 // If the user sends an image while we have an active booking session, 
@@ -477,10 +496,10 @@ export async function extractState(
                                     const lowerN = normalizeText(cleanName);
                                     if (!services.some(s => normalizeText(s.title).includes(lowerN)) && !categories.some(c => normalizeText(c.name).includes(lowerN))) {
                                         state.clientName = cleanName;
-                                        if (state.selectedServiceIds.length === 0 && !state.currentCategoryId && state.pendingCategoryIds.length === 0) {
+                                        // ONLY transition to parent_selection if we didn't just pick something!
+                                        const hasSelections = state.selectedServiceIds.length > 0 || state.currentCategoryId || state.pendingCategoryIds.length > 0;
+                                        if (!hasSelections) {
                                             state.stage = 'parent_selection';
-                                        } else if (newlySelectedIds.length > 0 || state.currentCategoryId) {
-                                            state.stage = 'sub_service_selection';
                                         } else if (!state.clientPhone) {
                                             state.stage = 'phone_collection';
                                         } else {
