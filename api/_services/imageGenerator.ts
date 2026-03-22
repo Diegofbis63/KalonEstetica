@@ -74,10 +74,97 @@ export async function generateMenuImage(title: string, items: { label: string, p
     const templateBase64 = getTemplateData();
     if (!font) throw new Error("No font for Satori!");
 
-    // Adjust height and item density based on whether we use a template
-    const itemHeight = templateBase64 ? 65 : 80; // More compact if using template
-    const calculatedHeight = 280 + (items.length * itemHeight); 
+    // Layout Intelligence: 2-column mode for lists > 10 items
+    const useColumns = items.length > 10;
+    const itemsPerCol = Math.ceil(items.length / (useColumns ? 2 : 1));
+    const col1Items = items.slice(0, itemsPerCol);
+    const col2Items = items.slice(itemsPerCol);
+
+    // Dynamic height calculation
+    const itemHeight = templateBase64 ? (useColumns ? 62 : 68) : (useColumns ? 70 : 80);
+    const calculatedHeight = (templateBase64 ? 320 : 280) + (itemsPerCol * itemHeight); 
     const finalHeight = Math.max(calculatedHeight, 600); 
+
+    const renderItem = (item: any, globalIndex: number) => {
+        const isService = item.price !== undefined;
+        return {
+            type: 'div',
+            props: {
+                style: {
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: useColumns ? '10px 12px' : '12px 18px',
+                    backgroundColor: 'rgba(0, 0, 0, 0.45)', 
+                    border: '1px solid rgba(197, 163, 99, 0.25)',
+                    borderRadius: '12px',
+                    boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                },
+                children: [
+                    {
+                        type: 'div',
+                        props: {
+                            style: { display: 'flex', alignItems: 'center', gap: useColumns ? '8px' : '16px' },
+                            children: [
+                                {
+                                    type: 'div',
+                                    props: {
+                                        style: { 
+                                            width: useColumns ? '26px' : '36px',
+                                            height: useColumns ? '26px' : '36px',
+                                            borderRadius: useColumns ? '13px' : '18px',
+                                            backgroundColor: '#c5a363',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            color: '#000',
+                                            fontWeight: 'bold',
+                                            fontSize: useColumns ? '14px' : '18px',
+                                        },
+                                        children: `${globalIndex + 1}`
+                                    }
+                                },
+                                {
+                                    type: 'span',
+                                    props: { 
+                                        style: { 
+                                            color: 'rgba(255,255,255,0.95)',
+                                            fontWeight: 500,
+                                            fontSize: useColumns ? '14px' : '19px',
+                                            maxWidth: useColumns ? '170px' : '360px',
+                                            overflow: 'hidden',
+                                            whiteSpace: 'nowrap',
+                                            textOverflow: 'ellipsis',
+                                        },
+                                        children: item.label 
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    isService ? {
+                        type: 'span',
+                        props: {
+                            style: { 
+                                color: '#c5a363', 
+                                fontWeight: 'bold',
+                                fontSize: useColumns ? '14px' : '22px',
+                                marginLeft: 'auto',
+                                whiteSpace: 'nowrap'
+                            },
+                            children: item.price ? `$${item.price}` : 'Consultar'
+                        }
+                    } : {
+                        type: 'div',
+                        props: {
+                            style: { color: 'rgba(197, 163, 99, 0.4)', marginLeft: 'auto' },
+                            children: '→'
+                        }
+                    }
+                ]
+            }
+        };
+    };
 
     const satoriConfig: any = {
         type: 'div',
@@ -89,244 +176,134 @@ export async function generateMenuImage(title: string, items: { label: string, p
                 flexDirection: 'column',
                 backgroundColor: '#0a0a0a',
                 color: '#fff',
-                padding: templateBase64 ? '200px 55px 50px 55px' : '60px 50px', // Large top padding for template header
+                padding: templateBase64 ? '210px 40px 60px 40px' : '60px 40px',
                 fontFamily: 'Inter',
                 backgroundImage: templateBase64 ? `url(${templateBase64})` : 'radial-gradient(circle at 50% 10%, #1a1a1a 0%, #050505 100%)',
                 backgroundSize: '100% 100%',
                 position: 'relative',
                 overflow: 'hidden',
-                borderRadius: '0px',
             },
             children: [
-                // Top accent design (Omitted if template has its own border)
+                // Stylized Title Section
                 !templateBase64 ? {
                     type: 'div',
                     props: {
-                        style: {
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            height: '6px',
-                            background: 'linear-gradient(90deg, transparent, #c5a363, transparent)',
-                        }
-                    }
-                } : null,
-                // Header with Logo - ONLY if NO template (Template already has it)
-                !templateBase64 && logoBase64 ? {
-                    type: 'div',
-                    props: {
-                        style: {
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            marginBottom: '40px',
+                        style: { 
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            alignItems: 'center', 
+                            marginBottom: useColumns ? '30px' : '40px',
+                            width: '100%' 
                         },
                         children: [
-                            {
-                                type: 'img',
-                                props: {
-                                    src: logoBase64,
-                                    style: {
-                                        width: '160px',
-                                        height: 'auto',
-                                        marginBottom: '10px',
-                                        filter: 'drop-shadow(0 4px 10px rgba(197, 163, 99, 0.2))',
-                                    }
-                                }
+                            { 
+                                type: 'div', 
+                                props: { 
+                                    style: { 
+                                        fontSize: useColumns ? '26px' : '32px', 
+                                        color: '#fff', 
+                                        fontWeight: 700, 
+                                        textAlign: 'center', 
+                                        textTransform: 'uppercase', 
+                                        letterSpacing: '2px',
+                                        textShadow: '0 2px 4px rgba(0,0,0,0.5)'
+                                    }, 
+                                    children: title 
+                                } 
                             },
-                            {
-                                type: 'div',
-                                props: {
-                                    style: {
-                                        fontSize: '12px',
-                                        color: '#c5a363',
-                                        textTransform: 'uppercase',
-                                        letterSpacing: '5px',
-                                        fontWeight: 700,
-                                        marginTop: '10px',
-                                        opacity: 0.8,
-                                    },
-                                    children: 'ESTÉTICA & BIENESTAR'
-                                }
-                            }
+                            { type: 'div', props: { style: { width: '80px', height: '3px', backgroundColor: '#c5a363', marginTop: '12px', borderRadius: '2px' } } }
                         ]
                     }
                 } : null,
-                // Title Section - ONLY if NO template or if we want a subtler subtitle
-                !templateBase64 ? {
-                    type: 'div',
-                    props: {
-                        style: {
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            marginBottom: '40px',
-                        },
-                        children: [
-                            {
-                                type: 'div',
-                                props: {
-                                    style: {
-                                        fontSize: '28px',
-                                        color: '#fff',
-                                        fontWeight: 600,
-                                        textAlign: 'center',
-                                        textTransform: 'uppercase',
-                                        letterSpacing: '1px',
-                                    },
-                                    children: title
-                                }
-                            },
-                            {
-                                type: 'div',
-                                props: {
-                                    style: {
-                                        width: '60px',
-                                        height: '2px',
-                                        backgroundColor: '#c5a363',
-                                        marginTop: '15px',
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                } : null,
-                // Items List
+                
+                // MULTICOLUMN / SINGLE COLUMN RENDERER
                 {
                     type: 'div',
                     props: {
                         style: {
                             display: 'flex',
-                            flexDirection: 'column',
-                            gap: '16px',
+                            flexDirection: useColumns ? 'row' : 'column',
+                            gap: useColumns ? '15px' : '18px',
+                            width: '100%',
+                            justifyContent: 'space-between',
+                            flex: 1
                         },
-                        children: items.map((item, index) => {
-                            const isService = item.price !== undefined;
-                            return {
-                                type: 'div',
-                                props: {
-                                    style: {
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
-                                        fontSize: '19px',
-                                        padding: '12px 18px',
-                                        backgroundColor: 'rgba(0, 0, 0, 0.45)', 
-                                        border: '1px solid rgba(197, 163, 99, 0.25)',
-                                        borderRadius: '12px',
-                                        boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                                        backdropFilter: 'blur(10px)', 
-                                    },
-                                    children: [
-                                        {
-                                            type: 'div',
-                                            props: {
-                                                style: { display: 'flex', alignItems: 'center', gap: '16px' },
-                                                children: [
-                                                    {
-                                                        type: 'div',
-                                                        props: {
-                                                            style: { 
-                                                                width: '36px',
-                                                                height: '36px',
-                                                                borderRadius: '18px',
-                                                                backgroundColor: '#c5a363',
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                justifyContent: 'center',
-                                                                color: '#000',
-                                                                fontWeight: 'bold',
-                                                                fontSize: '18px',
-                                                            },
-                                                            children: `${index + 1}`
-                                                        }
-                                                    },
-                                                    {
-                                                        type: 'span',
-                                                        props: { 
-                                                            style: { 
-                                                                color: 'rgba(255,255,255,0.95)',
-                                                                fontWeight: 500,
-                                                            },
-                                                            children: item.label 
-                                                        }
-                                                    }
-                                                ]
-                                            }
-                                        },
-                                        isService ? {
-                                            type: 'span',
-                                            props: {
-                                                style: { 
-                                                    color: '#c5a363', 
-                                                    fontWeight: 'bold',
-                                                    fontSize: '22px'
-                                                },
-                                                children: item.price ? `$${item.price}` : 'Consultar'
-                                            }
-                                        } : {
-                                            type: 'div',
-                                            props: {
-                                                style: { color: 'rgba(197, 163, 99, 0.4)' },
-                                                children: '→'
-                                            }
-                                        }
-                                    ]
+                        children: useColumns 
+                            ? [
+                                // Column 1
+                                {
+                                    type: 'div',
+                                    props: {
+                                        style: { display: 'flex', flexDirection: 'column', gap: '15px', width: '48.5%' },
+                                        children: col1Items.map((item, index) => renderItem(item, index))
+                                    }
+                                },
+                                // Column 2
+                                {
+                                    type: 'div',
+                                    props: {
+                                        style: { display: 'flex', flexDirection: 'column', gap: '15px', width: '48.5%' },
+                                        children: col2Items.map((item, index) => renderItem(item, itemsPerCol + index))
+                                    }
                                 }
-                            };
-                        })
+                            ]
+                            : items.map((item, index) => renderItem(item, index))
                     }
                 },
-                // Footer
-                {
+                
+                // FOOTER
+                !templateBase64 ? {
                     type: 'div',
                     props: {
                         style: {
                             marginTop: 'auto',
-                            paddingTop: '30px',
+                            paddingTop: '20px',
                             display: 'flex',
                             flexDirection: 'column',
                             alignItems: 'center',
-                            gap: '5px',
-                            borderTop: '1px solid rgba(197, 163, 99, 0.1)',
+                            gap: '8px',
+                            width: '100%',
+                            minHeight: '60px'
                         },
                         children: [
-                            {
-                                type: 'span',
-                                props: {
+                            { 
+                                type: 'span', 
+                                props: { 
                                     style: { 
-                                        fontSize: '16px', 
-                                        color: '#c5a363',
-                                        fontWeight: 600,
-                                        letterSpacing: '1px',
-                                    },
-                                    children: 'Respondé con el número'
-                                }
+                                        fontSize: '17px', 
+                                        color: '#c5a363', 
+                                        fontWeight: 600, 
+                                        letterSpacing: '1.5px',
+                                        textTransform: 'uppercase'
+                                    }, 
+                                    children: 'Respondé con el número' 
+                                } 
                             },
+                            {
+                                type: 'div',
+                                props: {
+                                    style: {
+                                        fontSize: '13px',
+                                        color: 'rgba(197, 163, 99, 0.6)',
+                                        letterSpacing: '0.5px'
+                                    },
+                                    children: 'KÂLON Estética • Salta, Argentina'
+                                }
+                            }
                         ]
                     }
-                }
+                } : null
             ],
         },
     };
 
+
     const svg = await satori(satoriConfig, {
         width: 600,
         height: finalHeight,
-        fonts: [
-            {
-                name: 'Inter',
-                data: font,
-                weight: 600,
-                style: 'normal',
-            },
-        ],
+        fonts: [{ name: 'Inter', data: font, weight: 600, style: 'normal' }],
     });
 
     const resvg = new Resvg(svg);
-    const pngData = resvg.render();
-    const pngBuffer = pngData.asPng();
-    
-    return pngBuffer;
+    return resvg.render().asPng();
 }

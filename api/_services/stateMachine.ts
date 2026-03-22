@@ -458,7 +458,8 @@ export async function extractState(
                     // IMMEDIATE TRANSITION: If we were in parent_selection or greeting, jump to sub_service_selection
                     if (['greeting', 'parent_selection'].includes(state.stage) || !state.currentCategoryId) {
                         if (!state.currentCategoryId && state.pendingCategoryIds.length > 0) {
-                            state.currentCategoryId = state.pendingCategoryIds.shift() || null;
+                            state.currentCategoryId = state.pendingCategoryIds[0];
+                            state.pendingCategoryIds = state.pendingCategoryIds.slice(1);
                             state.stage = 'sub_service_selection';
                             console.log(`[stateMachine] Transitioning to sub_service_selection for ${state.currentCategoryId}`);
                         }
@@ -604,7 +605,8 @@ export async function extractState(
                             
                             // PROGRESSION: If we added services, check if there are more categories or go to review
                             if (state.pendingCategoryIds.length > 0) {
-                                state.currentCategoryId = state.pendingCategoryIds.shift()!;
+                                state.currentCategoryId = state.pendingCategoryIds[0];
+                                state.pendingCategoryIds = state.pendingCategoryIds.slice(1);
                                 state.stage = 'sub_service_selection';
                             } else {
                                 state.stage = 'cart_review';
@@ -619,7 +621,11 @@ export async function extractState(
                             const isNav = isAffirmation || intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("ningun") || normalizedContent.includes("nada") || normalizedContent.includes("no gracias") || normalizedContent.includes("bastante");
                             
                             if (isNav && state.stage !== 'sub_service_selection') {
-                                state.errorType = 'service_not_found';
+                                if (isAffirmation) {
+                                    state.stage = (state.clientName && state.clientName !== 'Cliente') ? 'parent_selection' : 'greeting';
+                                } else {
+                                    state.errorType = 'service_not_found';
+                                }
                             }
                         }
                     }
@@ -720,7 +726,11 @@ export async function extractState(
                             state.stage = 'cart_review';
                             state.errorType = undefined;
                         } else if (isUserConfirming) {
-                            state.stage = 'name_collection';
+                            if (state.clientName && state.clientName !== 'Cliente') {
+                                state.stage = 'availability_proposal'; // Skip name if known
+                            } else {
+                                state.stage = 'name_collection';
+                            }
                             state.errorType = undefined;
                         } else if (intent === 'negacion_o_cerrar_carrito' || normalizedContent.includes("no")) {
                             state.stage = 'parent_selection';
@@ -736,7 +746,11 @@ export async function extractState(
                     if (intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("si") || normalizedContent.includes("mas") || normalizedContent.includes("agregar")) {
                         state.stage = 'parent_selection';
                     } else if (intent === 'negacion_o_cerrar_carrito' || intent === 'pedir_turno_general' || normalizedContent.includes("no") || normalizedContent.includes("turno") || normalizedContent.includes("estamos") || normalizedContent.includes("asi esta bien")) {
-                        state.stage = 'name_collection';
+                        if (state.clientName && state.clientName !== 'Cliente') {
+                            state.stage = 'availability_proposal';
+                        } else {
+                            state.stage = 'name_collection';
+                        }
                     }
                 }
                 
@@ -972,8 +986,8 @@ export function generateResponse(
                 return response(`¡Excelente! 🎉 Revisemos tu pedido para que esté todo perfecto:\n\n${list}\n\n💰 *Total:* $${formatPrice(totalPrice)}\n⏳ *Duración estimada:* ${durText}\n\n¿Es correcto o te gustaría agregar o modificar algo?`);
             }
             case 'cart_confirmation': {
-                 const selectedNames = services.filter(s => state.selectedServiceIds.includes(s.id)).map(s => s.title).join(', ');
-                 return response(`¡Qué lindo lo que elegiste! 😍 Actualmente tenés en tu carrito: *${selectedNames}*.\n\n¿Te gustaría sumar algo más o ya buscamos un lugarcito en nuestra agenda para vos?`);
+                 const selectedNames = state.selectedServiceIds.map(id => services.find(s => s.id === id)?.title).filter(Boolean).join(', ');
+                 return response(`¡Qué lindo lo que elegiste! 😍 Actualmente tenés: *${selectedNames}*.\n\n¿Te gustaría sumar algo más o ya buscamos un lugar en la agenda?`);
             }
             case 'name_collection': {
                 const selectedServices = services.filter(s => state.selectedServiceIds.includes(s.id));
