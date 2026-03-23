@@ -1,20 +1,17 @@
-
 import { db } from './_services/db.js';
 import * as schema from './_services/schema.js';
 import { requireAuth } from '../utils/auth.js';
-import { eq, desc, sql as drizzleSql } from 'drizzle-orm';
+import { eq, desc, asc, sql as drizzleSql } from 'drizzle-orm';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'OPTIONS') return res.status(200).end();
 
-    // Determine target based on query param, body, or URL path
     const { type, id, categoryId, category_id, categorySlug, slug } = req.query;
     const catId = (categoryId || category_id) as string;
     const catSlug = categorySlug as string;
     const itemSlug = slug as string;
     
-    // Robust detection: prioritize URL path which Vercel rewrites or original
     const fullUrl = (req.url || '').toLowerCase();
     const isService = fullUrl.includes('service') || type === 'service' || (req.body && req.body.type === 'service');
     
@@ -25,7 +22,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (req.method === 'GET') {
             let list;
             if (isService) {
-                // Return services filtered by category (ID or Slug) if requested
                 let targetId = catId;
                 if (!targetId && catSlug) {
                     const cat = await db.query.categories.findFirst({
@@ -38,11 +34,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 
                 list = await db.query.services.findMany({
                     where,
-                    orderBy: [schema.services.sort_order, schema.services.created_at],
+                    orderBy: [asc(schema.services.sort_order), desc(schema.services.created_at)],
                     with: { category: true }
                 });
                 
-                // SANITIZE: duration must be an actual Number for Zod
                 list = list.map((s: any) => {
                     const cleanDur = parseInt(String(s.duration_min || s.duration || "0")) || 0;
                     return {
@@ -53,18 +48,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     };
                 });
             } else {
-                // Return categories filtered by slug if requested
                 const where = itemSlug ? eq(schema.categories.slug, itemSlug) : undefined;
                 list = await db.query.categories.findMany({
                     where,
-                    orderBy: [schema.categories.sort_order, schema.categories.created_at]
+                    orderBy: [asc(schema.categories.sort_order), desc(schema.categories.created_at)]
                 });
             }
             
             return res.status(200).json({ [key]: list });
         }
 
-        // AUTH required for mutations
         const user = await requireAuth(req, res);
         if (!user) return;
 
@@ -77,21 +70,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (req.method === 'PUT') {
             const body = req.body.data || req.body;
-            
-            // BATCH REORDER SUPPORT
             if (body.reorder && Array.isArray(body.reorder)) {
-                if (!table) return res.status(400).json({ error: 'Directiva de tabla no detectada' });
-                
-                // For neon-http, we'll do sequential updates to be safe
                 for (const item of body.reorder) {
-                    await db.update(table)
-                            .set({ sort_order: item.sort_order })
-                            .where(eq(table.id, item.id));
+                    await db.update(table).set({ sort_order: item.sort_order }).where(eq(table.id, item.id));
                 }
-                
                 return res.status(200).json({ success: true, message: 'Orden actualizado' });
             }
-
             const { id: itemId, ...data } = body;
             if (!itemId) return res.status(400).json({ error: 'Missing ID' });
             if (isService && data.duration) data.duration_min = parseInt(String(data.duration)) || 0;
@@ -109,6 +93,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(405).json({ error: 'Method not allowed' });
     } catch (e) {
         console.error(`[CMS API ERROR] ${key}:`, e);
-        return res.status(500).json({ error: 'Internal Server Error' });
+        return res.status(500).json({ error: 'Internal Server Error', details: (e as Error).message });
     }
 }

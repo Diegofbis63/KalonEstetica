@@ -123,7 +123,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             leads: [], 
             appointments: [], 
             stats: { totalAppointments: 0, totalUsers: 0, newToday: 0, total_revenue: 0 },
-            error_details: (e as Error).message 
+            error: (e as Error).message,
+            stack: (e as Error).stack,
+            debug_info: {
+                has_db: !!db,
+                has_schema_appointments: !!schema.appointments,
+                has_schema_leads: !!schema.leads
+            }
         });
     }
 }
