@@ -1,7 +1,7 @@
 import { google } from '@ai-sdk/google';
 
-// Utilizaremos Gemini 2.5 Flash (única con cuota y soporte estable en este entorno)
-export const kalonModel = google('gemini-2.5-flash');
+// Utilizaremos Gemini 1.5 Flash por ser el modelo más estable y compatible para streaming en Vercel.
+export const kalonModel = google('gemini-1.5-flash');
 
 /**
  * System Prompt Maestro para la IA.
