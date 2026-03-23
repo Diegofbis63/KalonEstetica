@@ -1,6 +1,9 @@
-import { google } from '@ai-sdk/google';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 
-// Utilizaremos Gemini 1.5 Flash por ser el modelo más estable y compatible para streaming en Vercel.
+const google = createGoogleGenerativeAI({
+    apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
+});
+
 export const kalonModel = google('gemini-1.5-flash');
 
 /**
