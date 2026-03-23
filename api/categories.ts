@@ -7,9 +7,12 @@ export default async function handler(req, res) {
         return res.status(200).end();
     }
     
-    // Retornamos un array vacío o mock para evitar el 404 que rompe el frontend
-    return res.status(200).json([
-        { id: 'facial', name: 'Facial' },
-        { id: 'corporal', name: 'Corporal' }
-    ]);
+    // El frontend espera un objeto con la propiedad "categories"
+    // Según el ZodError: Expected object, received array.
+    return res.status(200).json({
+        categories: [
+            { id: 'facial', name: 'Facial' },
+            { id: 'corporal', name: 'Corporal' }
+        ]
+    });
 }
