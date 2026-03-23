@@ -159,8 +159,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     // Expects: data: {"choices":[{"delta":{"content":"chunk"}}], "stage":"..."}\n\n
                     res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: delta } }], stage: 'chatting' })}\n\n`);
                 }
-            } catch (streamError) {
+            } catch (streamError: any) {
                 console.error("[chat.ts] Stream error:", streamError);
+                // Enviar el error detallado al cliente para depuración rápida de Gemini en Prod
+                res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: `\n\n[Error Interno IA: ${streamError.message}]` } }], stage: 'chatting' })}\n\n`);
             } finally {
                 res.write('data: [DONE]\n\n');
                 res.end();
