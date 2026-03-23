@@ -77,7 +77,7 @@ export default function KalonChat() {
     };
 
     await streamKalonChat({
-      messages: [],
+      messages: [{ role: 'user', content: 'Hola, quiero reservar una cita' }],
       clientPhone: phone || undefined,
       onDelta: (chunk) => upsertAssistant(chunk),
       onStage: (s) => setCurrentStage(s),
