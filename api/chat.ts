@@ -1,14 +1,12 @@
 import { streamText, generateText } from 'ai';
-import { kalonModel, getSystemPrompt } from './_services/ai.js';
+import { getKalonModel, getSystemPrompt } from './_services/ai.js';
 import { buildTools } from './_services/ai_tools.js';
 import { formatForWhatsApp } from './_services/utils.js';
 import { 
     getChatHistory, 
     insertChatLog, 
-    findLeadByFlexiblePhone,
-    db
+    findLeadByFlexiblePhone
 } from './_services/db.js';
-import { sql as drizzleSql } from 'drizzle-orm';
 
 export default async function handler(req, res) {
     // CORS manual para Node.js Serverless
@@ -38,8 +36,12 @@ export default async function handler(req, res) {
             try {
                 const lead = idStr.length >= 8 ? await findLeadByFlexiblePhone(idStr) : null;
                 leadId = lead?.id || null;
-            } catch (e) { console.error("Lead ID Error:", e); }
+            } catch (e) { 
+                console.error("[Chat] DB Error during Identification:", e); 
+            }
         }
+
+        const model = getKalonModel(); // Dynamic init
 
         if (userId) {
             // WHATSAPP (Sync path)
@@ -47,7 +49,7 @@ export default async function handler(req, res) {
             if (incomingMessage) coreMessages.push({ role: 'user', content: incomingMessage });
 
             const result = await generateText({
-                model: kalonModel,
+                model,
                 system: getSystemPrompt(),
                 messages: coreMessages,
                 tools: buildTools(leadId, DEFAULT_ORG_ID),
@@ -61,39 +63,47 @@ export default async function handler(req, res) {
         // WEB WIDGET (Streaming path)
         let coreMessages = (messages || []).map((m: any) => ({ role: m.role, content: m.content }));
         if (incomingMessage) coreMessages.push({ role: 'user', content: incomingMessage });
-        if (coreMessages.length === 0) coreMessages.push({ role: 'user', content: 'Hola' });
+        
+        // Safety: Ensure at least one message for the model
+        if (coreMessages.length === 0) {
+            coreMessages.push({ role: 'user', content: 'Hola' });
+        }
+
+        console.log(`[Stream] Processing ${coreMessages.length} messages. Lead: ${leadId}`);
 
         const result = streamText({
-            model: kalonModel,
+            model,
             system: getSystemPrompt(),
             messages: coreMessages,
             tools: buildTools(leadId, DEFAULT_ORG_ID),
             maxSteps: 5,
         });
 
-        // Configurar cabeceras de streaming para Node.js
+        // SSE Response Headers
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('X-Accel-Buffering', 'no');
         res.setHeader('Connection', 'keep-alive');
 
-        // Handshake
+        // Initial Handshake
         res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: "" } }], stage: 'chatting' })}\n\n`);
 
+        let fullContent = "";
         for await (const text of result.textStream) {
+            fullContent += text;
             res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }], stage: 'chatting' })}\n\n`);
         }
 
+        // Post-processing (non-blocking for the stream)
         if (leadId) {
-            const fullText = await result.text;
-            await insertChatLog(leadId, 'assistant', fullText, null, false);
+            await insertChatLog(leadId, 'assistant', fullContent, null, false).catch(e => console.error("[Log Error]:", e));
         }
 
         res.write('data: [DONE]\n\n');
         res.end();
 
     } catch (e: any) {
-        console.error("[Global Catch]:", e);
+        console.error("[Fatal Chat Error]:", e);
         if (!res.headersSent) {
             res.status(500).json({ error: e.message });
         } else {

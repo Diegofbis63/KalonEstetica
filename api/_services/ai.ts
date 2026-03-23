@@ -1,10 +1,17 @@
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 
-const google = createGoogleGenerativeAI({
-    apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
-});
-
-export const kalonModel = google('gemini-1.5-flash');
+/**
+ * Retorna el modelo configurado dinámicamente con la API Key actual del proceso.
+ * Esto previene capturar una API Key vacía durante el cold start.
+ */
+export const getKalonModel = () => {
+    const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    if (!apiKey) {
+        throw new Error("GOOGLE_GENERATIVE_AI_API_KEY no está configurada en el entorno.");
+    }
+    const google = createGoogleGenerativeAI({ apiKey });
+    return google('gemini-1.5-flash');
+};
 
 /**
  * System Prompt Maestro para la IA.
