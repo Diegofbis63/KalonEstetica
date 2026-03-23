@@ -153,12 +153,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             res.setHeader('Cache-Control', 'no-cache');
             res.setHeader('Connection', 'keep-alive');
 
+            console.log(`[chat.ts] Submitting to AI: ${coreMessages.length} messages. Model: ${kalonModel.modelId}`);
+            console.log(`[chat.ts] API Key Present: ${!!process.env.GOOGLE_GENERATIVE_AI_API_KEY}`);
+
             try {
+                let chunkCount = 0;
                 for await (const text of result.textStream) {
+                    chunkCount++;
                     res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }], stage: 'chatting' })}\n\n`);
                 }
+                console.log(`[chat.ts] Stream finished. Total chunks: ${chunkCount}`);
             } catch (streamError: any) {
-                console.error("[chat.ts] Stream error:", streamError);
+                console.error("[chat.ts] Stream error detected:", streamError);
+                res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: `\n\n[Error de conexión con la IA: ${streamError.message || 'Error desconocido'}]` } }], stage: 'error' })}\n\n`);
             } finally {
                 res.write('data: [DONE]\n\n');
                 res.end();
