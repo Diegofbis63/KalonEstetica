@@ -1,6 +1,6 @@
 async function testProd() {
     console.log("--- INICIANDO PRUEBA DE ORO EN LOCAL ---");
-    const url = 'http://localhost:3000/api/chat';
+    const url = 'https://kalon-estetica.vercel.app/api/chat';
     const payload = {
         message: "¿Cuáles son los servicios de limpieza de cutis que ofrecen? Listalos por favor.",
         messages: [],
