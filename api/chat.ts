@@ -156,6 +156,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             console.log(`[chat.ts] Submitting to AI: ${coreMessages.length} messages. Model: ${kalonModel.modelId}`);
             console.log(`[chat.ts] API Key Present: ${!!process.env.GOOGLE_GENERATIVE_AI_API_KEY}`);
 
+            // Handshake inicial para verificar que el stream llega al cliente
+            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: "Conectando con KÂLON..." } }], stage: 'chatting' })}\n\n`);
+
             try {
                 let chunkCount = 0;
                 for await (const text of result.textStream) {
