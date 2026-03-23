@@ -19,6 +19,12 @@ export default async function handler(req, res) {
         return res.status(200).end();
     }
 
+    // SSE Response Headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.setHeader('Connection', 'keep-alive');
+
     const DEFAULT_ORG_ID = 'kalon-estetica';
 
     try {
@@ -27,7 +33,9 @@ export default async function handler(req, res) {
         let incomingMessage = message || "";
         const userId = userIdRaw ? userIdRaw.split('@')[0].replace(/\D/g, '') : null;
 
-        // IDENTIFY LEAD
+        // DEBUG Handshake
+        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: "DEBUG: Conexión con Servidor Vercel exitosa.\n" } }], stage: 'chatting' })}\n\n`);
+
         const idToIdentify = initId || userIdRaw || (clientPhone?.length > 5 ? clientPhone : null);
         let leadId = null;
 
@@ -37,11 +45,13 @@ export default async function handler(req, res) {
                 const lead = idStr.length >= 8 ? await findLeadByFlexiblePhone(idStr) : null;
                 leadId = lead?.id || null;
             } catch (e) { 
-                console.error("[Chat] DB Error during Identification:", e); 
+                console.error("[Chat] DB Error:", e); 
             }
         }
 
-        const model = getKalonModel(); // Dynamic init
+        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: "DEBUG: Identificación de cliente completada. Cargando IA...\n" } }], stage: 'chatting' })}\n\n`);
+
+        const model = getKalonModel();
 
         if (userId) {
             // WHATSAPP (Sync path)
@@ -52,11 +62,9 @@ export default async function handler(req, res) {
                 model,
                 system: getSystemPrompt(),
                 messages: coreMessages,
-                tools: buildTools(leadId, DEFAULT_ORG_ID),
                 maxSteps: 5
             });
 
-            if (leadId) await insertChatLog(leadId, 'assistant', result.text, null, true);
             return res.status(200).json({ responseText: formatForWhatsApp(result.text) });
         }
 
@@ -64,7 +72,6 @@ export default async function handler(req, res) {
         let coreMessages = (messages || []).map((m: any) => ({ role: m.role, content: m.content }));
         if (incomingMessage) coreMessages.push({ role: 'user', content: incomingMessage });
         
-        // Safety: Ensure at least one message for the model
         if (coreMessages.length === 0) {
             coreMessages.push({ role: 'user', content: 'Hola' });
         }
@@ -75,28 +82,23 @@ export default async function handler(req, res) {
             model,
             system: getSystemPrompt(),
             messages: coreMessages,
-            tools: buildTools(leadId, DEFAULT_ORG_ID),
+            // Aislamiento temporal de tools para verificar respuesta base
             maxSteps: 5,
         });
 
-        // SSE Response Headers
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('X-Accel-Buffering', 'no');
-        res.setHeader('Connection', 'keep-alive');
-
-        // Initial Handshake
-        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: "" } }], stage: 'chatting' })}\n\n`);
+        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: "DEBUG: Gemini inicializado. Esperando primer token...\n" } }], stage: 'chatting' })}\n\n`);
 
         let fullContent = "";
+        let tokenCount = 0;
+
         for await (const text of result.textStream) {
+            tokenCount++;
             fullContent += text;
             res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }], stage: 'chatting' })}\n\n`);
         }
 
-        // Post-processing (non-blocking for the stream)
-        if (leadId) {
-            await insertChatLog(leadId, 'assistant', fullContent, null, false).catch(e => console.error("[Log Error]:", e));
+        if (tokenCount === 0) {
+            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: "DEBUG ERROR: Gemini no retornó tokens de texto. Revisa cuotas o filtros de seguridad.\n" } }], stage: 'chatting' })}\n\n`);
         }
 
         res.write('data: [DONE]\n\n');
@@ -104,11 +106,7 @@ export default async function handler(req, res) {
 
     } catch (e: any) {
         console.error("[Fatal Chat Error]:", e);
-        if (!res.headersSent) {
-            res.status(500).json({ error: e.message });
-        } else {
-            res.write(`data: ${JSON.stringify({ error: e.message, stage: 'error' })}\n\n`);
-            res.end();
-        }
+        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: `\nFATAL ERROR: ${e.message}` } }], stage: 'error' })}\n\n`);
+        res.end();
     }
 }
