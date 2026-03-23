@@ -195,7 +195,11 @@ export async function safeFetch<T>(url: string, schema: z.ZodType<T>, defaultVal
     const res = await fetch(url);
     if (!res.ok) {
       console.warn(`SafeFetch: ${url} returned ${res.status}`);
-      return defaultValue ?? (schema.parse([]) as unknown as T); // Try to parse empty array if possible
+      try {
+          return defaultValue ?? (schema.parse({}) as unknown as T);
+      } catch {
+          return defaultValue ?? (schema.parse([]) as unknown as T);
+      }
     }
     const data = await res.json();
     const result = schema.safeParse(data);

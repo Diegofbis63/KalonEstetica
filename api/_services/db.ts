@@ -15,24 +15,17 @@ export const db = drizzle(sql, { schema });
 
 export async function getCategories(): Promise<Category[]> {
     console.log("[db.ts] Fetching categories...");
-    const results = await db.query.categories.findMany({
-        where: eq(schema.categories.active, true),
-        orderBy: [asc(schema.categories.sort_order)]
-    });
-    return results as Category[];
+    const results = await sql`SELECT id, name, slug, description, image_url, active, sort_order, organization_id FROM categories WHERE active = true ORDER BY sort_order ASC`;
+    return results as unknown as Category[];
 }
 
 export async function getActiveServices(): Promise<Service[]> {
     console.log("[db.ts] Fetching active services...");
-    const results = await db.query.services.findMany({
-        where: eq(schema.services.active, true),
-        orderBy: [asc(schema.services.sort_order)]
-    });
-    // Map to stateMachine.Service type (legacy names)
+    const results = await sql`SELECT id, category_id, title, description, price, duration, duration_min, active, sort_order FROM services WHERE active = true ORDER BY sort_order ASC`;
     return results.map(s => ({
         ...s,
-        category_name: s.category || "Servicio",
-        duration: s.duration || `${s.duration_min} min`
+        category_name: (s as any).category || "Servicio",
+        duration: (s as any).duration || `${(s as any).duration_min} min`
     })) as unknown as Service[];
 }
 
@@ -84,13 +77,11 @@ export async function insertChatLog(leadId: string, role: string, content: strin
 
 export async function createLead(orgId: string, name: string, contactInfo: any) {
     console.log(`[db.ts] Creating a new lead for: ${name}`);
-    const results = await db.insert(schema.leads).values({
-        organization_id: orgId,
-        client_name: name,
-        contact_info: contactInfo,
-        status: 'qualified',
-        intent_score: 70
-    }).returning({ id: schema.leads.id });
+    const results = await sql`
+        INSERT INTO leads (organization_id, client_name, contact_info)
+        VALUES (${orgId}, ${name}, ${contactInfo})
+        RETURNING id
+    `;
     return results[0];
 }
 
@@ -99,47 +90,37 @@ export async function getAppointmentsForDate(dateStr: string) {
     return await sql`SELECT date_time, staff_id FROM appointments WHERE date_time::date = ${dateStr} AND status != 'canceled'`;
 }
 
-export async function getStaffBySpecialty(categoryId: string) {
-    console.log(`[db.ts] Fetching active staff for category: ${categoryId}`);
-    const results = await db.query.staff.findMany({
-        where: eq(schema.staff.is_active, true),
-        with: {
-            specialties: true
-        }
-    });
-    // Filter in JS to ensure they have the specialty
-    return results.filter(s => s.specialties.some(spec => spec.category_id === categoryId));
+export async function getStaffByCategory(categoryId: string) {
+    console.log(`[db.ts] Fetching staff for category: ${categoryId}`);
+    const results = await sql`
+        SELECT s.* FROM staff s
+        JOIN staff_specialties ss ON s.id = ss.staff_id
+        WHERE s.is_active = true AND ss.category_id = ${categoryId}
+    `;
+    return results;
 }
 
 export async function getAllStaff() {
-    return await db.query.staff.findMany({
-        where: eq(schema.staff.is_active, true),
-        with: { specialties: true }
-    });
+    const results = await sql`SELECT * FROM staff WHERE is_active = true`;
+    return results;
 }
 
 export async function createAppointment(leadId: string, orgId: string, dateTime: string, catNames: string, price: number, duration: number, selectedServices: Service[]) {
     console.log(`[db.ts] Creating appointment for lead ${leadId} at ${dateTime}`);
-    return await db.insert(schema.appointments).values({
-        lead_id: leadId,
-        organization_id: orgId,
-        date_time: new Date(dateTime),
-        service_type: catNames,
-        status: 'confirmed',
-        total_price: price.toString(),
-        total_duration: duration,
-        selected_services: selectedServices
-    });
+    return await sql`
+        INSERT INTO appointments (lead_id, organization_id, date_time, service_type, status, total_price, total_duration, selected_services)
+        VALUES (${leadId}, ${orgId}, ${new Date(dateTime).toISOString()}, ${catNames}, 'confirmed', ${price.toString()}, ${duration}, ${JSON.stringify(selectedServices)}::jsonb)
+    `;
 }
 
 export async function markLeadAsConverted(leadId: string) {
     console.log(`[db.ts] Marking lead ${leadId} as converted`);
-    return await db.update(schema.leads).set({ status: 'converted', updated_at: new Date() }).where(eq(schema.leads.id, leadId));
+    return await sql`UPDATE leads SET status = 'converted', updated_at = NOW() WHERE id = ${leadId}`;
 }
 
 export async function updateLeadState(leadId: string, state: ConvState) {
     console.log(`[db.ts] Updating lead ${leadId} current_state`);
-    return await db.update(schema.leads).set({ current_state: state, updated_at: new Date() }).where(eq(schema.leads.id, leadId));
+    return await sql`UPDATE leads SET current_state = ${JSON.stringify(state)}::jsonb, updated_at = NOW() WHERE id = ${leadId}`;
 }
 
 export async function getAvailableSlotsFromDB(categoryId: string, startDate: Date, endDate: Date) {

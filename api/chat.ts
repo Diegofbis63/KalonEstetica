@@ -54,7 +54,7 @@ export default async function handler(req, res) {
 
             const result = await generateText({
                 model,
-                system: getSystemPrompt(),
+                system: getSystemPrompt(leadId),
                 messages: coreMessages,
                 tools: buildTools(leadId, DEFAULT_ORG_ID),
                 maxSteps: 5
@@ -74,7 +74,7 @@ export default async function handler(req, res) {
 
         const result = streamText({
             model,
-            system: getSystemPrompt(),
+            system: getSystemPrompt(leadId),
             messages: coreMessages,
             tools: buildTools(leadId, DEFAULT_ORG_ID),
             maxSteps: 5,

@@ -4,32 +4,68 @@ import {
     getCategories, 
     getActiveServices, 
     getAvailableSlotsFromDB, 
-    getStaffBySpecialty 
+    getStaffBySpecialty,
+    createLead
 } from './db.js';
 
 export const buildTools = (leadId: string | null, orgId: string) => ({
+    registrar_cliente: tool({
+        description: 'Crea un nuevo cliente (lead) en la base de datos. Úsalo en cuanto el cliente proporcione su Nombre y Apellido al inicio.',
+        parameters: z.object({
+            nombre: z.string().describe('Nombre del cliente.'),
+            apellido: z.string().describe('Apellido del cliente.'),
+            telefono: z.string().optional().describe('Teléfono de contacto.'),
+        }),
+        execute: async ({ nombre, apellido, telefono }) => {
+            try {
+                const fullName = `${nombre} ${apellido}`.trim();
+                const contactInfo = { phone: telefono || "Sin teléfono", source: "web_chatbot" };
+                const newLead = await createLead(orgId, fullName, contactInfo);
+                return { 
+                    exito: true, 
+                    id: newLead.id, 
+                    mensaje: `Cliente ${fullName} registrado con éxito en la base de datos.` 
+                };
+            } catch (err: any) {
+                console.error('[AI Tool] Error en registrar_cliente:', err);
+                return { error: 'Error al registrar cliente: ' + err.message };
+            }
+        }
+    }),
+
     consultar_servicios: tool({
         description: 'Devuelve el listado completo de categorías (padres) y servicios específicos (hijos) con sus precios e IDs. Úsalo siempre que necesites saber qué ofrece el centro o para confirmar los IDs de los servicios que quiere el cliente.',
         parameters: z.object({}),
         execute: async () => {
-            const [categories, services] = await Promise.all([
-                getCategories(),
-                getActiveServices()
-            ]);
-            
-            return categories.map(cat => {
-                const catServices = services.filter(s => s.category_id === cat.id);
-                return {
-                    categoria: cat.name,
-                    id_categoria: cat.id,
-                    servicios: catServices.map(s => ({
-                        id: s.id,
-                        titulo: s.title,
-                        precio: s.price,
-                        duracion_minutos: (s as any).duration || (s as any).duration_min
-                    }))
-                };
-            });
+            try {
+                const [categories, services] = await Promise.all([
+                    getCategories(),
+                    getActiveServices()
+                ]);
+                
+                console.log(`[AI Tool] Categories found: ${categories.length}, Services found: ${services.length}`);
+
+                const result = categories.map(cat => {
+                    const catServices = services.filter(s => s.category_id === cat.id);
+                    return {
+                        categoria: cat.name,
+                        id_categoria: cat.id,
+                        servicios: catServices.map(s => {
+                            const rawDuration = (s as any).duration_min || parseInt((s as any).duration) || 30;
+                            return {
+                                id: s.id,
+                                titulo: s.title,
+                                precio: s.price,
+                                duracion_minutos: typeof rawDuration === 'number' ? rawDuration : 30
+                            };
+                        })
+                    };
+                });
+                return result;
+            } catch (err: any) {
+                console.error('[AI Tool] Error in consultar_servicios:', err);
+                throw err; // Re-throw so the SDK sees it as tool-error but we see the log
+            }
         }
     }),
 

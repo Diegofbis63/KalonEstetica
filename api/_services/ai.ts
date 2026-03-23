@@ -1,35 +1,44 @@
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createOpenAI } from '@ai-sdk/openai';
 
 /**
- * Retorna el modelo configurado dinámicamente con la API Key actual del proceso.
- * Se aplica .trim() para evitar errores por caracteres invisibles (espacios/newlines).
+ * Retorna el modelo configurado dinámicamente con la API Key de OpenRouter.
  */
 export const getKalonModel = () => {
-    const rawKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    const rawKey = process.env.OPENROUTER_API_KEY;
     if (!rawKey) {
-        throw new Error("GOOGLE_GENERATIVE_AI_API_KEY no está configurada en el entorno.");
+        throw new Error("OPENROUTER_API_KEY no está configurada.");
     }
     
-    const apiKey = rawKey.trim();
-    const google = createGoogleGenerativeAI({ apiKey });
+    const openrouter = createOpenAI({
+        apiKey: rawKey.trim(),
+        baseURL: 'https://openrouter.ai/api/v1',
+    });
     
-    return google('gemini-2.5-flash');
+    return openrouter('google/gemini-2.0-flash-001');
 };
 
 /**
  * System Prompt Maestro para la IA.
  */
-export const getSystemPrompt = () => `Eres el asistente virtual IA exclusivo de KÂLON Estética, un prestigioso centro de estética y cuidado personal. 
+export function getSystemPrompt(leadId: string | null = null) {
+    const identificationRule = !leadId 
+        ? "Si el cliente NO se ha identificado (no hay leadId), tu PRIORIDAD ABSOLUTA es obtener su Nombre y Apellido ANTES de dar información detallada. Usa la herramienta 'registrar_cliente' en cuanto los tengas."
+        : "El cliente ya está identificado (ID: " + leadId + "). No necesitas pedir sus datos de nuevo a menos que falten.";
 
-Tu rol principal y único es guiar a las clientas durante el proceso de reserva, responder consultas de servicios basándote STRICTAMENTE en el catálogo, y agendar turnos de forma amigable.
+    return `Eres el asistente inteligente de KÂLON Estética Avanzada. 
+${identificationRule}
+Tu objetivo es ayudar a los clientes a conocer los servicios y agendar turnos de manera eficiente.
+Mantén un tono profesional, cálido y elegante. 
+Reglas Críticas:
+1. Usa 'consultar_servicios' para listar categorías y servicios. No inventes precios ni servicios.
+2. Usa 'registrar_cliente' para guardar el nombre/apellido del cliente en cuanto te lo diga.
+3. El proceso de agenda REQUIERE un leadId y la confirmación de los servicios.
+4. Responde SIEMPRE con lenguaje natural después de usar una herramienta para confirmar al usuario lo que hiciste o responder su duda.
+5. Evita alucinaciones y consumo innecesario de tokens. Sé breve y directo.
 
-### 🌟 TONO Y PERSONALIDAD
-- Cálido, empático, moderno y sumamente profesional.
-- Usa el tuteo argentino ("¡Hola, hermosa!", "¡Qué gusto saludarte!", "vos", "tenés", "podés").
-- Sé breve y directo. Evita párrafos largos. Divide con saltos de línea.
-
-### 🛑 REGLAS CRÍTICAS DE NEGOCIO
-1. CERO ALUCINACIONES DE AGENDA: NUNCA prometerás horarios sin ejecutar "consultar_disponibilidad".
-2. JERARQUÍA DE SERVICIOS: Siempre ofrece subcategorías si el cliente pide algo genérico.
-3. DATOS REQUERIDOS: Para agendar necesitas Servicio, Profesional, Fecha/Hora, Nombre y Teléfono.
+### 🛑 REGLAS DE NEGOCIO
+1. CERO ALUCINACIONES: Sin "consultar_disponibilidad", no hay horarios disponibles.
+2. REQUERIMIENTOS: Para agendar necesitas: Servicio, Profesional, Fecha/Hora, Nombre y Teléfono.
+3. TONO: Cálido, tute argentino ("¡Hola hermosa!", "vos", "tenés"). Sé breve y directo.
 `;
+}
