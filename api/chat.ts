@@ -154,15 +154,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             res.setHeader('Connection', 'keep-alive');
 
             try {
-                for await (const part of result.fullStream) {
-                    if (part.type === 'text-delta') {
-                        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: part.textDelta } }], stage: 'chatting' })}\n\n`);
-                    } else if (part.type === 'error') {
-                        console.error("[chat.ts] AI FullStream Error:", part.error);
-                        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: `\n\n[FullStream Error: ${typeof part.error === 'object' ? JSON.stringify(part.error) : part.error}]` } }], stage: 'error' })}\n\n`);
-                    } else {
-                        console.log(`[chat.ts] Stream Part: ${part.type}`);
-                    }
+                for await (const text of result.textStream) {
+                    res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }], stage: 'chatting' })}\n\n`);
                 }
             } catch (streamError: any) {
                 console.error("[chat.ts] Stream error:", streamError);
