@@ -37,16 +37,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             if (!lead_id || !date_time) return res.status(400).json({ error: 'Missing Required Fields' });
 
             const [newAppt] = await db.insert(schema.appointments).values({
-                lead_id,
+                lead_id: lead_id as string,
                 date_time: new Date(date_time),
-                service_type: service_type || 'General',
-                category_id: category_id || null,
+                service_type: (service_type as string) || 'General',
+                category_id: (category_id as string) || null,
                 selected_services: selected_services || [],
-                total_price: Number(total_price) || 0,
+                total_price: String(total_price || 0),
                 total_duration: Number(total_duration) || 0,
                 status: 'pending',
                 created_at: new Date()
-            }).returning();
+            } as any).returning();
 
             return res.status(201).json(newAppt);
         }
@@ -64,7 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             if (date_time) updateObj.date_time = new Date(date_time);
             if (service_type) updateObj.service_type = service_type;
             if (selected_services) updateObj.selected_services = selected_services;
-            if (total_price !== undefined) updateObj.total_price = Number(total_price);
+            if (total_price !== undefined) updateObj.total_price = String(total_price);
             if (total_duration !== undefined) updateObj.total_duration = Number(total_duration);
             if (category_id) updateObj.category_id = category_id;
 

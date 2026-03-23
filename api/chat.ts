@@ -7,7 +7,9 @@ import {
     findLeadByFlexiblePhone
 } from './_services/db.js';
 
-export default async function handler(req, res) {
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
     // CORS manual para Node.js Serverless
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -29,7 +31,7 @@ export default async function handler(req, res) {
     try {
         const { message, messages, userId: userIdRaw, clientPhone, identificationId: initId } = req.body || {};
         
-        let incomingMessage = message || "";
+        const incomingMessage = req.body.message || "";
         const userId = userIdRaw ? userIdRaw.split('@')[0].replace(/\D/g, '') : null;
 
         const idToIdentify = initId || userIdRaw || (clientPhone?.length > 5 ? clientPhone : null);
@@ -49,7 +51,7 @@ export default async function handler(req, res) {
 
         if (userId) {
             // WHATSAPP (Sync path)
-            let coreMessages = (messages || []).map((m: any) => ({ role: m.role, content: m.content }));
+        const coreMessages: any = (messages || []).map((m: any) => ({ role: m.role, content: m.content }));
             if (incomingMessage) coreMessages.push({ role: 'user', content: incomingMessage });
 
             const result = await generateText({
@@ -57,7 +59,6 @@ export default async function handler(req, res) {
                 system: getSystemPrompt(leadId),
                 messages: coreMessages,
                 tools: buildTools(leadId, DEFAULT_ORG_ID),
-                maxSteps: 5
             });
 
             if (leadId) await insertChatLog(leadId, 'assistant', result.text, null, true);
@@ -65,7 +66,7 @@ export default async function handler(req, res) {
         }
 
         // WEB WIDGET (Streaming path)
-        let coreMessages = (messages || []).map((m: any) => ({ role: m.role, content: m.content }));
+        const coreMessages: any = (messages || []).map((m: any) => ({ role: m.role, content: m.content }));
         if (incomingMessage) coreMessages.push({ role: 'user', content: incomingMessage });
         
         if (coreMessages.length === 0) {
@@ -77,7 +78,6 @@ export default async function handler(req, res) {
             system: getSystemPrompt(leadId),
             messages: coreMessages,
             tools: buildTools(leadId, DEFAULT_ORG_ID),
-            maxSteps: 5,
         });
 
         // Initial Handshake (Custom JSON protocol for KalonChat.tsx)
