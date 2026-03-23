@@ -85,6 +85,9 @@ export async function generateMenuImage(title: string, items: { label: string, p
     const calculatedHeight = (templateBase64 ? 320 : 280) + (itemsPerCol * itemHeight); 
     const finalHeight = Math.max(calculatedHeight, 600); 
 
+    const paddingTop = templateBase64 ? Math.round(finalHeight * 0.35) : 60;
+    const paddingBottom = templateBase64 ? Math.round(finalHeight * 0.10) : 40;
+
     const renderItem = (item: any, globalIndex: number) => {
         const isService = item.price !== undefined;
         return {
@@ -176,7 +179,7 @@ export async function generateMenuImage(title: string, items: { label: string, p
                 flexDirection: 'column',
                 backgroundColor: '#0a0a0a',
                 color: '#fff',
-                padding: templateBase64 ? '210px 40px 60px 40px' : '60px 40px',
+                padding: `${paddingTop}px 40px ${paddingBottom}px 40px`,
                 fontFamily: 'Inter',
                 backgroundImage: templateBase64 ? `url(${templateBase64})` : 'radial-gradient(circle at 50% 10%, #1a1a1a 0%, #050505 100%)',
                 backgroundSize: '100% 100%',

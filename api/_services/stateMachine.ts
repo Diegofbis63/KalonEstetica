@@ -442,7 +442,10 @@ export async function extractState(
                     : [];
                 
                 // 3. Combine and Deduplicate (preserving order)
-                const newlySelectedIds: string[] = Array.from(new Set([...idsFromNumbers, ...idsFromNames]));
+                let newlySelectedIds: string[] = Array.from(new Set([...idsFromNumbers, ...idsFromNames]));
+                
+                // Keep only valid category IDs (prevents Service UUIDs from leaking into category logic)
+                newlySelectedIds = newlySelectedIds.filter(id => categories.some(cat => cat.id === id));
                 
                 newlySelectedIds.forEach(id => {
                     if (!state.pendingCategoryIds.includes(id) && state.currentCategoryId !== id) {
@@ -467,22 +470,21 @@ export async function extractState(
                 }
 
                 if (!state.clientName || state.clientName === 'Cliente' || state.clientName === 'null') {
-                    const isNamePrompt = currentBotAsked === 'name' || state.stage === 'name_collection' || state.stage === 'greeting';
-                    const hasIntro = normalizedContent.includes("mi nombre es") || normalizedContent.includes("soy ");
-                    // SEAL: If we are in scheduling flow, don't try to capture name unless explicitly asked
-                    const isSchedulingIntent = (relDate || timeMatch) && state.stage === 'availability_proposal';
-                    
-                    if ((isNamePrompt || hasIntro) && !isSchedulingIntent) {
-                        if (msg.content && msg.content.length > 2 && msg.content.length < 50) {
-                            const catWords = categories.map(c => normalizeText(c.name)).flatMap(n => n.split(/\s+/));
-                            const svcWords = services.map(s => normalizeText(s.title)).flatMap(n => n.split(/\s+/));
-                            
-                            const confirmWords = ['si', 'correcto', 'perfecto', 'bien', 'dale', 'ok', 'listo', 'avanzar', 'genial', 'obvio', 'confirmo', 'avancemos', 'adelante', 'estamos', 'esta bien', 'asi esta bien', 'confirmar', 'buenisimo', 'excelente', 'de 10', 'de diez', 'bueno', 'bueno dale', 'es correcto'];
-                            const notNames = [
-                                "si", "no", "hola", "chau", "nada", "turno", "bien", "dale", "otro", "adelante", "perfecto", "listo", "agregar", "sacar", "quitar", "sumar", "mas", "menos",
-                                "extensiones", "pestañas", "uñas", "cejas", "lifting", "facial", "masaje", "depilacion", "corporal", "manicuria", "pedicuria", "esmalte",
-                                ...confirmWords, ...catWords, ...svcWords
-                            ];
+                    if (msg.content && msg.content.length > 2 && msg.content.length < 50) {
+                        const catWords = categories.map(c => normalizeText(c.name)).flatMap(n => n.split(/\s+/));
+                        const svcWords = services.map(s => normalizeText(s.title)).flatMap(n => n.split(/\s+/));
+                        
+                        const confirmWords = ['si', 'correcto', 'perfecto', 'bien', 'dale', 'ok', 'listo', 'avanzar', 'genial', 'obvio', 'confirmo', 'avancemos', 'adelante', 'estamos', 'esta bien', 'asi esta bien', 'confirmar', 'buenisimo', 'excelente', 'de 10', 'de diez', 'bueno', 'bueno dale', 'es correcto'];
+                        const notNames = [
+                            "si", "no", "hola", "chau", "nada", "turno", "bien", "dale", "otro", "adelante", "perfecto", "listo", "agregar", "sacar", "quitar", "sumar", "mas", "menos",
+                            "extensiones", "pestañas", "uñas", "cejas", "lifting", "facial", "masaje", "depilacion", "corporal", "manicuria", "pedicuria", "esmalte",
+                            ...confirmWords, ...catWords, ...svcWords
+                        ];
+
+                        const isNamePrompt = currentBotAsked === 'name' || state.stage === 'name_collection' || state.stage === 'greeting';
+                            const hasIntro = normalizedContent.includes("mi nombre es") || normalizedContent.includes("soy ") || normalizedContent.includes("me llamo");
+                            // SEAL: If we are in scheduling flow, don't try to capture name unless explicitly asked
+                            const isSchedulingIntent = (relDate || timeMatch) && state.stage === 'availability_proposal';
                             
                             const isServiceSelectionTurn = newlySelectedIds.length > 0;
                             const isBlockedCommand = notNames.some(word => 
@@ -491,29 +493,36 @@ export async function extractState(
                                 (word.length > 3 && normalizedContent.includes(word))
                             );
 
-                            if ((!isBlockedCommand && !isServiceSelectionTurn) || hasIntro) {
-                                const cleanName = extractName(msg.content);
-                                if (cleanName && cleanName.length > 2 && !notNames.includes(normalizeText(cleanName))) {
-                                    const lowerN = normalizeText(cleanName);
-                                    if (!services.some(s => normalizeText(s.title).includes(lowerN)) && !categories.some(c => normalizeText(c.name).includes(lowerN))) {
-                                        state.clientName = cleanName;
-                                        // ONLY transition to parent_selection if we didn't just pick something!
-                                        const hasSelections = state.selectedServiceIds.length > 0 || state.currentCategoryId || state.pendingCategoryIds.length > 0;
-                                        if (!hasSelections) {
-                                            state.stage = 'parent_selection';
-                                        } else if (!state.clientPhone) {
-                                            state.stage = 'phone_collection';
-                                        } else {
-                                            state.stage = 'cart_review';
+                            // Strict override: if bot directly asked for the name, and the user gave a short text without numbers
+                            const isDirectNameAnswer = isNamePrompt && !isServiceSelectionTurn && !/[\d]/.test(normalizedContent) && normalizedContent.split(/\s+/).length <= 4;
+
+                            if ((!isBlockedCommand && !isServiceSelectionTurn) || hasIntro || isDirectNameAnswer) {
+                                if (!isSchedulingIntent) {
+                                    const cleanName = extractName(msg.content);
+                                    if (cleanName && cleanName.length > 2) {
+                                        const lowerN = normalizeText(cleanName);
+                                        // Unless it's a direct exact match of a category/service, we take it as name.
+                                        const isExactServiceCatMatch = services.some(s => normalizeText(s.title) === lowerN) || categories.some(c => normalizeText(c.name) === lowerN);
+                                        
+                                        if (isDirectNameAnswer || (!notNames.includes(lowerN) && !isExactServiceCatMatch)) {
+                                            state.clientName = cleanName;
+                                            // ONLY transition to parent_selection if we didn't just pick something!
+                                            const hasSelections = state.selectedServiceIds.length > 0 || state.currentCategoryId || state.pendingCategoryIds.length > 0;
+                                            if (!hasSelections) {
+                                                state.stage = 'parent_selection';
+                                            } else if (!state.clientPhone) {
+                                                state.stage = 'phone_collection';
+                                            } else {
+                                                state.stage = 'cart_review';
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
                     }
-                }
 
-                if (currentBotAsked === 'phone' && (!state.clientPhone || state.clientPhone === 'Cliente')) {
+                if ((currentBotAsked === 'phone' || state.stage === 'phone_collection') && (!state.clientPhone || state.clientPhone === 'Cliente' || state.clientPhone === 'null')) {
                     if (intent === 'afirmacion_o_agregar_carrito' || normalizedContent.includes("este mismo") || normalizedContent.includes("si")) {
                         state.clientPhone = 'CONFIRMED_CURRENT';
                     } else {

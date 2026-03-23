@@ -23,13 +23,20 @@ export async function streamKalonChat({
 }) {
   try {
     const lastMsg = messages[messages.length - 1];
+    
+    // Create a copy of messages without large base64 media URLs to avoid 413 Payload Too Large
+    const strippedMessages = messages.map(m => ({
+      role: m.role,
+      content: m.content
+    }));
+
     const body: {
-      messages: Msg[];
+      messages: { role: string; content: string }[];
       clientPhone?: string;
       mediaUrl?: string;
       message?: string;
     } = { 
-      messages, 
+      messages: strippedMessages, 
       clientPhone, 
       mediaUrl: mediaUrl || lastMsg?.media_url 
     };
