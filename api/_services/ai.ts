@@ -13,7 +13,7 @@ export const getKalonModel = () => {
     const apiKey = rawKey.trim();
     const google = createGoogleGenerativeAI({ apiKey });
     
-    return google('gemini-1.5-flash');
+    return google('gemini-2.5-flash');
 };
 
 /**
