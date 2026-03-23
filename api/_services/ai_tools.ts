@@ -4,7 +4,7 @@ import {
     getCategories, 
     getActiveServices, 
     getAvailableSlotsFromDB, 
-    getStaffBySpecialty,
+    getStaffByCategory,
     createLead
 } from './db.js';
 
@@ -76,7 +76,7 @@ export const buildTools = (leadId: string | null, orgId: string) => ({
             fecha: z.string().describe('La fecha a consultar en formato YYYY-MM-DD. Si el cliente dice "mañana", debes calcular la fecha exacta basándote en que hoy es la fecha actual. ¡Obligatorio!'),
         }),
         execute: async ({ categoriaId, fecha }: { categoriaId: string; fecha: string; }) => {
-            const staff = await getStaffBySpecialty(categoriaId);
+            const staff = await getStaffByCategory(categoriaId);
             if (staff.length === 0) {
                 return { error: 'No hay profesionales disponibles que realicen este tipo de servicio.' };
             }
