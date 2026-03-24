@@ -40,17 +40,42 @@ export const buildTools = (leadId: string | null, orgId: string, initId?: string
         }
     }),
 
-    consultar_servicios: tool({
-        description: 'Devuelve el listado completo de categorías (padres) y servicios específicos (hijos) con sus precios e IDs. Úsalo siempre que necesites saber qué ofrece el centro o para confirmar los IDs de los servicios que quiere el cliente.',
+    listar_categorias_principales: tool({
+        description: 'Obtiene el listado de las categorías principales de servicios de KÂLON (ej: Depilación, Masajes, Facial). Úsalo al inicio para mostrar el menú de especialidades al cliente.',
         parameters: z.object({}) as any,
         execute: async () => {
+            try {
+                const categories = await getCategories();
+                return categories.map(c => ({
+                    id: c.id,
+                    nombre: c.name,
+                    slug: c.slug
+                })) as any;
+            } catch (err: any) {
+                console.error('[AI Tool] Error in listar_categorias_principales:', err);
+                throw err;
+            }
+        }
+    }),
+
+    consultar_servicios: tool({
+        description: 'Devuelve el desglose detallado de todos los servicios específicos dentro de cada categoría con sus precios e IDs. Úsalo cuando el cliente ya eligió una categoría o quiere ver precios específicos.',
+        parameters: z.object({
+            categoriaId: z.string().optional().describe('Opcional. ID de una categoría específica para filtrar resultados.')
+        }) as any,
+        execute: async (args: any) => {
+            const { categoriaId } = args;
             try {
                 const [categories, services] = await Promise.all([
                     getCategories(),
                     getActiveServices()
                 ]);
                 
-                const result = categories.map(cat => {
+                const filteredCats = categoriaId 
+                    ? categories.filter(c => c.id === categoriaId)
+                    : categories;
+
+                const result = filteredCats.map(cat => {
                     const catServices = services.filter(s => s.category_id === cat.id);
                     return {
                         categoria: cat.name,
@@ -73,6 +98,7 @@ export const buildTools = (leadId: string | null, orgId: string, initId?: string
             }
         }
     }),
+
 
     consultar_disponibilidad: tool({
         description: 'Busca horarios disponibles reales para uno o más servicios. SIEMPRE debes usar esta herramienta antes de confirmar un horario con el cliente.',

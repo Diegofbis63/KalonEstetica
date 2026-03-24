@@ -93,6 +93,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             onStepFinish: async (step) => {
                 const toolCalls = step.toolCalls;
                 for (const call of toolCalls) {
+                    if (call.toolName === 'listar_categorias_principales') {
+                        const result = step.toolResults.find(r => r.toolCallId === call.toolCallId)?.result;
+                        if (Array.isArray(result)) {
+                            try {
+                                const items = result.map((c: any) => ({ label: c.nombre }));
+                                const imageBuffer = await generateMenuImage('NUESTRAS ESPECIALIDADES', items);
+                                const base64 = `data:image/png;base64,${imageBuffer.toString('base64')}`;
+                                res.write(`data: ${JSON.stringify({ media_url: base64, stage: 'displaying_menu' })}\n\n`);
+                                console.log("[Satori] Streamed Category Menu Image");
+                            } catch (e) {
+                                console.error("[Satori Error Category Menu]:", e);
+                            }
+                        }
+                    }
+
                     if (call.toolName === 'consultar_servicios') {
                         const categories = step.toolResults.find(r => r.toolCallId === call.toolCallId)?.result;
                         if (Array.isArray(categories)) {

@@ -24,7 +24,12 @@ interface Lead {
 }
 
 export default function KalonChat() {
-  const [messages, setMessages] = useState<Msg[]>([]);
+  const [messages, setMessages] = useState<Msg[]>([
+    {
+      role: "assistant",
+      content: "¡Hola! Bienvenida/o a KÂLON Estética ✨. Soy tu asistente virtual y estoy acá para ayudarte a reservar un momento especial para vos. Para empezar, ¿me decís tu nombre y apellido? 😊"
+    }
+  ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
