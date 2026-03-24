@@ -49,10 +49,19 @@ async function getFontData() {
 // Function to get the logo as a base64 string
 function getLogoData() {
     if (logoData) return logoData;
-    const logoPath = path.join(process.cwd(), 'public', 'logo.png');
-    if (fs.existsSync(logoPath)) {
-        const logoBuffer = fs.readFileSync(logoPath);
-        logoData = `data:image/png;base64,${logoBuffer.toString('base64')}`;
+    // Forcing an absolute path check to be extra safe on locals, but process.cwd() is standard for Vercel.
+    const logoPaths = [
+        path.join(process.cwd(), 'public', 'logo.png'),
+        'E:\\Antigravity Projects\\KalonEstetica\\public\\logo.png', // User local absolute
+        '/var/task/public/logo.png' // Vercel absolute
+    ];
+    
+    for (const lp of logoPaths) {
+        if (fs.existsSync(lp)) {
+            const logoBuffer = fs.readFileSync(lp);
+            logoData = `data:image/png;base64,${logoBuffer.toString('base64')}`;
+            break;
+        }
     }
     return logoData;
 }
@@ -71,11 +80,16 @@ function getTemplateData() {
 export async function generateMenuImage(title: string, items: { label: string, price?: string | number }[]) {
     const font = await getFontData();
     const logoBase64 = getLogoData();
-    const templateBase64 = getTemplateData();
     if (!font) throw new Error("No font for Satori!");
 
     const isDepilacion = title.toLowerCase().includes('depil');
     
+    // Safety check for empty data
+    if (!items || items.length === 0) {
+        console.error(`[Satori Error] No services provided for category: ${title}`);
+        items = [{ label: "Consulta en el local", price: "Personalizado" }];
+    }
+
     // Split items for Depilación or general 2-column mode
     let col1Items = items;
     let col2Items: typeof items = [];
@@ -86,9 +100,8 @@ export async function generateMenuImage(title: string, items: { label: string, p
     if (isDepilacion) {
         col1Title = "FEMENINO";
         col2Title = "MASCULINO";
-        col1Items = items.filter(i => i.label.toLowerCase().includes('fem') || !i.label.toLowerCase().includes('masc'));
-        col2Items = items.filter(i => i.label.toLowerCase().includes('masc'));
-        // If one column is empty, revert to standard distribution but keep titles if possible
+        col1Items = items.filter(i => i.label.toLowerCase().includes('fem') || (!i.label.toLowerCase().includes('masc') && !i.label.toLowerCase().includes('hombre')));
+        col2Items = items.filter(i => i.label.toLowerCase().includes('masc') || i.label.toLowerCase().includes('hombre'));
     } else if (useColumns) {
         const itemsPerCol = Math.ceil(items.length / 2);
         col1Items = items.slice(0, itemsPerCol);
@@ -99,9 +112,9 @@ export async function generateMenuImage(title: string, items: { label: string, p
     const itemHeight = 55;
     const itemsToShowHeight = Math.max(col1Items.length, col2Items.length);
     const calculatedHeight = 250 + (itemsToShowHeight * itemHeight); 
-    const finalHeight = Math.max(calculatedHeight, 650); 
+    const finalHeight = Math.max(calculatedHeight, 600); 
 
-    const renderItem = (item: any, globalIndex: number) => {
+    const renderItem = (item: any) => {
         const isService = item.price !== undefined;
         return {
             type: 'div',
@@ -112,6 +125,7 @@ export async function generateMenuImage(title: string, items: { label: string, p
                     alignItems: 'center',
                     padding: '8px 4px',
                     borderBottom: '1px solid rgba(93, 64, 55, 0.1)',
+                    width: '100%',
                 },
                 children: [
                     {
@@ -126,12 +140,12 @@ export async function generateMenuImage(title: string, items: { label: string, p
                                             color: '#5D4037',
                                             fontWeight: 500,
                                             fontSize: '15px',
-                                            maxWidth: isDepilacion ? '180px' : '220px',
+                                            maxWidth: (useColumns || isDepilacion) ? '180px' : '380px',
                                             overflow: 'hidden',
                                             whiteSpace: 'nowrap',
                                             textOverflow: 'ellipsis',
                                         },
-                                        children: item.label.replace(/femenino/gi, '').replace(/masculino/gi, '').trim()
+                                        children: item.label.replace(/femenino/gi, '').replace(/masculino/gi, '').replace(/femenina/gi, '').trim()
                                     }
                                 }
                             ]
@@ -147,7 +161,7 @@ export async function generateMenuImage(title: string, items: { label: string, p
                                 marginLeft: '8px',
                                 whiteSpace: 'nowrap'
                             },
-                            children: item.price ? `$${item.price}` : 'Consultar'
+                            children: item.price ? (item.price.toString().startsWith('$') ? item.price : `$${item.price}`) : 'Consultar'
                         }
                     } : null
                 ]
@@ -163,8 +177,8 @@ export async function generateMenuImage(title: string, items: { label: string, p
                 width: '600px',
                 display: 'flex',
                 flexDirection: 'column',
-                backgroundColor: '#F2EBE3', // Beige Premium
-                color: '#5D4037', // Marrón Elegante
+                backgroundColor: '#F2EBE3', 
+                color: '#5D4037', 
                 padding: '40px',
                 fontFamily: 'Inter',
                 position: 'relative',
@@ -204,7 +218,7 @@ export async function generateMenuImage(title: string, items: { label: string, p
                     }
                 },
                 
-                // Content Wrapper
+                // Content Wrapper (Row if 2 cols)
                 {
                     type: 'div',
                     props: {
@@ -214,6 +228,7 @@ export async function generateMenuImage(title: string, items: { label: string, p
                             gap: '30px',
                             width: '100%',
                             justifyContent: 'space-between',
+                            flex: 1,
                         },
                         children: [
                             // Column 1
@@ -225,11 +240,11 @@ export async function generateMenuImage(title: string, items: { label: string, p
                                         isDepilacion ? {
                                             type: 'div',
                                             props: {
-                                                style: { fontSize: '18px', fontWeight: 'bold', color: '#c5a363', marginBottom: '15px', borderBottom: '2px solid #c5a363', paddingBottom: '5px' },
+                                                style: { fontSize: '16px', fontWeight: 'bold', color: '#c5a363', marginBottom: '15px', borderBottom: '2px solid #c5a363', paddingBottom: '3px', letterSpacing: '2px' },
                                                 children: col1Title
                                             }
                                         } : null,
-                                        ...col1Items.map((item, index) => renderItem(item, index))
+                                        ...col1Items.map((item) => renderItem(item))
                                     ]
                                 }
                             },
@@ -242,11 +257,11 @@ export async function generateMenuImage(title: string, items: { label: string, p
                                         isDepilacion ? {
                                             type: 'div',
                                             props: {
-                                                style: { fontSize: '18px', fontWeight: 'bold', color: '#c5a363', marginBottom: '15px', borderBottom: '2px solid #c5a363', paddingBottom: '5px' },
+                                                style: { fontSize: '16px', fontWeight: 'bold', color: '#c5a363', marginBottom: '15px', borderBottom: '2px solid #c5a363', paddingBottom: '3px', letterSpacing: '2px' },
                                                 children: col2Title
                                             }
                                         } : null,
-                                        ...col2Items.map((item, index) => renderItem(item, col1Items.length + index))
+                                        ...col2Items.map((item) => renderItem(item))
                                     ]
                                 }
                             } : null
@@ -272,20 +287,20 @@ export async function generateMenuImage(title: string, items: { label: string, p
                                 type: 'span', 
                                 props: { 
                                     style: { 
-                                        fontSize: '14px', 
+                                        fontSize: '15px', 
                                         color: '#c5a363', 
-                                        fontWeight: 600, 
+                                        fontWeight: 700, 
                                         letterSpacing: '2px',
                                         textTransform: 'uppercase'
                                     }, 
-                                    children: 'KÂLON Estética Avanzada' 
+                                    children: 'KÂLON MULTIESPACIO ESTÉTICO' 
                                 } 
                             },
                             {
                                 type: 'div',
                                 props: {
-                                    style: { fontSize: '11px', color: 'rgba(93, 64, 55, 0.5)' },
-                                    children: 'Reserva tu momento • Salta, Argentina'
+                                    style: { fontSize: '12px', color: 'rgba(93, 64, 55, 0.7)', fontWeight: 500 },
+                                    children: 'Reserva tu momento • Córdoba, Argentina'
                                 }
                             }
                         ]

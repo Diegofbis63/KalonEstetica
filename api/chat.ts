@@ -98,7 +98,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         if (Array.isArray(categories)) {
                             for (const cat of categories) {
                                 try {
-                                    const items = cat.servicios.map((s: any) => ({ label: s.titulo, price: s.price }));
+                                    const items = cat.servicios.map((s: any) => ({ label: s.titulo, price: s.precio }));
                                     const imageBuffer = await generateMenuImage(cat.categoria, items);
                                     const base64 = `data:image/png;base64,${imageBuffer.toString('base64')}`;
                                     res.write(`data: ${JSON.stringify({ media_url: base64, stage: 'displaying_menu' })}\n\n`);
