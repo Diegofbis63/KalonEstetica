@@ -93,7 +93,7 @@ export async function generateMenuImage(title: string, items: { label: string, p
     // Split items for Depilación or general 2-column mode
     let col1Items = items;
     let col2Items: typeof items = [];
-    let useColumns = items.length > 8 || isDepilacion;
+    const useColumns = items.length > 8 || isDepilacion;
     let col1Title = "";
     let col2Title = "";
 
