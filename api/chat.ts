@@ -2,6 +2,7 @@ import { streamText, convertToCoreMessages } from 'ai';
 import { getKalonModel, getSystemPrompt } from './_services/ai.js';
 import { buildTools } from './_services/ai_tools.js';
 import { findLeadByFlexiblePhone, insertChatLog, findLeadByInitId } from './_services/db.js';
+import { generateMenuImage } from './_services/imageGenerator.js';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -89,6 +90,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             messages: coreMessages as any,
             tools: buildTools(leadId, DEFAULT_ORG_ID, initId),
             maxSteps: 3,
+            onStepFinish: async (step) => {
+                const toolCalls = step.toolCalls;
+                for (const call of toolCalls) {
+                    if (call.toolName === 'consultar_servicios') {
+                        const categories = step.toolResults.find(r => r.toolCallId === call.toolCallId)?.result;
+                        if (Array.isArray(categories)) {
+                            for (const cat of categories) {
+                                try {
+                                    const items = cat.servicios.map((s: any) => ({ label: s.titulo, price: s.price }));
+                                    const imageBuffer = await generateMenuImage(cat.categoria, items);
+                                    const base64 = `data:image/png;base64,${imageBuffer.toString('base64')}`;
+                                    res.write(`data: ${JSON.stringify({ media_url: base64, stage: 'displaying_menu' })}\n\n`);
+                                    console.log(`[Satori] Streamed image for ${cat.categoria}`);
+                                } catch (e) {
+                                    console.error("[Satori Error]:", e);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         });
 
         // Initial Handshake for SSE

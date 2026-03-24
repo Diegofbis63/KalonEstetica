@@ -74,19 +74,32 @@ export async function generateMenuImage(title: string, items: { label: string, p
     const templateBase64 = getTemplateData();
     if (!font) throw new Error("No font for Satori!");
 
-    // Layout Intelligence: 2-column mode for lists > 10 items
-    const useColumns = items.length > 10;
-    const itemsPerCol = Math.ceil(items.length / (useColumns ? 2 : 1));
-    const col1Items = items.slice(0, itemsPerCol);
-    const col2Items = items.slice(itemsPerCol);
+    const isDepilacion = title.toLowerCase().includes('depil');
+    
+    // Split items for Depilación or general 2-column mode
+    let col1Items = items;
+    let col2Items: typeof items = [];
+    let useColumns = items.length > 8 || isDepilacion;
+    let col1Title = "";
+    let col2Title = "";
+
+    if (isDepilacion) {
+        col1Title = "FEMENINO";
+        col2Title = "MASCULINO";
+        col1Items = items.filter(i => i.label.toLowerCase().includes('fem') || !i.label.toLowerCase().includes('masc'));
+        col2Items = items.filter(i => i.label.toLowerCase().includes('masc'));
+        // If one column is empty, revert to standard distribution but keep titles if possible
+    } else if (useColumns) {
+        const itemsPerCol = Math.ceil(items.length / 2);
+        col1Items = items.slice(0, itemsPerCol);
+        col2Items = items.slice(itemsPerCol);
+    }
 
     // Dynamic height calculation
-    const itemHeight = templateBase64 ? (useColumns ? 62 : 68) : (useColumns ? 70 : 80);
-    const calculatedHeight = (templateBase64 ? 320 : 280) + (itemsPerCol * itemHeight); 
-    const finalHeight = Math.max(calculatedHeight, 600); 
-
-    const paddingTop = templateBase64 ? Math.round(finalHeight * 0.35) : 60;
-    const paddingBottom = templateBase64 ? Math.round(finalHeight * 0.10) : 40;
+    const itemHeight = 55;
+    const itemsToShowHeight = Math.max(col1Items.length, col2Items.length);
+    const calculatedHeight = 250 + (itemsToShowHeight * itemHeight); 
+    const finalHeight = Math.max(calculatedHeight, 650); 
 
     const renderItem = (item: any, globalIndex: number) => {
         const isService = item.price !== undefined;
@@ -97,49 +110,28 @@ export async function generateMenuImage(title: string, items: { label: string, p
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    padding: useColumns ? '10px 12px' : '12px 18px',
-                    backgroundColor: 'rgba(0, 0, 0, 0.45)', 
-                    border: '1px solid rgba(197, 163, 99, 0.25)',
-                    borderRadius: '12px',
-                    boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                    padding: '8px 4px',
+                    borderBottom: '1px solid rgba(93, 64, 55, 0.1)',
                 },
                 children: [
                     {
                         type: 'div',
                         props: {
-                            style: { display: 'flex', alignItems: 'center', gap: useColumns ? '8px' : '16px' },
+                            style: { display: 'flex', alignItems: 'center', gap: '8px', flex: 1 },
                             children: [
-                                {
-                                    type: 'div',
-                                    props: {
-                                        style: { 
-                                            width: useColumns ? '26px' : '36px',
-                                            height: useColumns ? '26px' : '36px',
-                                            borderRadius: useColumns ? '13px' : '18px',
-                                            backgroundColor: '#c5a363',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            color: '#000',
-                                            fontWeight: 'bold',
-                                            fontSize: useColumns ? '14px' : '18px',
-                                        },
-                                        children: `${globalIndex + 1}`
-                                    }
-                                },
                                 {
                                     type: 'span',
                                     props: { 
                                         style: { 
-                                            color: 'rgba(255,255,255,0.95)',
+                                            color: '#5D4037',
                                             fontWeight: 500,
-                                            fontSize: useColumns ? '14px' : '19px',
-                                            maxWidth: useColumns ? '170px' : '360px',
+                                            fontSize: '15px',
+                                            maxWidth: isDepilacion ? '180px' : '220px',
                                             overflow: 'hidden',
                                             whiteSpace: 'nowrap',
                                             textOverflow: 'ellipsis',
                                         },
-                                        children: item.label 
+                                        children: item.label.replace(/femenino/gi, '').replace(/masculino/gi, '').trim()
                                     }
                                 }
                             ]
@@ -151,19 +143,13 @@ export async function generateMenuImage(title: string, items: { label: string, p
                             style: { 
                                 color: '#c5a363', 
                                 fontWeight: 'bold',
-                                fontSize: useColumns ? '14px' : '22px',
-                                marginLeft: 'auto',
+                                fontSize: '16px',
+                                marginLeft: '8px',
                                 whiteSpace: 'nowrap'
                             },
                             children: item.price ? `$${item.price}` : 'Consultar'
                         }
-                    } : {
-                        type: 'div',
-                        props: {
-                            style: { color: 'rgba(197, 163, 99, 0.4)', marginLeft: 'auto' },
-                            children: '→'
-                        }
-                    }
+                    } : null
                 ]
             }
         };
@@ -177,129 +163,137 @@ export async function generateMenuImage(title: string, items: { label: string, p
                 width: '600px',
                 display: 'flex',
                 flexDirection: 'column',
-                backgroundColor: '#0a0a0a',
-                color: '#fff',
-                padding: `${paddingTop}px 40px ${paddingBottom}px 40px`,
+                backgroundColor: '#F2EBE3', // Beige Premium
+                color: '#5D4037', // Marrón Elegante
+                padding: '40px',
                 fontFamily: 'Inter',
-                backgroundImage: templateBase64 ? `url(${templateBase64})` : 'radial-gradient(circle at 50% 10%, #1a1a1a 0%, #050505 100%)',
-                backgroundSize: '100% 100%',
                 position: 'relative',
                 overflow: 'hidden',
+                borderRadius: '0px',
             },
             children: [
-                // Stylized Title Section
-                !templateBase64 ? {
+                // Header with Logo
+                {
                     type: 'div',
                     props: {
-                        style: { 
-                            display: 'flex', 
-                            flexDirection: 'column', 
-                            alignItems: 'center', 
-                            marginBottom: useColumns ? '30px' : '40px',
-                            width: '100%' 
-                        },
+                        style: { display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '30px', width: '100%' },
                         children: [
+                            logoBase64 ? {
+                                type: 'img',
+                                props: {
+                                    src: logoBase64,
+                                    style: { width: '180px', marginBottom: '20px' }
+                                }
+                            } : null,
                             { 
                                 type: 'div', 
                                 props: { 
                                     style: { 
-                                        fontSize: useColumns ? '26px' : '32px', 
-                                        color: '#fff', 
+                                        fontSize: '28px', 
+                                        color: '#5D4037', 
                                         fontWeight: 700, 
                                         textAlign: 'center', 
-                                        textTransform: 'uppercase', 
-                                        letterSpacing: '2px',
-                                        textShadow: '0 2px 4px rgba(0,0,0,0.5)'
+                                        letterSpacing: '3px',
+                                        textTransform: 'uppercase'
                                     }, 
                                     children: title 
                                 } 
                             },
-                            { type: 'div', props: { style: { width: '80px', height: '3px', backgroundColor: '#c5a363', marginTop: '12px', borderRadius: '2px' } } }
+                            { type: 'div', props: { style: { width: '60px', height: '2px', backgroundColor: '#c5a363', marginTop: '10px' } } }
                         ]
                     }
-                } : null,
+                },
                 
-                // MULTICOLUMN / SINGLE COLUMN RENDERER
+                // Content Wrapper
                 {
                     type: 'div',
                     props: {
                         style: {
                             display: 'flex',
-                            flexDirection: useColumns ? 'row' : 'column',
-                            gap: useColumns ? '15px' : '18px',
+                            flexDirection: 'row',
+                            gap: '30px',
                             width: '100%',
                             justifyContent: 'space-between',
-                            flex: 1
                         },
-                        children: useColumns 
-                            ? [
-                                // Column 1
-                                {
-                                    type: 'div',
-                                    props: {
-                                        style: { display: 'flex', flexDirection: 'column', gap: '15px', width: '48.5%' },
-                                        children: col1Items.map((item, index) => renderItem(item, index))
-                                    }
-                                },
-                                // Column 2
-                                {
-                                    type: 'div',
-                                    props: {
-                                        style: { display: 'flex', flexDirection: 'column', gap: '15px', width: '48.5%' },
-                                        children: col2Items.map((item, index) => renderItem(item, itemsPerCol + index))
-                                    }
+                        children: [
+                            // Column 1
+                            {
+                                type: 'div',
+                                props: {
+                                    style: { display: 'flex', flexDirection: 'column', width: useColumns ? '47%' : '100%' },
+                                    children: [
+                                        isDepilacion ? {
+                                            type: 'div',
+                                            props: {
+                                                style: { fontSize: '18px', fontWeight: 'bold', color: '#c5a363', marginBottom: '15px', borderBottom: '2px solid #c5a363', paddingBottom: '5px' },
+                                                children: col1Title
+                                            }
+                                        } : null,
+                                        ...col1Items.map((item, index) => renderItem(item, index))
+                                    ]
                                 }
-                            ]
-                            : items.map((item, index) => renderItem(item, index))
+                            },
+                            // Column 2
+                            useColumns ? {
+                                type: 'div',
+                                props: {
+                                    style: { display: 'flex', flexDirection: 'column', width: '47%' },
+                                    children: [
+                                        isDepilacion ? {
+                                            type: 'div',
+                                            props: {
+                                                style: { fontSize: '18px', fontWeight: 'bold', color: '#c5a363', marginBottom: '15px', borderBottom: '2px solid #c5a363', paddingBottom: '5px' },
+                                                children: col2Title
+                                            }
+                                        } : null,
+                                        ...col2Items.map((item, index) => renderItem(item, col1Items.length + index))
+                                    ]
+                                }
+                            } : null
+                        ]
                     }
                 },
                 
-                // FOOTER
-                !templateBase64 ? {
+                // Footer
+                {
                     type: 'div',
                     props: {
                         style: {
                             marginTop: 'auto',
-                            paddingTop: '20px',
+                            paddingTop: '30px',
                             display: 'flex',
                             flexDirection: 'column',
                             alignItems: 'center',
-                            gap: '8px',
-                            width: '100%',
-                            minHeight: '60px'
+                            gap: '5px',
+                            width: '100%'
                         },
                         children: [
                             { 
                                 type: 'span', 
                                 props: { 
                                     style: { 
-                                        fontSize: '17px', 
+                                        fontSize: '14px', 
                                         color: '#c5a363', 
                                         fontWeight: 600, 
-                                        letterSpacing: '1.5px',
+                                        letterSpacing: '2px',
                                         textTransform: 'uppercase'
                                     }, 
-                                    children: 'Respondé con el número' 
+                                    children: 'KÂLON Estética Avanzada' 
                                 } 
                             },
                             {
                                 type: 'div',
                                 props: {
-                                    style: {
-                                        fontSize: '13px',
-                                        color: 'rgba(197, 163, 99, 0.6)',
-                                        letterSpacing: '0.5px'
-                                    },
-                                    children: 'KÂLON Estética • Salta, Argentina'
+                                    style: { fontSize: '11px', color: 'rgba(93, 64, 55, 0.5)' },
+                                    children: 'Reserva tu momento • Salta, Argentina'
                                 }
                             }
                         ]
                     }
-                } : null
+                }
             ],
         },
     };
-
 
     const svg = await satori(satoriConfig, {
         width: 600,
