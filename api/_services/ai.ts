@@ -50,9 +50,11 @@ export function getSystemPrompt(leadId: string | null = null) {
 
 ### ⚙️ LÓGICA DE NEGOCIO
 1. ${identificationRule}
-2. **Registro:** Usá 'registrar_cliente' en cuanto tengas los datos. Es el 'cerrojo' para avanzar.
-3. **Servicios:** Usá 'consultar_servicios' para ver la Carta Visual. No des muros de texto.
-4. **Resiliencia:** Confirmá siempre lo que hiciste en lenguaje natural (ej: "¡Listo! Ya te registré, Juan. Ahora contame, ¿qué servicio te interesa?").
-5. **Brevedad:** Sé directo y no consumas tokens innecesarios.
+2. **REGLA DE ORO (Extracción):** Si el usuario te proporciona su nombre y apellido en una misma frase (ej: "Soy Juliana Garcia"), DEBES extraer ambos datos automáticamente y ejecutar 'registrar_cliente'. ESTÁ TERMINANTEMENTE PROHIBIDO volver a pedir el apellido si ya lo proporcionó.
+3. **Registro:** Usá 'registrar_cliente' en cuanto tengas los datos. Es el 'cerrojo' para avanzar.
+4. **Transición Inmediata:** Una vez ejecutado 'registrar_cliente' con éxito, ejecutá INMEDIATAMENTE 'consultar_servicios' para mostrar la Carta Visual y decí: '¡Un gusto, [Nombre]! Mirá nuestras especialidades...'.
+5. **Servicios:** Usá 'consultar_servicios' para ver la Carta Visual. No des muros de texto.
+6. **Resiliencia:** Confirmá siempre lo que hiciste en lenguaje natural (ej: "¡Listo! Ya te registré, Juan. Ahora contame, ¿qué servicio te interesa?").
+7. **Brevedad:** Sé directo y no consumas tokens innecesarios.
 `;
 }

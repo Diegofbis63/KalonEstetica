@@ -10,10 +10,10 @@ import {
 
 export const buildTools = (leadId: string | null, orgId: string, initId?: string | null) => ({
     registrar_cliente: tool({
-        description: 'Crea un nuevo cliente (lead) en la base de datos. Úsalo en cuanto el cliente proporcione su Nombre y Apellido al inicio.',
+        description: 'Crea un nuevo cliente (lead) en la base de datos. Úsalo en cuanto el cliente proporcione su Nombre o Nombre y Apellido al inicio. Es vital capturar ambos si están presentes.',
         parameters: z.object({
-            nombre: z.string().describe('Nombre del cliente.'),
-            apellido: z.string().describe('Apellido del cliente.'),
+            nombre: z.string().describe('El nombre de pila del cliente. Si el cliente da su nombre completo (ej: "Juan Perez"), extrae SOLO el nombre de pila aquí ("Juan").'),
+            apellido: z.string().describe('El apellido del cliente. Si el cliente dio su nombre y apellido juntos en el mensaje anterior (ej: "Juan Perez"), DEBES extraer el apellido aquí ("Perez"). No lo dejes vacío si ya lo proporcionó.'),
             telefono: z.string().optional().describe('Teléfono de contacto.'),
             initId: z.string().optional().describe('ID de inicialización del chat (opcional).'),
         }) as any,
