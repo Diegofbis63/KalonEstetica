@@ -916,7 +916,7 @@ export function generateResponse(
         switch (state.stage) {
             case 'greeting': {
                 if (!state.clientName || state.clientName === 'Cliente') {
-                    return response(`Bienvenida a *KÂLON Estética* ✨\n\nSoy tu asistente virtual y estoy acá para ayudarte a reservar un momento especial para vos.\n\nPara empezar, ¿me decís tu *nombre y apellido*? 😊`);
+                    return response(`¡Hola! Bienvenida/o a KÂLON Estética ✨. Soy tu asistente virtual y estoy acá para ayudarte a reservar un momento especial para vos. Para empezar, ¿me decís tu nombre y apellido? 😊`);
                 }
                 const visualItems = categories.map(c => ({ id: c.id, label: c.name }));
                 state.optionMap = Object.fromEntries(visualItems.map((v, i) => [(i + 1).toString(), v.id]));
