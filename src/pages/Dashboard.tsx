@@ -515,7 +515,6 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                             className="outline-none focus:outline-none focus-visible:outline-none w-full sm:w-auto"
                                           >
                                             <Badge 
-                                              variant="outline" 
                                               variant="outline"
                                               className={`
                                                 flex flex-col items-center justify-center h-10 w-24 border-0

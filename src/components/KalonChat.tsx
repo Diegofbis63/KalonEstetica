@@ -35,6 +35,14 @@ export default function KalonChat() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [zoomImage, setZoomImage] = useState<string | null>(null);
+  const [chatInitId] = useState(() => {
+    if (typeof window === 'undefined') return "";
+    const saved = sessionStorage.getItem('kalon_chat_init_id');
+    if (saved) return saved;
+    const newId = crypto.randomUUID();
+    sessionStorage.setItem('kalon_chat_init_id', newId);
+    return newId;
+  });
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -79,6 +87,7 @@ export default function KalonChat() {
     await streamKalonChat({
       messages: [{ role: 'user', content: 'Hola, quiero reservar una cita' }],
       clientPhone: phone || undefined,
+      identificationId: chatInitId,
       onDelta: (chunk) => upsertAssistant(chunk),
       onStage: (s) => setCurrentStage(s),
       onMedia: (url) => setMessages(prev => {
@@ -174,6 +183,7 @@ export default function KalonChat() {
     await streamKalonChat({
       messages: [...messages, userMsg],
       clientPhone: phone || (identifiedLead?.contact_info?.phone) || undefined,
+      identificationId: chatInitId,
       mediaUrl: mediaToSend,
       onDelta: (chunk) => upsertAssistant(chunk),
       onStage: (s) => setCurrentStage(s),

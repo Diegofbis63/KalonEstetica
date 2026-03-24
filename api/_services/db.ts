@@ -67,6 +67,17 @@ export async function findLeadByFlexiblePhone(phone: string) {
     return results.length > 0 ? results[0] : null;
 }
 
+export async function findLeadByInitId(initId: string) {
+    if (!initId) return null;
+    console.log(`[db.ts] Searching lead by initId: ${initId}`);
+    const results = await db.select()
+        .from(schema.leads)
+        .where(drizzleSql`${schema.leads.contact_info}->>'initId' = ${initId}`)
+        .limit(1);
+        
+    return results.length > 0 ? results[0] : null;
+}
+
 export async function getChatHistory(leadId: string) {
     console.log(`[db.ts] Fetching chat history for lead: ${leadId}`);
     return await db.query.chat_logs.findMany({

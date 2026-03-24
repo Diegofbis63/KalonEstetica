@@ -8,34 +8,41 @@ import {
     createLead
 } from './db.js';
 
-export const buildTools = (leadId: string | null, orgId: string) => ({
-    registrar_cliente: (tool({
+export const buildTools = (leadId: string | null, orgId: string, initId?: string | null) => ({
+    registrar_cliente: tool({
         description: 'Crea un nuevo cliente (lead) en la base de datos. Úsalo en cuanto el cliente proporcione su Nombre y Apellido al inicio.',
         parameters: z.object({
             nombre: z.string().describe('Nombre del cliente.'),
             apellido: z.string().describe('Apellido del cliente.'),
             telefono: z.string().optional().describe('Teléfono de contacto.'),
-        }),
-        execute: async ({ nombre, apellido, telefono }: any) => {
+            initId: z.string().optional().describe('ID de inicialización del chat (opcional).'),
+        }) as any,
+        execute: async (args: any) => {
+            const { nombre, apellido, telefono, initId: argInitId } = args;
             try {
                 const fullName = `${nombre} ${apellido}`.trim();
-                const contactInfo = { phone: telefono || "Sin teléfono", source: "web_chatbot" };
+                const contactInfo = { 
+                    phone: telefono || "Sin teléfono", 
+                    source: "web_chatbot",
+                    initId: argInitId || initId || null
+                };
                 const newLead = await createLead(orgId, fullName, contactInfo);
+                console.log("[Tool] Created Lead with InitId:", newLead.id, initId);
                 return { 
-                    exito: true, 
+                    success: true, 
                     id: newLead.id, 
-                    mensaje: `Cliente ${fullName} registrado con éxito en la base de datos.` 
+                    mensaje: `Cliente ${fullName} registrado con éxito. Ya podés informarle precios o agendar turnos.` 
                 };
             } catch (err: any) {
                 console.error('[AI Tool] Error en registrar_cliente:', err);
                 return { error: 'Error al registrar cliente: ' + err.message };
             }
         }
-    }) as any),
+    }),
 
-    consultar_servicios: (tool({
+    consultar_servicios: tool({
         description: 'Devuelve el listado completo de categorías (padres) y servicios específicos (hijos) con sus precios e IDs. Úsalo siempre que necesites saber qué ofrece el centro o para confirmar los IDs de los servicios que quiere el cliente.',
-        parameters: z.object({}),
+        parameters: z.object({}) as any,
         execute: async () => {
             try {
                 const [categories, services] = await Promise.all([
@@ -65,15 +72,16 @@ export const buildTools = (leadId: string | null, orgId: string) => ({
                 throw err;
             }
         }
-    }) as any),
+    }),
 
-    consultar_disponibilidad: (tool({
+    consultar_disponibilidad: tool({
         description: 'Busca horarios disponibles reales para uno o más servicios. SIEMPRE debes usar esta herramienta antes de confirmar un horario con el cliente.',
         parameters: z.object({
             categoriaId: z.string().describe('El ID de la categoría principal (UUID) a la que pertenece el servicio requerido.'),
             fecha: z.string().describe('La fecha a consultar en formato YYYY-MM-DD. Si el cliente dice "mañana", debes calcular la fecha exacta basándote en que hoy es la fecha actual. ¡Obligatorio!'),
-        }),
-        execute: async ({ categoriaId, fecha }: any) => {
+        }) as any,
+        execute: async (args: any) => {
+            const { categoriaId, fecha } = args;
             const staff = await getStaffByCategory(categoriaId);
             if (staff.length === 0) {
                 return { error: 'No hay profesionales disponibles que realicen este tipo de servicio.' };
@@ -103,15 +111,16 @@ export const buildTools = (leadId: string | null, orgId: string) => ({
                 horarios_disponibles: availableSlots 
             };
         }
-    }) as any),
+    }),
 
-    agendar_turno: (tool({
+    agendar_turno: tool({
         description: 'Programa y guarda un turno en la base de datos de manera definitiva. REQUIERE que tengas el ID del servicio, fecha, hora y datos del cliente.',
         parameters: z.object({
             serviceIds: z.array(z.string()).describe('Array con los IDs exactos de los servicios elegidos.'),
             dateTimeIso: z.string().describe('Fecha y hora del turno en formato ISO, ej: "2024-06-25T15:00:00".'),
-        }),
-        execute: async ({ serviceIds, dateTimeIso }: any) => {
+        }) as any,
+        execute: async (args: any) => {
+            const { serviceIds, dateTimeIso } = args;
             if (!leadId) {
                 return { error: 'Falla al agendar: No hay un ID de lead (cliente) instanciado. Pide su nombre y número por favor.' };
             }
@@ -148,5 +157,5 @@ export const buildTools = (leadId: string | null, orgId: string) => ({
                 return { error: 'Error interno en BD al guardar turno: ' + (err as Error).message };
             }
         }
-    }) as any)
+    })
 });

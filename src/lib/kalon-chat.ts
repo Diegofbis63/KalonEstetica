@@ -11,6 +11,7 @@ export async function streamKalonChat({
   onMedia,
   clientPhone,
   mediaUrl,
+  identificationId,
 }: {
   messages: Msg[];
   onDelta: (deltaText: string) => void;
@@ -20,6 +21,7 @@ export async function streamKalonChat({
   onMedia?: (url: string) => void;
   clientPhone?: string;
   mediaUrl?: string;
+  identificationId?: string;
 }) {
   try {
     const lastMsg = messages[messages.length - 1];
@@ -35,10 +37,12 @@ export async function streamKalonChat({
       clientPhone?: string;
       mediaUrl?: string;
       message?: string;
+      identificationId?: string;
     } = { 
       messages: strippedMessages, 
       clientPhone, 
-      mediaUrl: mediaUrl || lastMsg?.media_url 
+      mediaUrl: mediaUrl || lastMsg?.media_url,
+      identificationId
     };
     if (lastMsg) body.message = lastMsg.content;
 
