@@ -4,6 +4,12 @@ import * as schema from './schema.js';
 import { eq, and, sql as drizzleSql, asc, desc, like, or } from 'drizzle-orm';
 import type { ConvState, Category, Service } from './stateMachine.js';
 
+export interface ContactInfo {
+    phone: string;
+    source: string;
+    initId?: string | null;
+}
+
 const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 if (!connectionString) {
     console.error("[db.ts] CRITICAL: Database connection string is missing!");
@@ -68,8 +74,8 @@ export async function findLeadByFlexiblePhone(phone: string) {
 }
 
 export async function findLeadByInitId(initId: string) {
-    if (!initId) return null;
-    console.log(`[db.ts] Searching lead by initId: ${initId}`);
+    if (!initId || typeof initId !== 'string' || initId.length < 5) return null;
+    console.log(`[db.ts] Searching lead by robust initId: ${initId}`);
     const results = await db.select()
         .from(schema.leads)
         .where(drizzleSql`${schema.leads.contact_info}->>'initId' = ${initId}`)
@@ -105,7 +111,7 @@ export async function insertChatLog(leadId: string, role: string, content: strin
     });
 }
 
-export async function createLead(orgId: string, name: string, contactInfo: any) {
+export async function createLead(orgId: string, name: string, contactInfo: ContactInfo) {
     console.log(`[db.ts] Creating a new lead for: ${name}`);
     const results = await db.insert(schema.leads).values({
         organization_id: orgId,

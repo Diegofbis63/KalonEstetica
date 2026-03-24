@@ -301,3 +301,4 @@ export async function generateMenuImage(title: string, items: { label: string, p
 
     return new Resvg(svg).render().asPng();
 }
+

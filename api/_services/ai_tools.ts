@@ -5,7 +5,9 @@ import {
     getActiveServices, 
     getAvailableSlotsFromDB, 
     getStaffByCategory,
-    createLead
+    createLead,
+    type ContactInfo,
+    createAppointment
 } from './db.js';
 
 export const buildTools = (leadId: string | null, orgId: string, initId?: string | null) => ({
@@ -17,11 +19,11 @@ export const buildTools = (leadId: string | null, orgId: string, initId?: string
             telefono: z.string().optional().describe('Teléfono de contacto.'),
             initId: z.string().optional().describe('ID de inicialización del chat (opcional).'),
         }) as any,
-        execute: async (args: any) => {
+        execute: async (args: { nombre: string; apellido: string; telefono?: string; initId?: string }) => {
             const { nombre, apellido, telefono, initId: argInitId } = args;
             try {
                 const fullName = `${nombre} ${apellido}`.trim();
-                const contactInfo = { 
+                const contactInfo: ContactInfo = { 
                     phone: telefono || "Sin teléfono", 
                     source: "web_chatbot",
                     initId: argInitId || initId || null
@@ -33,9 +35,9 @@ export const buildTools = (leadId: string | null, orgId: string, initId?: string
                     id: newLead.id, 
                     mensaje: `Cliente ${fullName} registrado con éxito. Ya podés informarle precios o agendar turnos.` 
                 };
-            } catch (err: any) {
+            } catch (err: unknown) {
                 console.error('[AI Tool] Error en registrar_cliente:', err);
-                return { error: 'Error al registrar cliente: ' + err.message };
+                return { error: 'Error al registrar cliente: ' + (err instanceof Error ? err.message : String(err)) };
             }
         }
     }),
@@ -49,7 +51,7 @@ export const buildTools = (leadId: string | null, orgId: string, initId?: string
                 return categories.map(c => ({
                     id: c.id,
                     nombre: c.name,
-                    slug: c.slug
+                    slug: (c as any).slug
                 })) as any;
             } catch (err: any) {
                 console.error('[AI Tool] Error in listar_categorias_principales:', err);
@@ -63,7 +65,7 @@ export const buildTools = (leadId: string | null, orgId: string, initId?: string
         parameters: z.object({
             categoriaId: z.string().optional().describe('Opcional. ID de una categoría específica para filtrar resultados.')
         }) as any,
-        execute: async (args: any) => {
+        execute: async (args: { categoriaId?: string }) => {
             const { categoriaId } = args;
             try {
                 const [categories, services] = await Promise.all([
@@ -99,14 +101,13 @@ export const buildTools = (leadId: string | null, orgId: string, initId?: string
         }
     }),
 
-
     consultar_disponibilidad: tool({
         description: 'Busca horarios disponibles reales para uno o más servicios. SIEMPRE debes usar esta herramienta antes de confirmar un horario con el cliente.',
         parameters: z.object({
             categoriaId: z.string().describe('El ID de la categoría principal (UUID) a la que pertenece el servicio requerido.'),
             fecha: z.string().describe('La fecha a consultar en formato YYYY-MM-DD. Si el cliente dice "mañana", debes calcular la fecha exacta basándote en que hoy es la fecha actual. ¡Obligatorio!'),
         }) as any,
-        execute: async (args: any) => {
+        execute: async (args: { categoriaId: string; fecha: string }) => {
             const { categoriaId, fecha } = args;
             const staff = await getStaffByCategory(categoriaId);
             if (staff.length === 0) {
@@ -145,42 +146,40 @@ export const buildTools = (leadId: string | null, orgId: string, initId?: string
             serviceIds: z.array(z.string()).describe('Array con los IDs exactos de los servicios elegidos.'),
             dateTimeIso: z.string().describe('Fecha y hora del turno en formato ISO, ej: "2024-06-25T15:00:00".'),
         }) as any,
-        execute: async (args: any) => {
+        execute: async (args: { serviceIds: string[]; dateTimeIso: string }) => {
             const { serviceIds, dateTimeIso } = args;
             if (!leadId) {
-                return { error: 'Falla al agendar: No hay un ID de lead (cliente) instanciado. Pide su nombre y número por favor.' };
+                return { error: 'Falla al agendar: No hay un ID de lead (cliente) identificado. Pide su nombre y apellido primero.' };
             }
-
-            const services = await getActiveServices();
-            const categories = await getCategories();
-            
-            const selectedServices = services.filter(s => serviceIds.includes(s.id));
-            if (selectedServices.length === 0) {
-                return { error: 'IDs de servicios inválidos.' };
-            }
-
-            const totalPrice = selectedServices.reduce((sum, s) => sum + Number(s.price), 0);
-            const totalDuration = selectedServices.reduce((sum, s) => sum + Number((s as any).duration || (s as any).duration_min), 0);
-
-            // Group category names for the "service_type" summary
-            const catIds = [...new Set(selectedServices.map(s => s.category_id))];
-            const catNames = categories.filter(c => catIds.includes(c.id)).map(c => c.name).join(' y ');
 
             try {
-                // Not importing createAppointment directly inside here to avoid circular dependencies if any, 
-                // but since it's imported at the top, we just use it:
-                const { createAppointment } = await import('./db.js');
+                const [services, categories] = await Promise.all([
+                    getActiveServices(),
+                    getCategories()
+                ]);
+                
+                const selectedServices = services.filter(s => serviceIds.includes(s.id));
+                if (selectedServices.length === 0) {
+                    return { error: 'IDs de servicios inválidos.' };
+                }
+
+                const totalPrice = selectedServices.reduce((sum, s) => sum + Number(s.price), 0);
+                const totalDuration = selectedServices.reduce((sum, s) => sum + Number((s as any).duration_min || (s as any).duration || 30), 0);
+
+                const catIds = [...new Set(selectedServices.map(s => s.category_id))];
+                const catNames = categories.filter(c => catIds.includes(c.id)).map(c => c.name).join(' y ');
+
                 await createAppointment(leadId, orgId, dateTimeIso, catNames, totalPrice, totalDuration, selectedServices as any);
                 
                 return {
-                    exito: true as const,
+                    exito: true,
                     mensaje: `Turno guardado con éxito para: ${catNames}`,
                     total_pagar: totalPrice,
                     duracion_total: totalDuration
                 };
             } catch (err: unknown) {
                 console.error('[AI Tool] Error agendando turno:', err);
-                return { error: 'Error interno en BD al guardar turno: ' + (err as Error).message };
+                return { error: 'Error interno en BD al guardar turno: ' + (err instanceof Error ? err.message : String(err)) };
             }
         }
     })
