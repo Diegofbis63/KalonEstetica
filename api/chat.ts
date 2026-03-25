@@ -56,7 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         const model = getKalonModel();
 
-        // Build history
+        // Build history with explicit check to prevent empty calls and ensure roles
         const allMessages = [...(messages || [])];
         const lastInHistory = allMessages.length > 0 ? allMessages[allMessages.length - 1] : null;
         
@@ -68,12 +68,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             allMessages.push({ role: 'user', content: 'Hola' });
         }
 
-        const coreMessages = allMessages.slice(-10).map(m => ({
-            role: m.role as 'user' | 'assistant' | 'system',
-            content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
-        }));
+        const coreMessages = allMessages.slice(-10).map(m => {
+            const role = (m.role === 'assistant' || m.role === 'user' || m.role === 'system') ? m.role : 'user';
+            return {
+                role,
+                content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
+            };
+        });
         
-        console.log(`[AI Request] Lead: ${leadId}, Messages: ${coreMessages.length}`);
+        console.log(`[AI Request Early] Lead: ${leadId}, Messages: ${coreMessages.length}, Incoming: "${incomingMessage}"`);
 
         const result = streamText({
             model,
@@ -82,38 +85,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             tools: buildTools(leadId, DEFAULT_ORG_ID, initId),
             maxSteps: 3,
             onStepFinish: async (step) => {
-                const toolCalls = step.toolCalls;
-                for (const call of toolCalls) {
-                    if (call.toolName === 'listar_categorias_principales') {
-                        const result = step.toolResults.find(r => r.toolCallId === call.toolCallId)?.result;
-                        if (Array.isArray(result)) {
-                            try {
-                                const items = result.map((c: any) => ({ label: c.nombre }));
+                console.log(`[Step Done] StepType: ${step.text ? 'text' : 'tool'}, ToolCalls: ${step.toolCalls.length}`);
+                
+                for (const call of step.toolCalls) {
+                    try {
+                        if (call.toolName === 'listar_categorias_principales') {
+                            const foundResult = step.toolResults.find(r => r.toolCallId === call.toolCallId)?.result;
+                            if (Array.isArray(foundResult)) {
+                                console.log(`[Satori Request] Categorias: ${foundResult.length}`);
+                                const items = foundResult.map((c: any) => ({ label: c.nombre }));
                                 const imageBuffer = await generateMenuImage('NUESTRAS ESPECIALIDADES', items);
                                 const base64 = `data:image/png;base64,${imageBuffer.toString('base64')}`;
-                                res.write(`data: ${JSON.stringify({ media_url: base64, stage: 'displaying_menu' })}\n\n`);
-                                console.log("[Satori] Streamed Category Menu Image");
-                            } catch (e) {
-                                console.error("[Satori Error Category Menu]:", e);
-                            }
-                        }
-                    }
-
-                    if (call.toolName === 'consultar_servicios') {
-                        const categories = step.toolResults.find(r => r.toolCallId === call.toolCallId)?.result;
-                        if (Array.isArray(categories)) {
-                            for (const cat of categories) {
-                                try {
-                                    const items = cat.servicios.map((s: any) => ({ label: s.titulo, price: s.precio }));
-                                    const imageBuffer = await generateMenuImage(cat.categoria, items);
-                                    const base64 = `data:image/png;base64,${imageBuffer.toString('base64')}`;
+                                if (!res.writableEnded) {
                                     res.write(`data: ${JSON.stringify({ media_url: base64, stage: 'displaying_menu' })}\n\n`);
-                                    console.log(`[Satori] Streamed image for ${cat.categoria}`);
-                                } catch (e) {
-                                    console.error("[Satori Error]:", e);
+                                    console.log("[Satori Streamed] Main Menu Image Success");
                                 }
                             }
                         }
+
+                        if (call.toolName === 'consultar_servicios') {
+                            const foundCategories = step.toolResults.find(r => r.toolCallId === call.toolCallId)?.result;
+                            if (Array.isArray(foundCategories)) {
+                                console.log(`[Satori Request] Servicios para: ${foundCategories.map(c => c.categoria).join(', ')}`);
+                                for (const cat of foundCategories) {
+                                    const items = (cat.servicios || []).map((s: any) => ({ label: s.titulo, price: s.precio }));
+                                    const imageBuffer = await generateMenuImage(cat.categoria, items);
+                                    const base64 = `data:image/png;base64,${imageBuffer.toString('base64')}`;
+                                    if (!res.writableEnded) {
+                                        res.write(`data: ${JSON.stringify({ media_url: base64, stage: 'displaying_menu' })}\n\n`);
+                                        console.log(`[Satori Streamed] Service List for ${cat.categoria} Success`);
+                                    }
+                                }
+                            }
+                        }
+                    } catch (toolErr) {
+                        console.error("[onStepFinish Tool Error]:", toolErr);
                     }
                 }
             }
@@ -125,10 +131,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         let fullContent = "";
         let chunks = 0;
         
+        console.log("[Stream Result] Starting textStream consumer...");
         for await (const text of result.textStream) {
             fullContent += text;
             chunks++;
-            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }], stage: 'chatting' })}\n\n`);
+            if (!res.writableEnded) {
+                res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }], stage: 'chatting' })}\n\n`);
+            }
         }
 
         console.log(`[AI Stream Done] Content Length: ${fullContent.length}, Chunks: ${chunks}`);
@@ -137,8 +146,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             insertChatLog(leadId, 'assistant', fullContent, null, false).catch(e => console.error("[Log Error]:", e));
         }
 
-        res.write('data: [DONE]\n\n');
-        res.end();
+        if (!res.writableEnded) {
+            res.write('data: [DONE]\n\n');
+            res.end();
+        }
 
     } catch (err: any) {
         console.error("[Fatal Chat Error]:", err);
