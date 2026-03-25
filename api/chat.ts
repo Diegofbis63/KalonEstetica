@@ -68,19 +68,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             allMessages.push({ role: 'user', content: 'Hola' });
         }
 
-        const coreMessages = convertToCoreMessages(allMessages).slice(-10).map(m => {
-            if (typeof m.content === 'string') return m;
-            if (Array.isArray(m.content)) {
-                const textOnly = m.content.every(c => c.type === 'text');
-                if (textOnly) {
-                    return { 
-                        ...m, 
-                        content: m.content.map(c => (c as any).text || '').join('\n') 
-                    };
-                }
-            }
-            return m;
-        });
+        const coreMessages = allMessages.slice(-10).map(m => ({
+            role: m.role as 'user' | 'assistant' | 'system',
+            content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
+        }));
         
         console.log(`[AI Request] Lead: ${leadId}, Messages: ${coreMessages.length}`);
 

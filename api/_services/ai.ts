@@ -14,7 +14,7 @@ export const getKalonModel = () => {
         apiKey: rawKey.trim(),
     });
 
-    return google('gemini-2.0-flash-001');
+    return google('gemini-1.5-flash-latest');
 };
 
 /**
