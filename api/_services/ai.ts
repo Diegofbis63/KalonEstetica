@@ -1,26 +1,20 @@
-import { createOpenAI } from '@ai-sdk/openai';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 
 /**
- * Retorna el modelo configurado dinámicamente con la API Key de OpenRouter.
+ * Retorna el modelo configurado dinámicamente con la API Key de Google Native.
+ * Usamos el SDK nativo de Google para mayor estabilidad en tool-calling y system instructions.
  */
 export const getKalonModel = () => {
-    const rawKey = process.env.OPENROUTER_API_KEY;
+    const rawKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     if (!rawKey) {
-        throw new Error("OPENROUTER_API_KEY no está configurada.");
+        throw new Error("GOOGLE_GENERATIVE_AI_API_KEY no está configurada.");
     }
     
-    const openrouter = createOpenAI({
+    const google = createGoogleGenerativeAI({
         apiKey: rawKey.trim(),
-        baseURL: 'https://openrouter.ai/api/v1',
-        // @ts-expect-error - Forzar modo estricto para deshabilitar OpenAIResponsesLanguageModel
-        compatibility: 'strict',
-        headers: {
-            'HTTP-Referer': 'https://kalon-estetica.vercel.app',
-            'X-Title': 'Kalon Estetica Chatbot',
-        }
     });
 
-    return openrouter('google/gemini-2.0-flash-001');
+    return google('gemini-2.0-flash-001');
 };
 
 /**
