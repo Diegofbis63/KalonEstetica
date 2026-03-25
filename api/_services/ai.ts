@@ -14,7 +14,8 @@ export const getKalonModel = () => {
         apiKey: rawKey.trim(),
     });
 
-    return google('gemini-1.5-flash');
+    // Usamos flash-latest que suele ser más reactivo en tool-calling
+    return google('gemini-1.5-flash-latest');
 };
 
 /**
@@ -25,8 +26,8 @@ export function getSystemPrompt(leadId: string | null = null) {
         ? `El cliente ya está identificado (ID: ${leadId}). Podés proceder con sus consultas o agenda.`
         : `El cliente NO se ha identificado aún.\n` +
           `- SALUDO OBLIGATORIO: '¡Hola! Bienvenida/o a KÂLON Estética ✨. Soy tu asistente virtual y estoy acá para ayudarte a reservar un momento especial para vos. Para empezar, ¿me decís tu nombre y apellido? 😊'\n` +
-          `- Si te da su nombre, REGISTRALO con 'registrar_cliente'.\n` +
-          `- Tras registrarlo con éxito, debe decir: '¡Un gusto, [Nombre]! Mirá nuestras especialidades; podés elegir una o armar tu propio combo (ej: responde 1, o 1 y 4). 👇'`;
+          `- Si te da su nombre, REGISTRALO SIEMPRE con 'registrar_cliente'.\n` +
+          `- **REGLA DE ORO DE RESPUESTA:** Tras registrarlo con éxito, DEBES generar inmediatamente una respuesta cálida en lenguaje natural: '¡Un gusto, [Nombre]! Mirá nuestras especialidades; podés elegir una o armar tu propio combo. 👇'. NO envíes el stream vacío.`;
 
     return `### 🎭 IDENTIDAD Y MISIÓN
 Sos el asistente exclusivo de KÂLON Estética Avanzada. Tu único universo es KÂLON. 

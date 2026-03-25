@@ -85,20 +85,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             tools: buildTools(leadId, DEFAULT_ORG_ID, initId),
             maxSteps: 3,
             onStepFinish: async (step) => {
-                console.log(`[Step Done] StepType: ${step.text ? 'text' : 'tool'}, ToolCalls: ${step.toolCalls.length}`);
+                const stepText = step.text || "";
+                console.log(`[Step Done] Type: ${stepText ? 'text' : 'tool'}, Tools: ${step.toolCalls.length}`);
                 
+                // Si el modelo registró al cliente en este paso, intentamos capturar el nuevo ID para el logging final
+                const regResult = step.toolResults.find(r => r.toolName === 'registrar_cliente')?.result as any;
+                if (regResult?.success && regResult.id) {
+                    console.log("[Chat] NEW Lead Registered during stream:", regResult.id);
+                    leadId = regResult.id; // Actualizamos para el logging de onFinish
+                }
+
                 for (const call of step.toolCalls) {
                     try {
                         if (call.toolName === 'listar_categorias_principales') {
                             const foundResult = step.toolResults.find(r => r.toolCallId === call.toolCallId)?.result;
                             if (Array.isArray(foundResult)) {
-                                console.log(`[Satori Request] Categorias: ${foundResult.length}`);
+                                console.log(`[Satori] Generando Menú Principal (${foundResult.length} ítems)`);
                                 const items = foundResult.map((c: any) => ({ label: c.nombre }));
                                 const imageBuffer = await generateMenuImage('NUESTRAS ESPECIALIDADES', items);
                                 const base64 = `data:image/png;base64,${imageBuffer.toString('base64')}`;
                                 if (!res.writableEnded) {
                                     res.write(`data: ${JSON.stringify({ media_url: base64, stage: 'displaying_menu' })}\n\n`);
-                                    console.log("[Satori Streamed] Main Menu Image Success");
                                 }
                             }
                         }
@@ -106,44 +113,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         if (call.toolName === 'consultar_servicios') {
                             const foundCategories = step.toolResults.find(r => r.toolCallId === call.toolCallId)?.result;
                             if (Array.isArray(foundCategories)) {
-                                console.log(`[Satori Request] Servicios para: ${foundCategories.map(c => c.categoria).join(', ')}`);
                                 for (const cat of foundCategories) {
                                     const items = (cat.servicios || []).map((s: any) => ({ label: s.titulo, price: s.precio }));
                                     const imageBuffer = await generateMenuImage(cat.categoria, items);
                                     const base64 = `data:image/png;base64,${imageBuffer.toString('base64')}`;
                                     if (!res.writableEnded) {
                                         res.write(`data: ${JSON.stringify({ media_url: base64, stage: 'displaying_menu' })}\n\n`);
-                                        console.log(`[Satori Streamed] Service List for ${cat.categoria} Success`);
                                     }
                                 }
                             }
                         }
                     } catch (toolErr) {
-                        console.error("[onStepFinish Tool Error]:", toolErr);
+                        console.error("[onStepFinish Tool Exception]:", toolErr);
                     }
                 }
             }
         });
 
-        // Initial Handshake for SSE
+        // Primer chunk para avisar al front que estamos vivos
         res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: "" } }], stage: 'chatting' })}\n\n`);
 
         let fullContent = "";
-        let chunks = 0;
         
-        console.log("[Stream Result] Starting textStream consumer...");
-        for await (const text of result.textStream) {
-            fullContent += text;
-            chunks++;
+        // Consumimos el stream de texto delta por delta
+        for await (const textDelta of result.textStream) {
+            fullContent += textDelta;
             if (!res.writableEnded) {
-                res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }], stage: 'chatting' })}\n\n`);
+                res.write(`data: ${JSON.stringify({
+                    choices: [{ delta: { content: textDelta } }],
+                    stage: 'chatting'
+                })}\n\n`);
             }
         }
 
-        console.log(`[AI Stream Done] Content Length: ${fullContent.length}, Chunks: ${chunks}`);
+        console.log(`[Stream End] Longitud: ${fullContent.length}, LeadId: ${leadId}`);
 
+        // Persistimos el log en DB si hay texto y lead
         if (leadId && fullContent.trim()) {
-            insertChatLog(leadId, 'assistant', fullContent, null, false).catch(e => console.error("[Log Error]:", e));
+            insertChatLog(leadId, 'assistant', fullContent, null, false).catch(e => console.error("[DB Log Error]:", e));
         }
 
         if (!res.writableEnded) {
@@ -152,8 +159,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
     } catch (err: any) {
-        console.error("[Fatal Chat Error]:", err);
-        const errorMsg = "Lo siento, hubo un error técnico. Por favor, intenta de nuevo.";
+        console.error("[Fatal Chat Handler Error]:", err);
+        const errorMsg = "Mmm, parece que perdí la conexión un segundo. ¿Me repetís lo último? 😊";
         if (!res.writableEnded) {
             res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: errorMsg } }], stage: 'error' })}\n\n`);
             res.write('data: [DONE]\n\n');
