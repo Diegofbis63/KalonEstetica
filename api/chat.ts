@@ -6,14 +6,14 @@ import { generateMenuImage } from './_services/imageGenerator.js';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-    // CORS
+    // CORS - Ampliado para evitar bloqueos
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS,PATCH,DELETE,PUT');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
 
     if (req.method === 'OPTIONS') return res.status(200).end();
 
-    // SSE Response Headers
+    // SSE Headers
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('X-Accel-Buffering', 'no');
@@ -23,12 +23,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     try {
         const { message, messages, userId: userIdRaw, clientPhone, identificationId: initId } = req.body || {};
-        const incomingMessage = message || "";
+        const incomingMessage = (message || "").trim();
         const idToIdentify = initId || userIdRaw || (typeof clientPhone === 'string' && clientPhone.length > 5 ? clientPhone : null);
         
         let leadId = null;
 
-        // Búsqueda de lead previo para contexto
+        // 1. Identificación de Lead
         if (idToIdentify && typeof idToIdentify === 'string') {
             const digitsOnly = idToIdentify.replace(/\D/g, '');
             if (digitsOnly.length >= 8 && !idToIdentify.includes('-')) {
@@ -36,8 +36,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 leadId = lead?.id || null;
             } 
             
-            // Si el mensaje actual es una presentación ("Soy Felipe"), ignoramos el ID de sesión previo para permitir registro nuevo
-            const looksLikeIntro = incomingMessage && incomingMessage.length < 50 && (
+            // Si el mensaje es una intro ("Soy Juan"), ignoramos leadId previo para permitir registro fresco
+            const looksLikeIntro = incomingMessage.length < 50 && (
                 incomingMessage.toLowerCase().includes('soy') || 
                 incomingMessage.toLowerCase().includes('nombre') || 
                 incomingMessage.toLowerCase().includes('llamo') || 
@@ -52,22 +52,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         const model = getKalonModel();
 
-        // Limpiamos mensajes y convertimos a formato Core (Gemini requiere model en vez de assistant)
+        // 2. Preparar Mensajes (Clave para Gemini)
         const rawHistory = Array.isArray(messages) ? messages : [];
-        const lastInHistory = rawHistory.length > 0 ? rawHistory[rawHistory.length - 1] : null;
+        // Filtramos mensajes vacíos o corruptos
+        const cleanHistory = rawHistory.filter((m: any) => m.content && m.role);
         
-        const preparedMessages = [...rawHistory];
+        // Evitamos duplicar el mensaje actual si ya está en el historial
+        const lastInHistory = cleanHistory.length > 0 ? cleanHistory[cleanHistory.length - 1] : null;
+        const preparedMessages = [...cleanHistory];
+        
         if (incomingMessage && (!lastInHistory || lastInHistory.content !== incomingMessage)) {
             preparedMessages.push({ role: 'user', content: incomingMessage });
         }
-        
-        const coreMessages = convertToCoreMessages(preparedMessages.slice(-10));
-        console.log(`[Chat] Requesting AI with ${coreMessages.length} messages. LeadId: ${leadId}`);
 
-        // Handshake inicial
-        if (!res.writableEnded) {
-            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: "" } }], stage: 'chatting' })}\n\n`);
+        // Si no hay mensajes, forzamos un inicio
+        if (preparedMessages.length === 0) {
+            preparedMessages.push({ role: 'user', content: 'Hola' });
         }
+
+        // CONVERSION CRÍTICA: SDK Gemini requiere model en vez de assistant
+        const coreMessages = convertToCoreMessages(preparedMessages.slice(-10));
+        
+        console.log(`[Chat] Starting Stream. Lead: ${leadId}, Msgs: ${coreMessages.length}, Last: "${incomingMessage}"`);
+
+        // 3. Handshake SSE
+        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: "" } }], stage: 'chatting' })}\n\n`);
 
         const result = streamText({
             model,
@@ -76,52 +85,72 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             tools: buildTools(leadId, DEFAULT_ORG_ID, initId),
             maxSteps: 5,
             onStepFinish: async (step) => {
-                // Captura dinámica del ID de lead si se registra en este paso
-                const regRes = step.toolResults.find(r => r.toolName === 'registrar_cliente')?.result as any;
-                if (regRes?.id) leadId = regRes.id;
+                console.log(`[Step] ${step.stepType} finished. Tools called: ${step.toolCalls.length}`);
+                
+                // Actualizar leadId si se registró en este paso
+                const foundReg = step.toolResults.find(r => r.toolName === 'registrar_cliente')?.result as any;
+                if (foundReg?.id) {
+                    leadId = foundReg.id;
+                    console.log(`[Identification] Lead caught in step: ${leadId}`);
+                }
 
-                // Inyección de imágenes Satori
+                // Procesar imágenes Satori
                 for (const call of step.toolCalls) {
-                    try {
-                        if (call.toolName === 'listar_categorias_principales') {
-                            const resTool = step.toolResults.find(r => r.toolCallId === call.toolCallId)?.result;
-                            if (Array.isArray(resTool)) {
-                                const items = resTool.map((c: any) => ({ label: c.nombre }));
-                                const imageBuffer = await generateMenuImage('NUESTRAS ESPECIALIDADES', items).catch(() => null);
-                                if (imageBuffer && !res.writableEnded) {
-                                    const base64 = `data:image/png;base64,${imageBuffer.toString('base64')}`;
-                                    res.write(`data: ${JSON.stringify({ media_url: base64, stage: 'satori_generated' })}\n\n`);
-                                }
-                            }
-                        }
-                        if (call.toolName === 'consultar_servicios') {
-                            const foundCategories = step.toolResults.find(r => r.toolCallId === call.toolCallId)?.result;
-                            if (Array.isArray(foundCategories)) {
-                                for (const cat of foundCategories) {
-                                    const items = (cat.servicios || []).map((s: any) => ({ label: s.titulo, price: s.precio }));
-                                    const imageBuffer = await generateMenuImage(cat.categoria, items).catch(() => null);
-                                    if (imageBuffer && !res.writableEnded) {
-                                        const base64 = `data:image/png;base64,${imageBuffer.toString('base64')}`;
+                    if (call.toolName === 'listar_categorias_principales' || call.toolName === 'consultar_servicios') {
+                        const toolRes = step.toolResults.find(r => r.toolCallId === call.toolCallId)?.result;
+                        if (Array.isArray(toolRes)) {
+                            try {
+                                if (call.toolName === 'listar_categorias_principales') {
+                                    const items = toolRes.map((c: any) => ({ label: c.nombre }));
+                                    const buf = await generateMenuImage('NUESTRAS ESPECIALIDADES', items).catch(() => null);
+                                    if (buf && !res.writableEnded) {
+                                        const base64 = `data:image/png;base64,${buf.toString('base64')}`;
                                         res.write(`data: ${JSON.stringify({ media_url: base64, stage: 'satori_generated' })}\n\n`);
                                     }
+                                } else {
+                                    for (const cat of toolRes) {
+                                        const items = (cat.servicios || []).map((s: any) => ({ label: s.titulo, price: s.precio }));
+                                        const buf = await generateMenuImage(cat.categoria, items).catch(() => null);
+                                        if (buf && !res.writableEnded) {
+                                            const base64 = `data:image/png;base64,${buf.toString('base64')}`;
+                                            res.write(`data: ${JSON.stringify({ media_url: base64, stage: 'satori_generated' })}\n\n`);
+                                        }
+                                    }
                                 }
+                            } catch (satoriErr) {
+                                console.error("[Satori Error]:", satoriErr);
                             }
                         }
-                    } catch (e) { console.error("[onStepFinish Error]:", e); }
+                    }
                 }
             }
         });
 
-        let fullContent = "";
-        for await (const textDelta of result.textStream) {
-            fullContent += textDelta;
-            if (!res.writableEnded) {
-                res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: textDelta } }], stage: 'chatting' })}\n\n`);
+        // 4. Consumo del Stream de Texto
+        let fullAssistantContent = "";
+        try {
+            for await (const chunk of result.textStream) {
+                fullAssistantContent += chunk;
+                if (!res.writableEnded) {
+                    res.write(`data: ${JSON.stringify({ 
+                        choices: [{ delta: { content: chunk } }], 
+                        stage: 'chatting' 
+                    })}\n\n`);
+                }
+            }
+        } catch (streamErr) {
+            console.error("[Stream Text Error]:", streamErr);
+            // Si falla el stream de texto, intentamos enviar lo que llevamos o un error
+            if (fullAssistantContent.length === 0 && !res.writableEnded) {
+                res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: "Ups, se me cortó la señal. ¿Me repetís?" } }], stage: 'error' })}\n\n`);
             }
         }
 
-        if (leadId && fullContent.trim()) {
-            await insertChatLog(leadId, 'assistant', fullContent, null, false).catch(console.error);
+        // 5. Finalización y Logs
+        if (leadId && fullAssistantContent.trim()) {
+            await insertChatLog(leadId, 'assistant', fullAssistantContent, null, false).catch(e => {
+                console.log("[DB Log Error]:", e);
+            });
         }
 
         if (!res.writableEnded) {
@@ -130,10 +159,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
     } catch (err: any) {
-        console.error("[Fatal Chat Handler Error]:", err);
-        const errorMsg = "Mmm, perdí un segundo la conexión. ¿Podés repetirme el nombre? 😊";
+        console.error("[Fatal Handler Error]:", err);
         if (!res.writableEnded) {
-            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: errorMsg } }], stage: 'error' })}\n\n`);
+            res.write(`data: ${JSON.stringify({ 
+                choices: [{ delta: { content: "Perdón, tuve un problema técnico. ¿Me decís tu nombre de nuevo?" } }], 
+                stage: 'error' 
+            })}\n\n`);
             res.write('data: [DONE]\n\n');
             res.end();
         }
