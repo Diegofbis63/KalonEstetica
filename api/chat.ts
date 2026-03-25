@@ -35,22 +35,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (idToIdentify && typeof idToIdentify === 'string') {
             const digitsOnly = idToIdentify.replace(/\D/g, '');
             
-            // If it's a phone number (mostly digits or short string)
+            // Prioridad: Teléfono ( identificación robusta)
             if (digitsOnly.length >= 8 && !idToIdentify.includes('-')) {
-                try {
-                    const lead = await findLeadByFlexiblePhone(digitsOnly);
-                    leadId = lead?.id || null;
-                    if (leadId) console.log("[Chat] Identified by Phone:", leadId);
-                } catch (e) { console.error("[Chat] Phone search error:", e); }
+                const lead = await findLeadByFlexiblePhone(digitsOnly).catch(() => null);
+                leadId = lead?.id || null;
             } 
             
-            // If not found yet and looks like a UUID (initId)
-            if (!leadId && (idToIdentify.includes('-') || idToIdentify.length > 20)) {
-                try {
-                    const lead = await findLeadByInitId(idToIdentify);
-                    leadId = lead?.id || null;
-                    if (leadId) console.log("[Chat] Identified by InitId:", leadId);
-                } catch (e) { console.error("[Chat] InitId search error:", e); }
+            // Si el cliente NO se presenta con nombre en este mensaje, intentamos recuperar por InitId
+            // Pero si el mensaje parece un registro (contiene nombre), ignoramos el InitId previo
+            const looksLikeIntro = incomingMessage && incomingMessage.length < 50 && (incomingMessage.toLowerCase().includes('soy') || incomingMessage.toLowerCase().includes('nombre') || incomingMessage.toLowerCase().includes('llamo') || incomingMessage.split(' ').length <= 4);
+            
+            if (!leadId && !looksLikeIntro && (idToIdentify.includes('-') || idToIdentify.length > 20)) {
+                const lead = await findLeadByInitId(idToIdentify).catch(() => null);
+                leadId = lead?.id || null;
             }
         }
 
@@ -83,7 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             system: getSystemPrompt(leadId),
             messages: coreMessages as any,
             tools: buildTools(leadId, DEFAULT_ORG_ID, initId),
-            maxSteps: 3,
+            maxSteps: 5,
             onStepFinish: async (step) => {
                 const stepText = step.text || "";
                 console.log(`[Step Done] Type: ${stepText ? 'text' : 'tool'}, Tools: ${step.toolCalls.length}`);
