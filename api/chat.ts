@@ -75,19 +75,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         
         console.log(`[AI Request Early] Lead: ${leadId}, Messages: ${coreMessages.length}, Incoming: "${incomingMessage}"`);
 
+        // Handshake inicial para mantener la conexión viva
+        if (!res.writableEnded) {
+            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: "" } }], stage: 'chatting' })}\n\n`);
+        }
+
         const result = streamText({
             model,
             system: getSystemPrompt(leadId),
-            messages: coreMessages as any,
+            messages: allMessages.slice(-10) as any, // convertToCoreMessages se asume en tiempo de ejecución o manual
             tools: buildTools(leadId, DEFAULT_ORG_ID, initId),
             maxSteps: 5,
         });
 
         let fullAssistantContent = "";
         
-        // Consumimos el stream completo nodo a nodo
-        for await (const chunk of (result as any).fullStream) {
-            try {
+        try {
+            // Consumimos el stream completo nodo a nodo
+            for await (const chunk of (result as any).fullStream) {
                 if (chunk.type === 'text-delta') {
                     const text = chunk.textDelta;
                     fullAssistantContent += text;
@@ -101,20 +106,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
                 if (chunk.type === 'tool-result') {
                     const { toolName, result: toolRes } = chunk;
-                    console.log(`[Tool Done] ${toolName}:`, !!toolRes);
+                    console.log(`[Tool Done] ${toolName}:`, toolRes ? 'SUCCESS' : 'EMPTY');
 
                     if (toolName === 'registrar_cliente' && (toolRes as any)?.id) {
                         leadId = (toolRes as any).id;
-                        console.log("[Chat] Converted Lead Updated:", leadId);
+                        console.log("[Chat] Lead ID updated during stream:", leadId);
                     }
 
                     if (toolName === 'listar_categorias_principales' && Array.isArray(toolRes)) {
-                        console.log("[Satori] Injecting Menu Image...");
-                        const items = toolRes.map((c: any) => ({ label: c.nombre }));
-                        const imageBuffer = await generateMenuImage('NUESTRAS ESPECIALIDADES', items).catch(() => null);
-                        if (imageBuffer && !res.writableEnded) {
-                            const base64 = `data:image/png;base64,${imageBuffer.toString('base64')}`;
-                            res.write(`data: ${JSON.stringify({ media_url: base64, stage: 'satori_generated' })}\n\n`);
+                        console.log("[Satori] Generating Main Menu...");
+                        try {
+                            const items = toolRes.map((c: any) => ({ label: c.nombre }));
+                            const imageBuffer = await generateMenuImage('NUESTRAS ESPECIALIDADES', items).catch(() => null);
+                            if (imageBuffer && !res.writableEnded) {
+                                const base64 = `data:image/png;base64,${imageBuffer.toString('base64')}`;
+                                res.write(`data: ${JSON.stringify({ media_url: base64, stage: 'satori_generated' })}\n\n`);
+                            }
+                        } catch (satoriErr) {
+                            console.error("[Satori Error]:", satoriErr);
                         }
                     }
 
@@ -129,15 +138,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         }
                     }
                 }
-            } catch (chunkErr) {
-                console.error("[FullStream Chunk Loop Error]:", chunkErr);
+            }
+        } catch (iterErr) {
+            console.error("[Stream Iteration Error]:", iterErr);
+            if (!res.writableEnded) {
+                res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: " " } }], stage: 'error' })}\n\n`);
             }
         }
 
         console.log(`[Stream Finalized] Lead: ${leadId}, Length: ${fullAssistantContent.length}`);
 
         if (leadId && fullAssistantContent.trim()) {
-            await insertChatLog(leadId, 'assistant', fullAssistantContent, null, false).catch(console.error);
+            await insertChatLog(leadId, 'assistant', fullAssistantContent, null, false).catch(e => {
+                console.error("[Final Log Error]:", e);
+            });
         }
 
         if (!res.writableEnded) {
@@ -147,7 +161,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     } catch (err: any) {
         console.error("[Fatal Chat Handler Error]:", err);
-        const errorMsg = "Mmm, perdí un segundo la conexión. ¿Podés repetirme el nombre? 😊";
+        const errorMsg = "Perdón, me distraje un segundo. ¿Me repetís tu nombre? 😊";
         if (!res.writableEnded) {
             res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: errorMsg } }], stage: 'error' })}\n\n`);
             res.write('data: [DONE]\n\n');

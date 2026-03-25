@@ -268,6 +268,19 @@ export default function KalonChat() {
             </div>
           </div>
         </div>
+
+        <button 
+          onClick={() => {
+            if (confirm("¿Quieres reiniciar la conversación? Se borrará el historial actual.")) {
+              sessionStorage.removeItem('kalon_chat_init_id');
+              window.location.reload();
+            }
+          }}
+          className="p-2 text-cream/20 hover:text-destructive hover:bg-destructive/10 rounded-xl transition-all"
+          title="Reiniciar chat"
+        >
+          <AlertTriangle className="w-4 h-4 rotate-180" />
+        </button>
       </div>
 
       {/* Messages */}
