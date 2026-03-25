@@ -81,73 +81,63 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             messages: coreMessages as any,
             tools: buildTools(leadId, DEFAULT_ORG_ID, initId),
             maxSteps: 5,
-            onStepFinish: async (step) => {
-                const stepText = step.text || "";
-                console.log(`[Step Done] Type: ${stepText ? 'text' : 'tool'}, Tools: ${step.toolCalls.length}`);
-                
-                // Si el modelo registró al cliente en este paso, intentamos capturar el nuevo ID para el logging final
-                const regResult = step.toolResults.find(r => r.toolName === 'registrar_cliente')?.result as any;
-                if (regResult?.success && regResult.id) {
-                    console.log("[Chat] NEW Lead Registered during stream:", regResult.id);
-                    leadId = regResult.id; // Actualizamos para el logging de onFinish
-                }
-
-                for (const call of step.toolCalls) {
-                    try {
-                        if (call.toolName === 'listar_categorias_principales') {
-                            const foundResult = step.toolResults.find(r => r.toolCallId === call.toolCallId)?.result;
-                            if (Array.isArray(foundResult)) {
-                                console.log(`[Satori] Generando Menú Principal (${foundResult.length} ítems)`);
-                                const items = foundResult.map((c: any) => ({ label: c.nombre }));
-                                const imageBuffer = await generateMenuImage('NUESTRAS ESPECIALIDADES', items);
-                                const base64 = `data:image/png;base64,${imageBuffer.toString('base64')}`;
-                                if (!res.writableEnded) {
-                                    res.write(`data: ${JSON.stringify({ media_url: base64, stage: 'displaying_menu' })}\n\n`);
-                                }
-                            }
-                        }
-
-                        if (call.toolName === 'consultar_servicios') {
-                            const foundCategories = step.toolResults.find(r => r.toolCallId === call.toolCallId)?.result;
-                            if (Array.isArray(foundCategories)) {
-                                for (const cat of foundCategories) {
-                                    const items = (cat.servicios || []).map((s: any) => ({ label: s.titulo, price: s.precio }));
-                                    const imageBuffer = await generateMenuImage(cat.categoria, items);
-                                    const base64 = `data:image/png;base64,${imageBuffer.toString('base64')}`;
-                                    if (!res.writableEnded) {
-                                        res.write(`data: ${JSON.stringify({ media_url: base64, stage: 'displaying_menu' })}\n\n`);
-                                    }
-                                }
-                            }
-                        }
-                    } catch (toolErr) {
-                        console.error("[onStepFinish Tool Exception]:", toolErr);
-                    }
-                }
-            }
         });
 
-        // Primer chunk para avisar al front que estamos vivos
-        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: "" } }], stage: 'chatting' })}\n\n`);
-
-        let fullContent = "";
+        let fullAssistantContent = "";
         
-        // Consumimos el stream de texto delta por delta
-        for await (const textDelta of result.textStream) {
-            fullContent += textDelta;
-            if (!res.writableEnded) {
-                res.write(`data: ${JSON.stringify({
-                    choices: [{ delta: { content: textDelta } }],
-                    stage: 'chatting'
-                })}\n\n`);
+        // Consumimos el stream completo nodo a nodo
+        for await (const chunk of (result as any).fullStream) {
+            try {
+                if (chunk.type === 'text-delta') {
+                    const text = chunk.textDelta;
+                    fullAssistantContent += text;
+                    if (!res.writableEnded) {
+                        res.write(`data: ${JSON.stringify({
+                            choices: [{ delta: { content: text } }],
+                            stage: 'chatting'
+                        })}\n\n`);
+                    }
+                }
+
+                if (chunk.type === 'tool-result') {
+                    const { toolName, result: toolRes } = chunk;
+                    console.log(`[Tool Done] ${toolName}:`, !!toolRes);
+
+                    if (toolName === 'registrar_cliente' && (toolRes as any)?.id) {
+                        leadId = (toolRes as any).id;
+                        console.log("[Chat] Converted Lead Updated:", leadId);
+                    }
+
+                    if (toolName === 'listar_categorias_principales' && Array.isArray(toolRes)) {
+                        console.log("[Satori] Injecting Menu Image...");
+                        const items = toolRes.map((c: any) => ({ label: c.nombre }));
+                        const imageBuffer = await generateMenuImage('NUESTRAS ESPECIALIDADES', items).catch(() => null);
+                        if (imageBuffer && !res.writableEnded) {
+                            const base64 = `data:image/png;base64,${imageBuffer.toString('base64')}`;
+                            res.write(`data: ${JSON.stringify({ media_url: base64, stage: 'satori_generated' })}\n\n`);
+                        }
+                    }
+
+                    if (toolName === 'consultar_servicios' && Array.isArray(toolRes)) {
+                        for (const cat of toolRes) {
+                            const items = (cat.servicios || []).map((s: any) => ({ label: s.titulo, price: s.precio }));
+                            const imageBuffer = await generateMenuImage(cat.categoria, items).catch(() => null);
+                            if (imageBuffer && !res.writableEnded) {
+                                const base64 = `data:image/png;base64,${imageBuffer.toString('base64')}`;
+                                res.write(`data: ${JSON.stringify({ media_url: base64, stage: 'satori_generated' })}\n\n`);
+                            }
+                        }
+                    }
+                }
+            } catch (chunkErr) {
+                console.error("[FullStream Chunk Loop Error]:", chunkErr);
             }
         }
 
-        console.log(`[Stream End] Longitud: ${fullContent.length}, LeadId: ${leadId}`);
+        console.log(`[Stream Finalized] Lead: ${leadId}, Length: ${fullAssistantContent.length}`);
 
-        // Persistimos el log en DB si hay texto y lead
-        if (leadId && fullContent.trim()) {
-            insertChatLog(leadId, 'assistant', fullContent, null, false).catch(e => console.error("[DB Log Error]:", e));
+        if (leadId && fullAssistantContent.trim()) {
+            await insertChatLog(leadId, 'assistant', fullAssistantContent, null, false).catch(console.error);
         }
 
         if (!res.writableEnded) {
@@ -157,7 +147,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     } catch (err: any) {
         console.error("[Fatal Chat Handler Error]:", err);
-        const errorMsg = "Mmm, parece que perdí la conexión un segundo. ¿Me repetís lo último? 😊";
+        const errorMsg = "Mmm, perdí un segundo la conexión. ¿Podés repetirme el nombre? 😊";
         if (!res.writableEnded) {
             res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: errorMsg } }], stage: 'error' })}\n\n`);
             res.write('data: [DONE]\n\n');
