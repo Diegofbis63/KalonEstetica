@@ -87,8 +87,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     const tr = chunk as any;
                     const toolName = tr.toolName || 'unknown';
                     const toolResult = tr.result ?? tr.output ?? tr.resultData ?? null;
-                    console.log(`[chat.ts] CAPTURED TOOL RESULT: ${toolName} (len: ${Array.isArray(toolResult) ? toolResult.length : 'not_array'})`);
+                    console.log(`[chat.ts] CAPTURED TOOL RESULT: ${toolName}`);
                     
+                    // SEGURIDAD NIVEL BUNKER: Si registra cliente, forzamos categorías para Satori
+                    if (toolName === 'registrar_cliente') {
+                        try {
+                            const { getCategories } = await import('./_services/db.js');
+                            const cats = await getCategories();
+                            if (cats && cats.length > 0) {
+                                console.log("[chat.ts] BUNKER: Auto-injecting categories for Satori");
+                                pendingSatoriItems.push({ toolName: 'listar_categorias_principales', data: cats });
+                            }
+                        } catch (e) {
+                            console.error("[chat.ts] Bunker injection failed:", e);
+                        }
+                    }
+
                     if (
                         (toolName === 'listar_categorias_principales' || toolName === 'consultar_servicios') &&
                         Array.isArray(toolResult) && toolResult.length > 0
