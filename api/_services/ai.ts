@@ -24,8 +24,8 @@ export const getKalonModel = () => {
         },
     });
 
-    // Gemini 1.5 Flash vía OpenRouter (rápido, barato, buen tool-calling)
-    return openrouter('google/gemini-1.5-flash');
+    // Gemini 2.0 Flash vía OpenRouter (rápido, barato, excelente tool-calling)
+    return openrouter('google/gemini-2.0-flash-001');
 };
 
 /**
