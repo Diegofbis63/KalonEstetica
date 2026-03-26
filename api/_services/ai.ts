@@ -1,20 +1,28 @@
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createOpenAI } from '@ai-sdk/openai';
 
 /**
- * Modelo de IA para KÂLON.
- * Usa Gemini 2.0 Flash (estable, rápido, excelente tool-calling).
+ * Modelo de IA para KÂLON — vía OpenRouter.
+ * 
+ * OpenRouter actúa como proxy y nos da acceso a Gemini Flash
+ * usando una API compatible con OpenAI.
  */
 export const getKalonModel = () => {
-    const rawKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    if (!rawKey) {
-        throw new Error("GOOGLE_GENERATIVE_AI_API_KEY no está configurada.");
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+        throw new Error("[ai.ts] CRITICAL: OPENROUTER_API_KEY no está configurada.");
     }
     
-    const google = createGoogleGenerativeAI({
-        apiKey: rawKey.trim(),
+    const openrouter = createOpenAI({
+        apiKey: apiKey.trim(),
+        baseURL: 'https://openrouter.ai/api/v1',
+        headers: {
+            'HTTP-Referer': 'https://kalon-estetica.vercel.app',
+            'X-Title': 'KALON Estetica Chatbot',
+        },
     });
 
-    return google('gemini-2.0-flash');
+    // Gemini 1.5 Flash vía OpenRouter (rápido, barato, buen tool-calling)
+    return openrouter('google/gemini-flash-1.5');
 };
 
 /**
@@ -22,7 +30,7 @@ export const getKalonModel = () => {
  * 
  * Reglas:
  * - NO generar el saludo de bienvenida (el frontend lo muestra estáticamente)
- * - El primer mensaje del usuario que llega acá ya es su RESPUESTA al saludo (ej: "Hola, soy Jose Perez")
+ * - El primer mensaje del usuario ya es su RESPUESTA al saludo (ej: "Hola, soy Jose Perez")
  * - NUNCA mostrar nombres de herramientas al usuario
  */
 export function getSystemPrompt(leadId: string | null = null, historyCount: number = 0) {

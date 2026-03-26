@@ -61,6 +61,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }, 25000);
 
         // --- 4. Start streaming ---
+        console.log(`[chat.ts] Calling streamText with ${coreMessages.length} core messages, leadId=${leadId}`);
+        console.log(`[chat.ts] System prompt length: ${systemPrompt.length}`);
+        
         const result = streamText({
             model,
             system: systemPrompt,
@@ -68,6 +71,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             tools,
             maxSteps: 4,
             abortSignal: controller.signal,
+            onStepFinish: (step) => {
+                console.log(`[chat.ts] Step finished: type=${step.stepType}, text=${step.text?.length || 0} chars, toolCalls=${step.toolCalls?.length || 0}`);
+            }
         });
 
         // Acumuladores
@@ -75,13 +81,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         let pendingSatoriItems: { toolName: string; data: unknown[] }[] = [];
 
         // --- 5. Consumir fullStream ---
+        let chunkCount = 0;
         try {
             for await (const chunk of result.fullStream) {
+                chunkCount++;
+                
                 if (chunk.type === 'text-delta') {
                     const text = chunk.textDelta;
                     fullText += text;
                     const payload = JSON.stringify({ choices: [{ delta: { content: text } }] });
                     res.write(`data: ${payload}\n\n`);
+                }
+                
+                if (chunk.type === 'tool-call') {
+                    console.log(`[chat.ts] Tool CALLED: ${(chunk as any).toolName}`);
                 }
 
                 if (chunk.type === 'tool-result') {
@@ -100,9 +113,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         } catch (streamErr: unknown) {
             const msg = streamErr instanceof Error ? streamErr.message : String(streamErr);
             if (msg.includes('abort')) {
-                console.warn('[chat.ts] Stream aborted by timeout');
+                console.warn(`[chat.ts] Stream aborted by timeout after ${chunkCount} chunks`);
             } else {
-                console.error('[chat.ts] Stream error:', msg);
+                console.error(`[chat.ts] Stream error after ${chunkCount} chunks:`, msg);
             }
         }
 
