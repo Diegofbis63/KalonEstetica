@@ -1,23 +1,14 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { streamText, convertToCoreMessages } from 'ai';
+import { streamText } from 'ai';
 import { getKalonModel, getSystemPrompt } from './_services/ai.js';
 import { buildTools } from './_services/ai_tools.js';
 import { findLeadByInitId } from './_services/db.js';
 import { generateMenuImage } from './_services/imageGenerator.js';
 
 /**
- * HANDLER DE CHAT KÂLON — VERSIÓN DEFINITIVA
- * 
- * Arquitectura:
- * 1. SSE Headers + body parsing
- * 2. Lead lookup (con timeout de 2s, si falla seguimos sin lead)
- * 3. streamText con AbortController de 25s globales
- * 4. Consumir fullStream: texto → SSE, tool-result → acumular para Satori post-stream
- * 5. Satori se ejecuta DESPUÉS del texto (no bloquea el stream)
- * 6. [DONE]
+ * HANDLER DE CHAT KÂLON — OpenRouter + AI SDK v6
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-    // --- SSE Setup ---
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
@@ -29,10 +20,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
         const { messages = [], identificationId } = req.body || {};
         const initId = identificationId || "guest";
-
         console.log(`[chat.ts] START — initId: ${initId}, messages: ${messages.length}`);
 
-        // --- 1. Lead Lookup (fast, best-effort) ---
+        // --- 1. Lead Lookup ---
         let leadId: string | null = null;
         if (initId && initId !== "guest" && initId.length > 10) {
             try {
@@ -43,65 +33,62 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 leadId = lead?.id || null;
                 console.log(`[chat.ts] Lead found: ${leadId || 'none'}`);
             } catch {
-                console.log('[chat.ts] Lead lookup failed, continuing without lead');
+                console.log('[chat.ts] Lead lookup failed');
             }
         }
 
-        // --- 2. Prepare AI Call ---
+        // --- 2. Prepare AI ---
         const model = getKalonModel();
-        const coreMessages = convertToCoreMessages(messages);
-        const systemPrompt = getSystemPrompt(leadId, coreMessages.length);
+        // AI SDK v6: messages se pasan directo, ya no existe convertToCoreMessages
+        const systemPrompt = getSystemPrompt(leadId, messages.length);
         const tools = buildTools(leadId, null, initId);
 
-        // --- 3. AbortController: 25s total timeout ---
+        console.log(`[chat.ts] Calling streamText — msgs: ${messages.length}, leadId: ${leadId}`);
+
+        // --- 3. Stream ---
         const controller = new AbortController();
         const timeout = setTimeout(() => {
-            console.warn('[chat.ts] GLOBAL TIMEOUT: 25s reached, aborting stream');
+            console.warn('[chat.ts] TIMEOUT 25s');
             controller.abort();
         }, 25000);
 
-        // --- 4. Start streaming ---
-        console.log(`[chat.ts] Calling streamText with ${coreMessages.length} core messages, leadId=${leadId}`);
-        console.log(`[chat.ts] System prompt length: ${systemPrompt.length}`);
-        
-        const result = streamText({
-            model,
-            system: systemPrompt,
-            messages: coreMessages,
-            tools,
-            maxSteps: 4,
-            abortSignal: controller.signal,
-            onStepFinish: (step) => {
-                console.log(`[chat.ts] Step finished: type=${step.stepType}, text=${step.text?.length || 0} chars, toolCalls=${step.toolCalls?.length || 0}`);
-            }
-        });
-
-        // Acumuladores
         let fullText = "";
-        let pendingSatoriItems: { toolName: string; data: unknown[] }[] = [];
-
-        // --- 5. Consumir fullStream ---
         let chunkCount = 0;
+        const pendingSatoriItems: { toolName: string; data: unknown[] }[] = [];
+
         try {
+            const result = streamText({
+                model,
+                system: systemPrompt,
+                messages, // AI SDK v6 acepta messages directamente
+                tools,
+                maxSteps: 4,
+                abortSignal: controller.signal,
+            });
+
             for await (const chunk of result.fullStream) {
                 chunkCount++;
-                
+
+                // AI SDK v6: text-delta usa .text, no .textDelta
                 if (chunk.type === 'text-delta') {
-                    const text = chunk.textDelta;
-                    fullText += text;
-                    const payload = JSON.stringify({ choices: [{ delta: { content: text } }] });
-                    res.write(`data: ${payload}\n\n`);
+                    const text = (chunk as any).textDelta || (chunk as any).text || '';
+                    if (text) {
+                        fullText += text;
+                        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`);
+                    }
                 }
-                
+
                 if (chunk.type === 'tool-call') {
-                    console.log(`[chat.ts] Tool CALLED: ${(chunk as any).toolName}`);
+                    const tc = chunk as any;
+                    console.log(`[chat.ts] TOOL CALL: ${tc.toolName || 'unknown'}(${JSON.stringify(tc.args || tc.input || {}).slice(0, 100)})`);
                 }
 
                 if (chunk.type === 'tool-result') {
-                    const { toolName, result: toolResult } = chunk;
-                    console.log(`[chat.ts] Tool completed: ${toolName}`);
+                    const tr = chunk as any;
+                    const toolName = tr.toolName || 'unknown';
+                    const toolResult = tr.result || tr.output || null;
+                    console.log(`[chat.ts] TOOL RESULT: ${toolName} → ${JSON.stringify(toolResult).slice(0, 200)}`);
                     
-                    // Acumular resultados para Satori DESPUÉS del stream de texto
                     if (
                         (toolName === 'listar_categorias_principales' || toolName === 'consultar_servicios') &&
                         Array.isArray(toolResult) && toolResult.length > 0
@@ -109,57 +96,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         pendingSatoriItems.push({ toolName, data: toolResult });
                     }
                 }
+
+                if (chunk.type === 'error') {
+                    console.error(`[chat.ts] ERROR CHUNK:`, JSON.stringify(chunk));
+                }
             }
         } catch (streamErr: unknown) {
-            const msg = streamErr instanceof Error ? streamErr.message : String(streamErr);
-            if (msg.includes('abort')) {
-                console.warn(`[chat.ts] Stream aborted by timeout after ${chunkCount} chunks`);
-            } else {
-                console.error(`[chat.ts] Stream error after ${chunkCount} chunks:`, msg);
+            const errMsg = streamErr instanceof Error ? streamErr.message : String(streamErr);
+            const errStack = streamErr instanceof Error ? streamErr.stack : '';
+            console.error(`[chat.ts] STREAM CATCH — chunks: ${chunkCount}, error: ${errMsg}`);
+            if (errStack) console.error(`[chat.ts] STACK: ${errStack}`);
+            
+            if (fullText.length === 0) {
+                res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: "Disculpá, tuve un problema técnico. ¿Podés intentar de nuevo? 🙏" } }] })}\n\n`);
             }
         }
 
         clearTimeout(timeout);
 
-        // --- 6. Post-stream: Generar imágenes Satori sin bloquear ---
+        // --- 4. Satori post-stream ---
         for (const item of pendingSatoriItems) {
             try {
-                const title = item.toolName === 'listar_categorias_principales'
-                    ? 'NUESTRAS ESPECIALIDADES'
-                    : 'SERVICIOS DISPONIBLES';
-                
-                const menuItems = item.data.map((r: any) => ({
+                const title = item.toolName === 'listar_categorias_principales' ? 'NUESTRAS ESPECIALIDADES' : 'SERVICIOS DISPONIBLES';
+                const menuItems = (item.data as any[]).map((r) => ({
                     label: r.nombre || r.name || r.categoria || 'Servicio',
                     price: r.precio || r.price || undefined
                 }));
-
                 const buf = await generateMenuImage(title, menuItems);
                 if (buf) {
-                    const base64 = `data:image/png;base64,${Buffer.from(buf).toString('base64')}`;
-                    res.write(`data: ${JSON.stringify({ media_url: base64 })}\n\n`);
+                    res.write(`data: ${JSON.stringify({ media_url: `data:image/png;base64,${Buffer.from(buf).toString('base64')}` })}\n\n`);
                 }
-            } catch (satoriErr) {
-                console.error('[chat.ts] Satori generation failed (non-blocking):', satoriErr);
+            } catch (e) {
+                console.error('[chat.ts] Satori fail:', e);
             }
         }
 
-        // --- 7. Cierre limpio ---
-        console.log(`[chat.ts] DONE — text length: ${fullText.length}, satori items: ${pendingSatoriItems.length}`);
+        console.log(`[chat.ts] DONE — text: ${fullText.length}, chunks: ${chunkCount}, satori: ${pendingSatoriItems.length}`);
         res.write(`data: [DONE]\n\n`);
         res.end();
 
     } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : String(error);
-        console.error('[chat.ts] FATAL ERROR:', msg);
-        
-        // Intentar enviar un mensaje de error al cliente
+        console.error('[chat.ts] FATAL:', msg);
         try {
-            res.write(`data: ${JSON.stringify({
-                choices: [{ delta: { content: "Disculpá, tuve un problema técnico. ¿Podés intentar de nuevo? 🙏" } }]
-            })}\n\n`);
+            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: "Disculpá, hubo un error. ¿Podés intentar de nuevo? 🙏" } }] })}\n\n`);
             res.write(`data: [DONE]\n\n`);
-        } catch { /* response already closed */ }
-        
+        } catch { /* closed */ }
         res.end();
     }
 }

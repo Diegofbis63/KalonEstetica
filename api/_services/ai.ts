@@ -7,10 +7,13 @@ import { createOpenAI } from '@ai-sdk/openai';
  * usando una API compatible con OpenAI.
  */
 export const getKalonModel = () => {
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
+    const rawKey = process.env.OPENROUTER_API_KEY;
+    if (!rawKey) {
         throw new Error("[ai.ts] CRITICAL: OPENROUTER_API_KEY no está configurada.");
     }
+    
+    const apiKey = rawKey.trim().replace(/[\r\n]/g, '');
+    console.log(`[ai.ts] OpenRouter key loaded: ${apiKey.slice(0, 12)}...${apiKey.slice(-4)} (${apiKey.length} chars)`);
     
     const openrouter = createOpenAI({
         apiKey: apiKey.trim(),
