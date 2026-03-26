@@ -18,30 +18,45 @@ if (!connectionString) {
 export const sql = neon(connectionString!);
 export const db = drizzle(sql, { schema });
 
+// --- HELPERS ---
+const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> => {
+    return Promise.race([
+        promise,
+        new Promise<T>((resolve) => setTimeout(() => {
+            console.warn(`[db.ts] TIMEOUT: Operation exceeded ${ms}ms. Falling back.`);
+            resolve(fallback);
+        }, ms))
+    ]);
+};
+
 // --- CATEGORIES ---
 export async function getCategories(): Promise<Category[]> {
     console.log("[db.ts] Fetching categories...");
-    const results = await db.query.categories.findMany({
-        where: eq(schema.categories.active, true),
-        orderBy: [asc(schema.categories.sort_order)]
-    });
+    const results = await withTimeout(
+        db.query.categories.findMany({
+            where: eq(schema.categories.active, true),
+            orderBy: [asc(schema.categories.sort_order)]
+        }),
+        3000, []
+    );
     return results as unknown as Category[];
 }
 
 // --- SERVICES ---
 export async function getActiveServices(): Promise<Service[]> {
     console.log("[db.ts] Fetching active services...");
-    const results = await db.query.services.findMany({
-        where: eq(schema.services.active, true),
-        with: {
-            category: true
-        },
-        orderBy: [asc(schema.services.sort_order)]
-    });
+    const results = await withTimeout(
+        db.query.services.findMany({
+            where: eq(schema.services.active, true),
+            with: { category: true },
+            orderBy: [asc(schema.services.sort_order)]
+        }),
+        3000, []
+    );
     
     return results.map(s => ({
         ...s,
-        category_name: s.category?.name || "Servicio",
+        category_name: (s as any).category?.name || "Servicio",
         duration: s.duration || `${s.duration_min} min`
     })) as unknown as Service[];
 }
@@ -51,153 +66,108 @@ export async function getLeadByPhone(phone: string) {
     console.log(`[db.ts] Searching lead by phone: ${phone}`);
     const normalized = phone.replace(/\D/g, '');
     
-    // Búsqueda flexible usando SQL crudo dentro de Drizzle para mayor precisión en JSONB
-    const results = await db.select()
-        .from(schema.leads)
-        .where(drizzleSql`regexp_replace(${schema.leads.contact_info}->>'phone', '\\D', '', 'g') LIKE ${'%' + normalized}`)
-        .limit(1);
-        
-    return results.length > 0 ? results[0] : null;
-}
-
-export async function findLeadByFlexiblePhone(phone: string) {
-    const normalized = phone.replace(/\D/g, '').slice(-10);
-    if (!normalized || normalized.length < 7) return null;
-    
-    console.log(`[db.ts] Searching lead by last 10 digits: ${normalized}`);
-    const results = await db.select()
-        .from(schema.leads)
-        .where(drizzleSql`regexp_replace(${schema.leads.contact_info}->>'phone', '\\D', '', 'g') LIKE ${'%' + normalized}`)
-        .limit(1);
+    const results = await withTimeout(
+        db.select().from(schema.leads)
+            .where(drizzleSql`regexp_replace(${schema.leads.contact_info}->>'phone', '\\D', '', 'g') LIKE ${'%' + normalized}`)
+            .limit(1),
+        2500, []
+    );
         
     return results.length > 0 ? results[0] : null;
 }
 
 export async function findLeadByInitId(initId: string) {
-    if (!initId || typeof initId !== 'string' || initId.length < 5) return null;
-    console.log(`[db.ts] Searching lead by robust initId: ${initId}`);
-    const results = await db.select()
-        .from(schema.leads)
-        .where(drizzleSql`${schema.leads.contact_info}->>'initId' = ${initId}`)
-        .limit(1);
+    if (!initId || initId.length < 5) return null;
+    console.log(`[db.ts] Searching lead by initId: ${initId}`);
+    
+    // Usamos findFirst que es más eficiente en Neon
+    const result = await withTimeout(
+        db.query.leads.findFirst({
+            where: drizzleSql`(${schema.leads.contact_info}->>'initId') = ${initId}`
+        }),
+        2000, // 2s timeout
+        null
+    );
         
-    return results.length > 0 ? results[0] : null;
+    return result;
 }
 
 export async function getChatHistory(leadId: string) {
     console.log(`[db.ts] Fetching chat history for lead: ${leadId}`);
-    return await db.query.chat_logs.findMany({
-        where: eq(schema.chat_logs.lead_id, leadId),
-        orderBy: [asc(schema.chat_logs.created_at)]
-    });
+    return await withTimeout(
+        db.query.chat_logs.findMany({
+            where: eq(schema.chat_logs.lead_id, leadId),
+            orderBy: [asc(schema.chat_logs.created_at)]
+        }),
+        3000, []
+    );
 }
 
-export async function updateLeadName(leadId: string, name: string) {
-    console.log(`[db.ts] Updating lead ${leadId} name to: ${name}`);
-    return await db.update(schema.leads)
-        .set({ client_name: name, updated_at: new Date() })
-        .where(eq(schema.leads.id, leadId));
-}
-
-export async function insertChatLog(leadId: string, role: string, content: string, mediaUrl: string | null, sentToWhatsapp: boolean, mediaData?: string | null) {
-    console.log(`[db.ts] Inserting chat log for lead ${leadId} (${role})`);
-    return await db.insert(schema.chat_logs).values({
-        lead_id: leadId,
-        role,
-        content,
-        media_url: mediaUrl,
-        media_data: mediaData || null,
-        sent_to_whatsapp: sentToWhatsapp
-    });
-}
-
-export async function createLead(orgId: string, name: string, contactInfo: ContactInfo) {
+export async function createLead(orgId: string | null, name: string, contactInfo: ContactInfo) {
     console.log(`[db.ts] Creating a new lead for: ${name}`);
-    const results = await db.insert(schema.leads).values({
-        organization_id: orgId,
-        client_name: name,
-        contact_info: contactInfo,
-        status: 'new',
-        is_bot_enabled: true,
-        chat_history: []
-    }).returning({ id: schema.leads.id });
+    const results = await withTimeout(
+        db.insert(schema.leads).values({
+            organization_id: orgId || null,
+            client_name: name,
+            contact_info: contactInfo,
+            status: 'new',
+            is_bot_enabled: true,
+            chat_history: []
+        }).returning({ id: schema.leads.id }),
+        3500, []
+    );
     
-    return results[0];
-}
-
-// --- APPOINTMENTS ---
-export async function getAppointmentsForDate(dateStr: string) {
-    console.log(`[db.ts] Checking appointments for date: ${dateStr}`);
-    const results = await db.select({
-        date_time: schema.appointments.date_time,
-        staff_id: schema.appointments.staff_id
-    })
-    .from(schema.appointments)
-    .where(and(
-        drizzleSql`${schema.appointments.date_time}::date = ${dateStr}`,
-        drizzleSql`${schema.appointments.status} != 'canceled'`
-    ));
-    return results;
-}
-
-// --- STAFF ---
-export async function getStaffByCategory(categoryId: string) {
-    console.log(`[db.ts] Fetching staff for category: ${categoryId}`);
-    const results = await db.select({
-        id: schema.staff.id,
-        name: schema.staff.name,
-        role: schema.staff.role
-    })
-    .from(schema.staff)
-    .innerJoin(schema.staff_specialties, eq(schema.staff.id, schema.staff_specialties.staff_id))
-    .where(and(
-        eq(schema.staff_specialties.category_id, categoryId),
-        eq(schema.staff.is_active, true)
-    ));
-    return results;
-}
-
-export async function getAllStaff() {
-    return await db.select().from(schema.staff).where(eq(schema.staff.is_active, true));
-}
-
-export async function createAppointment(leadId: string, orgId: string, dateTime: string, catNames: string, price: number, duration: number, selectedServices: Service[]) {
-    console.log(`[db.ts] Creating appointment for lead ${leadId} at ${dateTime}`);
-    return await db.insert(schema.appointments).values({
-        lead_id: leadId,
-        organization_id: orgId,
-        date_time: new Date(dateTime),
-        service_type: catNames,
-        status: 'confirmed',
-        total_price: price.toString(),
-        total_duration: duration,
-        selected_services: selectedServices
-    });
+    return results[0] || { id: "temporary-" + Date.now() };
 }
 
 // --- UPDATES ---
-export async function markLeadAsConverted(leadId: string) {
-    console.log(`[db.ts] Marking lead ${leadId} as converted`);
-    return await db.update(schema.leads)
-        .set({ status: 'converted', updated_at: new Date() })
-        .where(eq(schema.leads.id, leadId));
-}
-
 export async function updateLeadState(leadId: string, state: ConvState) {
     console.log(`[db.ts] Updating lead ${leadId} current_state`);
-    return await db.update(schema.leads)
-        .set({ current_state: state, updated_at: new Date() })
-        .where(eq(schema.leads.id, leadId));
+    return await withTimeout(
+        db.update(schema.leads)
+            .set({ current_state: state, updated_at: new Date() })
+            .where(eq(schema.leads.id, leadId)),
+        3000, null
+    );
 }
 
 // --- SLOTS ---
 export async function getAvailableSlotsFromDB(categoryId: string, startDate: Date, endDate: Date) {
-    console.log(`[db.ts] Calling get_available_slots in DB for category: ${categoryId}`);
+    console.log(`[db.ts] Calling availability DB for category: ${categoryId}`);
     const query = drizzleSql`
         SELECT slot_time as "slot_time", professional_id as "staff_id"
         FROM get_available_slots(${categoryId}, ${startDate.toISOString()}, ${endDate.toISOString()}, 30)
         ORDER BY slot_time ASC
     `;
-    const results = await db.execute(query);
-    return results.rows as unknown as { slot_time: Date, staff_id: string }[];
+    const results = await withTimeout(db.execute(query), 5000, { rows: [] });
+    return (results.rows as any) || [];
+}
+
+export async function createAppointment(leadId: string, orgId: string | null, dateTime: string, catNames: string, price: number, duration: number, selectedServices: Service[]) {
+    console.log(`[db.ts] Creating appointment for lead ${leadId}`);
+    return await withTimeout(
+        db.insert(schema.appointments).values({
+            lead_id: leadId,
+            organization_id: orgId || null,
+            date_time: new Date(dateTime),
+            service_type: catNames,
+            status: 'confirmed',
+            total_price: price.toString(),
+            total_duration: duration,
+            selected_services: selectedServices
+        }),
+        4000, null
+    );
+}
+
+export async function getStaffByCategory(categoryId: string) {
+    console.log(`[db.ts] Fetching staff for category: ${categoryId}`);
+    const results = await withTimeout(
+        db.select({ id: schema.staff.id, name: schema.staff.name })
+            .from(schema.staff)
+            .innerJoin(schema.staff_specialties, eq(schema.staff.id, schema.staff_specialties.staff_id))
+            .where(and(eq(schema.staff_specialties.category_id, categoryId), eq(schema.staff.is_active, true))),
+        3000, []
+    );
+    return results;
 }
