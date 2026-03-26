@@ -86,13 +86,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 if (chunk.type === 'tool-result') {
                     const tr = chunk as any;
                     const toolName = tr.toolName || 'unknown';
-                    const toolResult = tr.result || tr.output || null;
-                    console.log(`[chat.ts] TOOL RESULT: ${toolName} → ${JSON.stringify(toolResult).slice(0, 200)}`);
+                    const toolResult = tr.result ?? tr.output ?? tr.resultData ?? null;
+                    console.log(`[chat.ts] CAPTURED TOOL RESULT: ${toolName} (len: ${Array.isArray(toolResult) ? toolResult.length : 'not_array'})`);
                     
                     if (
                         (toolName === 'listar_categorias_principales' || toolName === 'consultar_servicios') &&
                         Array.isArray(toolResult) && toolResult.length > 0
                     ) {
+                        console.log(`[chat.ts] ADDING TO SATORI QUEUE: ${toolName}`);
                         pendingSatoriItems.push({ toolName, data: toolResult });
                     }
                 }
