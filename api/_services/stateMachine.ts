@@ -50,8 +50,10 @@ export interface Service {
     id: string;
     category_id: string;
     title: string;
+    description?: string;
     price: number | string;
     duration: string;
+    active: boolean;
     category_name?: string;
 }
 

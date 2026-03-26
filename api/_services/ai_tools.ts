@@ -97,20 +97,25 @@ export const buildTools = (leadId: string | null, orgId: string | null, initId?:
                     }];
                 }
 
-                return filteredCats.map(cat => {
-                    const catServices = services.filter(s => s.category_id === cat.id);
-                    return {
-                        categoria: cat.name,
-                        id_categoria: cat.id,
-                        servicios: catServices.map((s, i) => ({
-                            numero: i + 1,
+                const allMatchServices: any[] = [];
+                filteredCats.forEach(cat => {
+                    const catServices = services.filter(s => s.category_id === cat.id && s.active);
+                    catServices.forEach(s => {
+                        allMatchServices.push({
+                            label: s.title,
+                            price: s.price,
                             id: s.id,
-                            titulo: s.title,
-                            precio: s.price,
-                            duracion: s.duration || '30 min'
-                        }))
-                    };
+                            category: cat.name
+                        });
+                    });
                 });
+
+                if (allMatchServices.length === 0) {
+                    return [{ error: `No hay servicios activos en ${filteredCats[0].name}.` }];
+                }
+
+                console.log(`[Tool:consultar_servicios] Found ${allMatchServices.length} services for ${categoriaNombre}`);
+                return allMatchServices;
             } catch (err) {
                 console.error('[Tool:consultar_servicios] ERROR:', err);
                 return [{ error: 'No se pudieron cargar los servicios.' }];

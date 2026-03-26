@@ -102,6 +102,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
             if (!lead) return res.status(404).json({ error: 'Lead no encontrado' });
 
+            /*
+            //## REGLAS INQUEBRANTABLES
+            1. **FLUJO DE REGISTRO**: 
+               - Si no conocés al cliente: pedí nombre y apellido.
+               - Una vez que tengas el nombre, ejecutá `registrar_cliente`.
+               - **INMEDIATAMENTE DESPUÉS** de que `registrar_cliente` responda éxito, **DEBÉS** ejecutar `listar_categorias_principales`. NO esperes a que el cliente te lo pida. Es automático.
+               - Solo después de ejecutar AMBAS herramientas, saludá y decí: "Acá tenés nuestras especialidades...".
+
+            2. **CERO REDUNDANCIA**: 
+               - No escribas la lista de servicios o categorías en texto. Satori genera la imagen automáticamente con los resultados de las herramientas.
+               - Tu texto solo debe saludar y guiar: "Elegí por número o nombre 👇".
+
+            3. **MULTISELECCIÓN**: Si el cliente elige varios (ej: "1 y 3"), pasale los IDs correspondientes a `consultar_disponibilidad`.
+            */
             // RBAC check
             const authUser = user as any;
             const isAuthorized = authUser.role === 'admin' || authUser.permissions?.includes(lead.category?.name);
