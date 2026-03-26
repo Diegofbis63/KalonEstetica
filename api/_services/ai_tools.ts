@@ -10,63 +10,70 @@ import {
     createAppointment
 } from './db.js';
 
-export const buildTools = (leadId: string | null, orgId: string, initId?: string | null) => ({
+/**
+ * Herramientas del Chatbot KÂLON.
+ * 
+ * Cada herramienta:
+ * - Tiene try-catch propio (NUNCA crashea el stream)
+ * - Retorna objetos simples que la IA puede leer y presentar
+ * - Los logs son internos, no se exponen al usuario
+ */
+export const buildTools = (leadId: string | null, orgId: string | null, initId?: string | null) => ({
+    
     registrar_cliente: tool({
-        description: 'Crea un nuevo cliente (lead) en la base de datos. Úsalo en cuanto el cliente proporcione su Nombre o Nombre y Apellido al inicio. Es vital capturar ambos si están presentes.',
+        description: 'Registra un nuevo cliente en KÂLON. Usalo cuando el cliente te diga su nombre y apellido.',
         parameters: z.object({
-            nombre: z.string().describe('El nombre de pila del cliente. Si el cliente da su nombre completo (ej: "Juan Perez"), extrae SOLO el nombre de pila aquí ("Juan").'),
-            apellido: z.string().describe('El apellido del cliente. Si el cliente dio su nombre y apellido juntos en el mensaje anterior (ej: "Juan Perez"), DEBES extraer el apellido aquí ("Perez"). No lo dejes vacío si ya lo proporcionó.'),
-            telefono: z.string().optional().describe('Teléfono de contacto.'),
-            initId: z.string().optional().describe('ID de inicialización del chat (opcional).'),
-        }) as any,
-        execute: async (args: { nombre: string; apellido: string; telefono?: string; initId?: string }) => {
-            const { nombre, apellido, telefono, initId: argInitId } = args;
+            nombre: z.string().describe('Nombre de pila del cliente'),
+            apellido: z.string().describe('Apellido del cliente'),
+        }),
+        execute: async ({ nombre, apellido }) => {
             try {
                 const fullName = `${nombre} ${apellido}`.trim();
                 const contactInfo: ContactInfo = { 
-                    phone: telefono || "Sin teléfono", 
+                    phone: "Sin teléfono", 
                     source: "web_chatbot",
-                    initId: argInitId || initId || null
+                    initId: initId || null
                 };
                 const newLead = await createLead(orgId, fullName, contactInfo);
-                console.log("[Tool] Created Lead with InitId:", newLead.id, initId);
+                console.log(`[Tool:registrar_cliente] Lead creado: ${newLead.id} (${fullName})`);
                 return { 
                     success: true, 
-                    id: newLead.id, 
-                    mensaje: `Cliente ${fullName} registrado con éxito. Ya podés informarle precios o agendar turnos.` 
+                    leadId: newLead.id, 
+                    nombre: fullName,
+                    mensaje: `Cliente ${fullName} registrado exitosamente.` 
                 };
-            } catch (err: unknown) {
-                console.error('[AI Tool] Error en registrar_cliente:', err);
-                return { error: 'Error al registrar cliente: ' + (err instanceof Error ? err.message : String(err)) };
+            } catch (err) {
+                console.error('[Tool:registrar_cliente] ERROR:', err);
+                return { success: false, error: 'No se pudo registrar al cliente. Intentá de nuevo.' };
             }
         }
     }),
 
     listar_categorias_principales: tool({
-        description: 'Obtiene el listado de las categorías principales de servicios de KÂLON (ej: Depilación, Masajes, Facial). Úsalo al inicio para mostrar el menú de especialidades al cliente.',
-        parameters: z.object({}) as any,
+        description: 'Lista las categorías principales de servicios de KÂLON (ej: Depilación, Pestañas, Uñas, etc). Usalo después de registrar al cliente para mostrarle el menú.',
+        parameters: z.object({}),
         execute: async () => {
             try {
                 const categories = await getCategories();
-                return categories.map(c => ({
-                    id: c.id,
+                console.log(`[Tool:listar_categorias] ${categories.length} categorías encontradas`);
+                return categories.map((c, i) => ({
+                    numero: i + 1,
                     nombre: c.name,
-                    slug: (c as any).slug
-                })) as any;
-            } catch (err: any) {
-                console.error('[AI Tool] Error in listar_categorias_principales:', err);
-                throw err;
+                    id: c.id
+                }));
+            } catch (err) {
+                console.error('[Tool:listar_categorias] ERROR:', err);
+                return [{ error: 'No se pudieron cargar las categorías.' }];
             }
         }
     }),
 
     consultar_servicios: tool({
-        description: 'Devuelve el desglose detallado de todos los servicios específicos dentro de cada categoría con sus precios e IDs. Úsalo cuando el cliente ya eligió una categoría o quiere ver precios específicos.',
+        description: 'Muestra los servicios específicos con precios dentro de una categoría. Usalo cuando el cliente elige una categoría del menú.',
         parameters: z.object({
-            categoriaId: z.string().optional().describe('Opcional. ID de una categoría específica para filtrar resultados.')
-        }) as any,
-        execute: async (args: { categoriaId?: string }) => {
-            const { categoriaId } = args;
+            categoriaId: z.string().optional().describe('UUID de la categoría a consultar. Si no se especifica, muestra todos.')
+        }),
+        execute: async ({ categoriaId }) => {
             try {
                 const [categories, services] = await Promise.all([
                     getCategories(),
@@ -77,109 +84,105 @@ export const buildTools = (leadId: string | null, orgId: string, initId?: string
                     ? categories.filter(c => c.id === categoriaId)
                     : categories;
 
-                const result = filteredCats.map(cat => {
+                return filteredCats.map(cat => {
                     const catServices = services.filter(s => s.category_id === cat.id);
                     return {
                         categoria: cat.name,
                         id_categoria: cat.id,
-                        servicios: catServices.map(s => {
-                            const rawDuration = (s as any).duration_min || parseInt((s as any).duration) || 30;
-                            return {
-                                id: s.id,
-                                titulo: s.title,
-                                precio: s.price,
-                                duracion_minutos: typeof rawDuration === 'number' ? rawDuration : 30
-                            };
-                        })
+                        servicios: catServices.map((s, i) => ({
+                            numero: i + 1,
+                            id: s.id,
+                            titulo: s.title,
+                            precio: s.price,
+                            duracion: s.duration || '30 min'
+                        }))
                     };
                 });
-                return result as any;
-            } catch (err: any) {
-                console.error('[AI Tool] Error in consultar_servicios:', err);
-                throw err;
+            } catch (err) {
+                console.error('[Tool:consultar_servicios] ERROR:', err);
+                return [{ error: 'No se pudieron cargar los servicios.' }];
             }
         }
     }),
 
     consultar_disponibilidad: tool({
-        description: 'Busca horarios disponibles reales para uno o más servicios. SIEMPRE debes usar esta herramienta antes de confirmar un horario con el cliente.',
+        description: 'Busca horarios disponibles para un servicio en una fecha específica.',
         parameters: z.object({
-            categoriaId: z.string().describe('El ID de la categoría principal (UUID) a la que pertenece el servicio requerido.'),
-            fecha: z.string().describe('La fecha a consultar en formato YYYY-MM-DD. Si el cliente dice "mañana", debes calcular la fecha exacta basándote en que hoy es la fecha actual. ¡Obligatorio!'),
-        }) as any,
-        execute: async (args: { categoriaId: string; fecha: string }) => {
-            const { categoriaId, fecha } = args;
-            const staff = await getStaffByCategory(categoriaId);
-            if (staff.length === 0) {
-                return { error: 'No hay profesionales disponibles que realicen este tipo de servicio.' };
-            }
+            categoriaId: z.string().describe('UUID de la categoría del servicio'),
+            fecha: z.string().describe('Fecha en formato YYYY-MM-DD'),
+        }),
+        execute: async ({ categoriaId, fecha }) => {
+            try {
+                const staff = await getStaffByCategory(categoriaId);
+                if (staff.length === 0) {
+                    return { disponible: false, mensaje: 'No hay profesionales para este servicio.' };
+                }
 
-            const searchStart = new Date(fecha + "T00:00:00");
-            const searchEnd = new Date(searchStart);
-            searchEnd.setDate(searchEnd.getDate() + 1);
+                const start = new Date(fecha + "T00:00:00");
+                const end = new Date(start);
+                end.setDate(end.getDate() + 1);
 
-            const slots = await getAvailableSlotsFromDB(categoriaId, searchStart, searchEnd);
-            
-            if (slots.length === 0) {
-                return { mensaje: 'No hay disponibilidad para esa fecha exacta. Por favor ofrece otro día u otro horario.' };
-            }
+                const slots = await getAvailableSlotsFromDB(categoriaId, start, end);
+                
+                if (!slots || slots.length === 0) {
+                    return { disponible: false, mensaje: 'No hay horarios disponibles para esa fecha.' };
+                }
 
-            const availableSlots = slots.slice(0, 8).map(s => {
-                const dateObj = new Date(s.slot_time);
                 return {
-                    fecha: dateObj.toISOString().split('T')[0],
-                    hora: dateObj.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Cordoba', hour12: false }),
-                    staff_id: s.staff_id
+                    disponible: true,
+                    fecha,
+                    horarios: slots.slice(0, 8).map(s => {
+                        const d = new Date(s.slot_time);
+                        return {
+                            hora: d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }),
+                            staff_id: s.staff_id
+                        };
+                    })
                 };
-            });
-
-            return { 
-                mensaje: 'Horarios encontrados con éxito.', 
-                horarios_disponibles: availableSlots 
-            };
+            } catch (err) {
+                console.error('[Tool:consultar_disponibilidad] ERROR:', err);
+                return { disponible: false, error: 'Error buscando disponibilidad.' };
+            }
         }
     }),
 
     agendar_turno: tool({
-        description: 'Programa y guarda un turno en la base de datos de manera definitiva. REQUIERE que tengas el ID del servicio, fecha, hora y datos del cliente.',
+        description: 'Confirma y agenda un turno en la base de datos.',
         parameters: z.object({
-            serviceIds: z.array(z.string()).describe('Array con los IDs exactos de los servicios elegidos.'),
-            dateTimeIso: z.string().describe('Fecha y hora del turno en formato ISO, ej: "2024-06-25T15:00:00".'),
-        }) as any,
-        execute: async (args: { serviceIds: string[]; dateTimeIso: string }) => {
-            const { serviceIds, dateTimeIso } = args;
+            serviceIds: z.array(z.string()).describe('IDs de los servicios elegidos'),
+            dateTimeIso: z.string().describe('Fecha y hora en ISO, ej: "2026-03-27T15:00:00"'),
+        }),
+        execute: async ({ serviceIds, dateTimeIso }) => {
             if (!leadId) {
-                return { error: 'Falla al agendar: No hay un ID de lead (cliente) identificado. Pide su nombre y apellido primero.' };
+                return { success: false, error: 'Primero necesito el nombre del cliente para agendar.' };
             }
-
             try {
                 const [services, categories] = await Promise.all([
                     getActiveServices(),
                     getCategories()
                 ]);
                 
-                const selectedServices = services.filter(s => serviceIds.includes(s.id));
-                if (selectedServices.length === 0) {
-                    return { error: 'IDs de servicios inválidos.' };
+                const selected = services.filter(s => serviceIds.includes(s.id));
+                if (selected.length === 0) {
+                    return { success: false, error: 'No se encontraron los servicios seleccionados.' };
                 }
 
-                const totalPrice = selectedServices.reduce((sum, s) => sum + Number(s.price), 0);
-                const totalDuration = selectedServices.reduce((sum, s) => sum + Number((s as any).duration_min || (s as any).duration || 30), 0);
-
-                const catIds = [...new Set(selectedServices.map(s => s.category_id))];
+                const totalPrice = selected.reduce((sum, s) => sum + Number(s.price || 0), 0);
+                const totalDuration = selected.reduce((sum, s) => sum + Number((s as any).duration_min || 30), 0);
+                const catIds = [...new Set(selected.map(s => s.category_id))];
                 const catNames = categories.filter(c => catIds.includes(c.id)).map(c => c.name).join(' y ');
 
-                await createAppointment(leadId, orgId, dateTimeIso, catNames, totalPrice, totalDuration, selectedServices as any);
+                await createAppointment(leadId, orgId, dateTimeIso, catNames, totalPrice, totalDuration, selected as any);
                 
                 return {
-                    exito: true,
-                    mensaje: `Turno guardado con éxito para: ${catNames}`,
-                    total_pagar: totalPrice,
-                    duracion_total: totalDuration
+                    success: true,
+                    mensaje: `Turno confirmado para ${catNames}`,
+                    total: totalPrice,
+                    duracion: totalDuration
                 };
-            } catch (err: unknown) {
-                console.error('[AI Tool] Error agendando turno:', err);
-                return { error: 'Error interno en BD al guardar turno: ' + (err instanceof Error ? err.message : String(err)) };
+            } catch (err) {
+                console.error('[Tool:agendar_turno] ERROR:', err);
+                return { success: false, error: 'Error guardando el turno.' };
             }
         }
     })
