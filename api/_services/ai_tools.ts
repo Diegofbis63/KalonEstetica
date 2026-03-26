@@ -69,20 +69,33 @@ export const buildTools = (leadId: string | null, orgId: string | null, initId?:
     }),
 
     consultar_servicios: tool({
-        description: 'Muestra los servicios específicos con precios dentro de una categoría. Usalo cuando el cliente elige una categoría del menú.',
+        description: 'Muestra los servicios específicos con precios dentro de una categoría. Acepta el nombre de la categoría (ej: "depilacion", "pestañas") o su UUID.',
         parameters: z.object({
-            categoriaId: z.string().optional().describe('UUID de la categoría a consultar. Si no se especifica, muestra todos.')
+            categoriaNombre: z.string().describe('Nombre de la categoría (ej: "Depilación", "Pestañas"). También acepta UUID.')
         }),
-        execute: async ({ categoriaId }) => {
+        execute: async ({ categoriaNombre }) => {
             try {
                 const [categories, services] = await Promise.all([
                     getCategories(),
                     getActiveServices()
                 ]);
                 
-                const filteredCats = categoriaId 
-                    ? categories.filter(c => c.id === categoriaId)
-                    : categories;
+                const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                const searchTerm = normalize(categoriaNombre);
+                
+                const filteredCats = categories.filter(c => 
+                    c.id === categoriaNombre || 
+                    normalize(c.name).includes(searchTerm) ||
+                    searchTerm.includes(normalize(c.name))
+                );
+
+                if (filteredCats.length === 0) {
+                    console.log(`[Tool:consultar_servicios] No match for "${categoriaNombre}". Available: ${categories.map(c => c.name).join(', ')}`);
+                    return [{ 
+                        error: `No encontré la categoría "${categoriaNombre}".`, 
+                        categorias_disponibles: categories.map((c, i) => `${i+1}. ${c.name}`).join(', ')
+                    }];
+                }
 
                 return filteredCats.map(cat => {
                     const catServices = services.filter(s => s.category_id === cat.id);
