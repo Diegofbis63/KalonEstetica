@@ -20,7 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { messages = [], identificationId, clientPhone } = req.body;
     const initId = identificationId || "guest";
     
-    console.log(`[Chat Request] Messages: ${messages.length}, Lead: ${initId}`);
+    res.write(`data: ${JSON.stringify({ stage: 'identifying' })}\n\n`);
 
     try {
         // 2. Identificar Cliente (Lead Persistence)
