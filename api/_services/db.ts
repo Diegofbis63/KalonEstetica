@@ -37,7 +37,7 @@ export async function getCategories(): Promise<Category[]> {
             where: eq(schema.categories.active, true),
             orderBy: [asc(schema.categories.sort_order)]
         }),
-        3000, []
+        5000, []
     );
     return results as unknown as Category[];
 }
@@ -51,7 +51,7 @@ export async function getActiveServices(): Promise<Service[]> {
             with: { category: true },
             orderBy: [asc(schema.services.sort_order)]
         }),
-        3000, []
+        5000, []
     );
     
     return results.map(s => ({
