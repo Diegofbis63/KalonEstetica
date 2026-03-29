@@ -54,7 +54,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         let fullText = "";
         let chunkCount = 0;
-        const pendingSatoriItems: { toolName: string; data: unknown[] }[] = [];
+        const pendingSatoriItems: { toolName: string; data: unknown[]; part?: number; totalParts?: number; customTitle?: string }[] = [];
+        let categoriesAlreadyQueued = false; // Prevención de duplicados Satori
 
         try {
             const result = streamText({
@@ -94,9 +95,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         try {
                             const { getCategories } = await import('./_services/db.js');
                             const cats = await getCategories();
-                            if (cats && cats.length > 0) {
+                            if (cats && cats.length > 0 && !categoriesAlreadyQueued) {
                                 console.log("[chat.ts] BUNKER: Auto-injecting categories for Satori");
-                                pendingSatoriItems.push({ toolName: 'listar_categorias_principales', data: cats });
+                                pendingSatoriItems.push({ 
+                                    toolName: 'listar_categorias_principales', 
+                                    data: cats,
+                                    customTitle: 'NUESTRAS ESPECIALIDADES'
+                                });
+                                categoriesAlreadyQueued = true;
                             }
                         } catch (e) {
                             console.error("[chat.ts] Bunker injection failed:", e);
@@ -105,15 +111,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
                     if (
                         (toolName === 'listar_categorias_principales' || toolName === 'consultar_servicios') &&
-                        Array.isArray(toolResult) && toolResult.length > 0
+                        Array.isArray(toolResult) && toolResult.length > 0 && 
+                        (tr.result && (tr.result as any).success !== false)
                     ) {
+                        // Evitamos duplicar si ya lo pusimos en Bunker mode para categorías
+                        if (toolName === 'listar_categorias_principales' && categoriesAlreadyQueued) {
+                            console.log("[chat.ts] DEDUPLICATOR: Skipping duplicate categories image");
+                            continue;
+                        }
+
                         console.log(`[chat.ts] ADDING TO SATORI QUEUE: ${toolName} (len: ${toolResult.length})`);
-                        // Dividimos en chunks de 15 para evitar imágenes gigantes y timeouts
+                        
+                        // Extraemos el nombre de la categoría para el título si aplica
+                        let resolvedTitle = toolName === 'listar_categorias_principales' ? 'NUESTRAS ESPECIALIDADES' : 'SERVICIOS DISPONIBLES';
+                        const firstItem = toolResult[0] as any;
+                        if (toolName === 'consultar_servicios' && firstItem?.category) {
+                            resolvedTitle = `SERVICIOS DE ${firstItem.category.toUpperCase()}`;
+                        }
+
                         const chunkSize = 15;
+                        const totalChunks = Math.ceil(toolResult.length / chunkSize);
+
                         for (let i = 0; i < toolResult.length; i += chunkSize) {
                             const chunkData = toolResult.slice(i, i + chunkSize);
-                            pendingSatoriItems.push({ toolName, data: chunkData, startIndex: i });
+                            pendingSatoriItems.push({ 
+                                toolName, 
+                                data: chunkData, 
+                                part: i / chunkSize + 1,
+                                totalParts: totalChunks,
+                                customTitle: resolvedTitle
+                            });
                         }
+
+                        if (toolName === 'listar_categorias_principales') categoriesAlreadyQueued = true;
                     }
                 }
 
@@ -123,9 +153,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
         } catch (streamErr: unknown) {
             const errMsg = streamErr instanceof Error ? streamErr.message : String(streamErr);
-            const errStack = streamErr instanceof Error ? streamErr.stack : '';
             console.error(`[chat.ts] STREAM CATCH — chunks: ${chunkCount}, error: ${errMsg}`);
-            if (errStack) console.error(`[chat.ts] STACK: ${errStack}`);
             
             if (fullText.length === 0) {
                 res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: "Disculpá, tuve un problema técnico. ¿Podés intentar de nuevo? 🙏" } }] })}\n\n`);
@@ -138,11 +166,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         for (let i = 0; i < pendingSatoriItems.length; i++) {
             const item = pendingSatoriItems[i];
             try {
-                let title = item.toolName === 'listar_categorias_principales' ? 'NUESTRAS ESPECIALIDADES' : 'SERVICIOS DISPONIBLES';
-                if (pendingSatoriItems.length > 1) {
-                    title += ` (PARTE ${i + 1})`;
+                let title = item.customTitle || 'KÂLON ESTÉTICA';
+                if (item.totalParts && item.totalParts > 1) {
+                    title += ` (PARTE ${item.part})`;
                 }
-                const menuItems = (item.data as any[]).map((r) => ({
+
+                const menuItems = (item.data as any[]).map((r: any) => ({
                     label: r.label || r.title || r.nombre || r.name || r.categoria || 'Servicio',
                     price: r.precio || r.price || undefined
                 }));

@@ -81,18 +81,20 @@ export const buildTools = (leadId: string | null, orgId: string | null, initId?:
                 if (results.length === 0) {
                     const categories = await getCategories();
                     console.log(`[Tool:consultar_servicios] No match for "${categoriaNombre}"`);
-                    return [{ 
+                    // Devolvemos un objeto con success: false para que Satori lo ignore
+                    return { 
+                        success: false,
                         error: `No encontré la categoría "${categoriaNombre}".`, 
                         categorias_disponibles: categories.map((c, i) => `${i+1}. ${c.name}`).join(', ')
-                    }];
+                    };
                 }
 
                 console.log(`[Tool:consultar_servicios] Found ${results.length} services for ${categoriaNombre}`);
                 return results.map(s => ({
-                    label: s.title,
+                    label: s.label || s.title || "Servicio",
                     price: s.price || 0,
                     id: s.id,
-                    category: (s as any).category_name || "General"
+                    category: s.category_name || "Servicios"
                 }));
             } catch (err) {
                 console.error('[Tool:consultar_servicios] ERROR:', err);
