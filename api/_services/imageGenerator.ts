@@ -46,25 +46,25 @@ function getLogoData() {
     return logoData;
 }
 
-export async function generateMenuImage(title: string, items: { label: string, price?: string | number }[]) {
+export async function generateMenuImage(title: string, items: { label: string, price?: string | number }[], startIndex: number = 0) {
     try {
         const font = getFontData();
         const cinzel = getSecondaryFontData();
         const isotypeBase64 = getLogoData();
         
-        const finalHeight = Math.max(450 + (items.length * 55), 650);
+        const finalHeight = Math.max(380 + (items.length * 52), 550);
 
         const satoriConfig: any = {
             type: 'div',
             props: {
                 style: {
                     height: `${finalHeight}px`,
-                    width: '700px',
+                    width: '650px',
                     display: 'flex',
                     flexDirection: 'column',
                     backgroundColor: '#fdfcfb',
                     color: '#3d2b24',
-                    padding: '60px',
+                    padding: '40px 50px',
                     fontFamily: 'Inter',
                     position: 'relative',
                 },
@@ -72,19 +72,19 @@ export async function generateMenuImage(title: string, items: { label: string, p
                     {
                         type: 'div',
                         props: {
-                            style: { display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '40px' },
+                            style: { display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '30px' },
                             children: [
                                 {
                                     type: 'div',
                                     props: {
-                                        style: { fontSize: '48px', color: '#c5a363', fontWeight: 700, letterSpacing: '6px' },
+                                        style: { fontSize: '42px', color: '#c5a363', fontWeight: 700, letterSpacing: '6px' },
                                         children: 'KÂLON'
                                     }
                                 },
                                 { 
                                     type: 'div', 
                                     props: { 
-                                        style: { fontSize: '22px', fontWeight: 700, marginTop: '20px', borderBottom: '2px solid #c5a363', padding: '5px 15px', letterSpacing: '3px' }, 
+                                        style: { fontSize: '18px', fontWeight: 700, marginTop: '15px', borderBottom: '2px solid #c5a363', padding: '3px 12px', letterSpacing: '3px' }, 
                                         children: title.toUpperCase() 
                                     }
                                 }
@@ -98,10 +98,10 @@ export async function generateMenuImage(title: string, items: { label: string, p
                             children: items.map((item, idx) => ({
                                 type: 'div',
                                 props: {
-                                    style: { display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid rgba(197, 163, 99, 0.2)' },
+                                    style: { display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(197, 163, 99, 0.2)' },
                                     children: [
-                                        { type: 'span', props: { style: { fontWeight: 600 }, children: `${idx + 1}. ${item.label}` } },
-                                        item.price ? { type: 'span', props: { style: { color: '#c5a363', fontWeight: 800 }, children: `$${item.price}` } } : null
+                                        { type: 'span', props: { style: { fontWeight: 600, fontSize: '16px' }, children: `${startIndex + idx + 1}. ${item.label}` } },
+                                        item.price ? { type: 'span', props: { style: { color: '#c5a363', fontWeight: 800, fontSize: '16px' }, children: `$${item.price}` } } : null
                                     ]
                                 }
                             }))

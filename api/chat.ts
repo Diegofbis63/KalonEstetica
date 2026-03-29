@@ -107,8 +107,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         (toolName === 'listar_categorias_principales' || toolName === 'consultar_servicios') &&
                         Array.isArray(toolResult) && toolResult.length > 0
                     ) {
-                        console.log(`[chat.ts] ADDING TO SATORI QUEUE: ${toolName}`);
-                        pendingSatoriItems.push({ toolName, data: toolResult });
+                        console.log(`[chat.ts] ADDING TO SATORI QUEUE: ${toolName} (len: ${toolResult.length})`);
+                        // Dividimos en chunks de 15 para evitar imágenes gigantes y timeouts
+                        const chunkSize = 15;
+                        for (let i = 0; i < toolResult.length; i += chunkSize) {
+                            const chunkData = toolResult.slice(i, i + chunkSize);
+                            pendingSatoriItems.push({ toolName, data: chunkData, startIndex: i });
+                        }
                     }
                 }
 
@@ -130,14 +135,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         clearTimeout(timeout);
 
         // --- 4. Satori post-stream ---
-        for (const item of pendingSatoriItems) {
+        for (let i = 0; i < pendingSatoriItems.length; i++) {
+            const item = pendingSatoriItems[i];
             try {
-                const title = item.toolName === 'listar_categorias_principales' ? 'NUESTRAS ESPECIALIDADES' : 'SERVICIOS DISPONIBLES';
+                let title = item.toolName === 'listar_categorias_principales' ? 'NUESTRAS ESPECIALIDADES' : 'SERVICIOS DISPONIBLES';
+                if (pendingSatoriItems.length > 1) {
+                    title += ` (PARTE ${i + 1})`;
+                }
                 const menuItems = (item.data as any[]).map((r) => ({
                     label: r.label || r.title || r.nombre || r.name || r.categoria || 'Servicio',
                     price: r.precio || r.price || undefined
                 }));
-                const buf = await generateMenuImage(title, menuItems);
+                const startIndex = (item as any).startIndex || 0;
+                const buf = await generateMenuImage(title, menuItems, startIndex);
                 if (buf) {
                     res.write(`data: ${JSON.stringify({ media_url: `data:image/png;base64,${Buffer.from(buf).toString('base64')}` })}\n\n`);
                 }
