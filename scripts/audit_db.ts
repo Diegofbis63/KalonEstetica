@@ -1,26 +1,27 @@
-
+import { neon } from '@neondatabase/serverless';
+import { drizzle } from 'drizzle-orm/neon-http';
+import * as schema from '../api/_services/schema.js';
 import 'dotenv/config';
-import { db } from './api/_services/db.js';
-import * as schema from './api/_services/schema.js';
-import { sql } from 'drizzle-orm';
 
 async function audit() {
-    try {
-        const catCount = await db.select({ count: sql`count(*)` }).from(schema.categories);
-        const svcCount = await db.select({ count: sql`count(*)` }).from(schema.services);
-        
-        console.log('--- DB AUDIT ---');
-        console.log('Categories:', catCount[0].count);
-        console.log('Services:', svcCount[0].count);
-        
-        if (Number(catCount[0].count) > 0) {
-            const firstCat = await db.query.categories.findFirst();
-            console.log('First Category Sample:', JSON.stringify(firstCat));
-        }
-    } catch (e) {
-        console.error('AUDIT ERROR:', e);
-    }
-    process.exit(0);
+    const sql = neon(process.env.DATABASE_URL!);
+    const db = drizzle(sql, { schema });
+
+    console.log("--- AUDITORÍA DE DATOS KALON ---");
+    
+    const categories = await db.query.categories.findMany();
+    console.log(`\nCategorías (${categories.length}):`);
+    categories.forEach(c => {
+        console.log(`- [${c.id}] ${c.name} (Activa: ${c.active}, Orden: ${c.sort_order})`);
+    });
+
+    const services = await db.query.services.findMany({
+        with: { category: true }
+    });
+    console.log(`\nServicios (${services.length}):`);
+    services.slice(0, 10).forEach(s => {
+        console.log(`- ${s.title} -> Categoría: ${s.category?.name || 'NINGUNA'}`);
+    });
 }
 
-audit();
+audit().catch(console.error);

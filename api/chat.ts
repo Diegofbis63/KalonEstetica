@@ -54,23 +54,94 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         let fullText = "";
         let chunkCount = 0;
-        const pendingSatoriItems: { toolName: string; data: unknown[]; part?: number; totalParts?: number; customTitle?: string }[] = [];
-        let categoriesAlreadyQueued = false; // Prevención de duplicados Satori
+        const pendingSatoriItems: { toolName: string; data: any[]; part?: number; totalParts?: number; customTitle?: string }[] = [];
+        let categoriesAlreadyQueued = false;
+        const processedToolCalls = new Set<string>();
+
+        // Función auxiliar para encolar items de Satori (Evita duplicados por ID de herramienta)
+        const enqueueSatoriItems = (toolName: string, toolResult: any, toolCallId?: string) => {
+            if (!toolResult) return;
+            if (toolCallId && processedToolCalls.has(toolCallId)) return;
+            if (toolCallId) processedToolCalls.add(toolCallId);
+            
+            // Extracción robusta de items (Normalización v4)
+            let finalData: any[] = [];
+            if (Array.isArray(toolResult)) {
+                finalData = toolResult;
+            } else if (toolResult && typeof toolResult === 'object') {
+                if (toolResult.success === false) return;
+                // Soporte para múltiples llaves comunes en la respuesta de la base de datos/IA
+                const possibleKeys = ['servicios', 'categories', 'categorias', 'items', 'results', 'data'];
+                for (const key of possibleKeys) {
+                    if (Array.isArray(toolResult[key])) {
+                        finalData = toolResult[key];
+                        break;
+                    }
+                }
+                // Si no encontramos llaves pero el objeto en sí tiene label/nombre, lo envolvemos en array
+                if (finalData.length === 0 && (toolResult.label || toolResult.nombre || toolResult.name)) {
+                    finalData = [toolResult];
+                }
+            }
+
+            if (finalData.length === 0) return;
+
+            // Extraer título real si viene en el resultado
+            let resolvedTitle = toolName === 'listar_categorias_principales' ? 'NUESTRAS ESPECIALIDADES' : 'SERVICIOS DISPONIBLES';
+            
+            // Normalizar items (Asegurar label y price)
+            const normalizedData = finalData.map(item => {
+                const label = item.label || item.nombre || item.name || item.title || "Servicio";
+                const price = item.price !== undefined ? item.price : 0;
+                const category = item.category || item.categoria || item.category_name;
+                return { label, price, category };
+            }).filter(item => item.label && item.label !== "Servicio");
+
+            if (normalizedData.length === 0) return;
+
+            if (normalizedData[0].category) {
+                resolvedTitle = `SERVICIOS DE ${String(normalizedData[0].category).toUpperCase()}`;
+            }
+
+            const chunkSize = 15;
+            const totalChunks = Math.ceil(normalizedData.length / chunkSize);
+
+            for (let i = 0; i < normalizedData.length; i += chunkSize) {
+                const chunkData = normalizedData.slice(i, i + chunkSize);
+                console.log(`[DIAG-ZORRO] QUEUING: ${toolName} (ID: ${toolCallId}) Part ${i / chunkSize + 1}/${totalChunks}`);
+                pendingSatoriItems.push({ 
+                    toolName, 
+                    data: chunkData, 
+                    part: i / chunkSize + 1,
+                    totalParts: totalChunks,
+                    customTitle: resolvedTitle
+                });
+            }
+            if (toolName === 'listar_categorias_principales') categoriesAlreadyQueued = true;
+        };
 
         try {
             const result = streamText({
                 model,
                 system: systemPrompt,
-                messages, // AI SDK v6 acepta messages directamente
+                messages, 
                 tools,
                 maxSteps: 4,
                 abortSignal: controller.signal,
-            });
+                onFinish: (finishResult: any) => {
+                    console.log(`[DIAG-ZORRO] onFinish triggered. Tools: ${finishResult.toolResults?.length || 0}`);
+                    finishResult.toolResults?.forEach((tr: any) => {
+                        const tName = tr.toolName;
+                        if (tName === 'listar_categorias_principales' || tName === 'consultar_servicios') {
+                            enqueueSatoriItems(tName, tr.result, tr.toolCallId);
+                        }
+                    });
+                }
+            } as any);
 
             for await (const chunk of result.fullStream) {
                 chunkCount++;
 
-                // AI SDK v6: text-delta usa .text, no .textDelta
                 if (chunk.type === 'text-delta') {
                     const text = (chunk as any).textDelta || (chunk as any).text || '';
                     if (text) {
@@ -79,71 +150,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     }
                 }
 
-                if (chunk.type === 'tool-call') {
-                    const tc = chunk as any;
-                    console.log(`[chat.ts] TOOL CALL: ${tc.toolName || 'unknown'}(${JSON.stringify(tc.args || tc.input || {}).slice(0, 100)})`);
-                }
-
                 if (chunk.type === 'tool-result') {
                     const tr = chunk as any;
                     const toolName = tr.toolName || 'unknown';
-                    const toolResult = tr.result ?? tr.output ?? tr.resultData ?? null;
-                    console.log(`[chat.ts] CAPTURED TOOL RESULT: ${toolName}`);
+                    const toolResult = tr.result ?? tr.output ?? null;
                     
-                    // SEGURIDAD NIVEL BUNKER: Si registra cliente, forzamos categorías para Satori
-                    if (toolName === 'registrar_cliente') {
+                    console.log(`[DIAG-ZORRO] Stream chunk: tool-result -> ${toolName}`);
+                    
+                    if (toolName === 'registrar_cliente' && !categoriesAlreadyQueued) {
                         try {
                             const { getCategories } = await import('./_services/db.js');
                             const cats = await getCategories();
-                            if (cats && cats.length > 0 && !categoriesAlreadyQueued) {
-                                console.log("[chat.ts] BUNKER: Auto-injecting categories for Satori");
-                                pendingSatoriItems.push({ 
-                                    toolName: 'listar_categorias_principales', 
-                                    data: cats,
-                                    customTitle: 'NUESTRAS ESPECIALIDADES'
-                                });
-                                categoriesAlreadyQueued = true;
-                            }
+                            enqueueSatoriItems('listar_categorias_principales', cats);
                         } catch (e) {
-                            console.error("[chat.ts] Bunker injection failed:", e);
+                            console.error("[chat.ts] Bunker fail:", e);
                         }
                     }
 
-                    if (
-                        (toolName === 'listar_categorias_principales' || toolName === 'consultar_servicios') &&
-                        Array.isArray(toolResult) && toolResult.length > 0 && 
-                        (tr.result && (tr.result as any).success !== false)
-                    ) {
-                        // Evitamos duplicar si ya lo pusimos en Bunker mode para categorías
-                        if (toolName === 'listar_categorias_principales' && categoriesAlreadyQueued) {
-                            console.log("[chat.ts] DEDUPLICATOR: Skipping duplicate categories image");
-                            continue;
-                        }
-
-                        console.log(`[chat.ts] ADDING TO SATORI QUEUE: ${toolName} (len: ${toolResult.length})`);
-                        
-                        // Extraemos el nombre de la categoría para el título si aplica
-                        let resolvedTitle = toolName === 'listar_categorias_principales' ? 'NUESTRAS ESPECIALIDADES' : 'SERVICIOS DISPONIBLES';
-                        const firstItem = toolResult[0] as any;
-                        if (toolName === 'consultar_servicios' && firstItem?.category) {
-                            resolvedTitle = `SERVICIOS DE ${firstItem.category.toUpperCase()}`;
-                        }
-
-                        const chunkSize = 15;
-                        const totalChunks = Math.ceil(toolResult.length / chunkSize);
-
-                        for (let i = 0; i < toolResult.length; i += chunkSize) {
-                            const chunkData = toolResult.slice(i, i + chunkSize);
-                            pendingSatoriItems.push({ 
-                                toolName, 
-                                data: chunkData, 
-                                part: i / chunkSize + 1,
-                                totalParts: totalChunks,
-                                customTitle: resolvedTitle
-                            });
-                        }
-
-                        if (toolName === 'listar_categorias_principales') categoriesAlreadyQueued = true;
+                    if (toolName === 'listar_categorias_principales' || toolName === 'consultar_servicios') {
+                        enqueueSatoriItems(toolName, toolResult, tr.toolCallId);
                     }
                 }
 
@@ -151,10 +176,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     console.error(`[chat.ts] ERROR CHUNK:`, JSON.stringify(chunk));
                 }
             }
+
+            // --- CRITICAL SYNC: Wait for EVERYTHING to finish before processing items ---
+            await result.done;
+            console.log(`[DIAG-ZORRO] result.done finished. Final queue size: ${pendingSatoriItems.length}`);
+
         } catch (streamErr: unknown) {
             const errMsg = streamErr instanceof Error ? streamErr.message : String(streamErr);
-            console.error(`[chat.ts] STREAM CATCH — chunks: ${chunkCount}, error: ${errMsg}`);
-            
+            console.error(`[chat.ts] STREAM CATCH — error: ${errMsg}`);
             if (fullText.length === 0) {
                 res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: "Disculpá, tuve un problema técnico. ¿Podés intentar de nuevo? 🙏" } }] })}\n\n`);
             }
@@ -162,27 +191,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         clearTimeout(timeout);
 
-        // --- 4. Satori post-stream ---
-        for (let i = 0; i < pendingSatoriItems.length; i++) {
-            const item = pendingSatoriItems[i];
-            try {
-                let title = item.customTitle || 'KÂLON ESTÉTICA';
-                if (item.totalParts && item.totalParts > 1) {
-                    title += ` (PARTE ${item.part})`;
-                }
+        // --- 4. Satori post-stream (PARALLEL) ---
+        if (pendingSatoriItems.length > 0) {
+            console.log(`[DIAG-ZORRO] Processing ${pendingSatoriItems.length} Satori items...`);
+            
+            // Deduplicar: Mismo título y mismo fragmento de datos
+            const uniqueItems = pendingSatoriItems.filter((v, i, a) => 
+                a.findIndex(t => t.customTitle === v.customTitle && t.part === v.part) === i
+            );
 
-                const menuItems = (item.data as any[]).map((r: any) => ({
-                    label: r.label || r.title || r.nombre || r.name || r.categoria || 'Servicio',
-                    price: r.precio || r.price || undefined
-                }));
-                const startIndex = (item as any).startIndex || 0;
-                const buf = await generateMenuImage(title, menuItems, startIndex);
-                if (buf) {
-                    res.write(`data: ${JSON.stringify({ media_url: `data:image/png;base64,${Buffer.from(buf).toString('base64')}` })}\n\n`);
+            await Promise.all(uniqueItems.map(async (item) => {
+                try {
+                    let title = item.customTitle || 'KÂLON ESTÉTICA';
+                    if (item.totalParts && item.totalParts > 1) {
+                        title += ` (${item.part}/${item.totalParts})`;
+                    }
+
+                    const menuItems = (item.data as any[]).map((r: any) => ({
+                        label: r.nombre || r.label || r.title || r.name || r.categoria || r.servicio || 'Servicio',
+                        price: r.precio || r.price || undefined
+                    })).filter(mi => mi.label !== 'Servicio');
+
+                    console.log(`[DIAG-ZORRO] Processed ${menuItems.length} items for ${title}. Sample: ${menuItems[0]?.label}`);
+
+                    if (menuItems.length === 0) {
+                        console.warn(`[DIAG-ZORRO] Skipping empty Satori item (after filter): ${title}`);
+                        return;
+                    }
+                    
+                    const startIndex = ((item.part || 1) - 1) * 15;
+                    console.log(`[DIAG-ZORRO] Generating ${title} with ${menuItems.length} items (start: ${startIndex})...`);
+                    const buf = await generateMenuImage(title, menuItems, startIndex);
+                    
+                    if (buf) {
+                        const base64 = Buffer.from(buf).toString('base64');
+                        console.log(`[DIAG-ZORRO] Satori Success: ${title} (${base64.length} bytes)`);
+                        res.write(`data: ${JSON.stringify({ media_url: `data:image/png;base64,${base64}` })}\n\n`);
+                    } else {
+                        console.error(`[DIAG-ZORRO] Satori Fail (null buffer) for: ${title}`);
+                    }
+                } catch (e) {
+                    console.error('[DIAG-ZORRO] Satori mapping/gen fail:', e);
                 }
-            } catch (e) {
-                console.error('[chat.ts] Satori fail:', e);
-            }
+            }));
         }
 
         console.log(`[chat.ts] DONE — text: ${fullText.length}, chunks: ${chunkCount}, satori: ${pendingSatoriItems.length}`);

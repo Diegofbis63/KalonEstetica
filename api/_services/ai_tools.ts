@@ -80,7 +80,7 @@ export const buildTools = (leadId: string | null, orgId: string | null, initId?:
                 
                 if (results.length === 0) {
                     const categories = await getCategories();
-                    console.log(`[Tool:consultar_servicios] No match for "${categoriaNombre}"`);
+                    console.warn(`[TOOL CRITICAL] No match for category: "${categoriaNombre}"`);
                     // Devolvemos un objeto con success: false para que Satori lo ignore
                     return { 
                         success: false,
@@ -89,16 +89,16 @@ export const buildTools = (leadId: string | null, orgId: string | null, initId?:
                     };
                 }
 
-                console.log(`[Tool:consultar_servicios] Found ${results.length} services for ${categoriaNombre}`);
+                console.log(`[TOOL CRITICAL] Found ${results.length} services for ${categoriaNombre}`);
                 return results.map(s => ({
                     label: s.label || s.title || "Servicio",
                     price: s.price || 0,
                     id: s.id,
-                    category: s.category_name || "Servicios"
+                    category: s.category_name || match.name || "Servicios"
                 }));
             } catch (err) {
                 console.error('[Tool:consultar_servicios] ERROR:', err);
-                return [{ error: 'No se pudieron cargar los servicios.' }];
+                return { success: false, error: 'No se pudieron cargar los servicios.' };
             }
         }
     }),

@@ -20,16 +20,20 @@ export const db = drizzle(sql, { schema });
 
 // --- HELPERS ---
 const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> => {
+    let timer: NodeJS.Timeout;
+    const timeoutPromise = new Promise<T>((resolve) => {
+        timer = setTimeout(() => {
+            console.warn(`[db.ts] TIMEOUT: Operation exceeded ${ms}ms. Falling back.`);
+            resolve(fallback);
+        }, ms);
+    });
+
     return Promise.race([
-        promise,
-        new Promise<T>((resolve) => {
-            const timer = setTimeout(() => {
-                console.warn(`[db.ts] TIMEOUT: Operation exceeded ${ms}ms. Falling back.`);
-                resolve(fallback);
-            }, ms);
-            // Ensure timeout doesn't keep the process alive in environments like Vercel (optional)
-            if (timer.unref) timer.unref();
-        })
+        promise.then((res) => {
+            clearTimeout(timer);
+            return res;
+        }),
+        timeoutPromise
     ]);
 };
 
@@ -66,18 +70,31 @@ export async function getActiveServices(): Promise<Service[]> {
 }
 
 export async function getServicesByCategory(categoryNameOrId: string): Promise<Service[]> {
-    console.log(`[db.ts] Fetching services for category: ${categoryNameOrId}`);
+    console.log(`[DB CRITICAL] Fetching services for category input: "${categoryNameOrId}"`);
     
-    // Primero buscamos la categoría (exacta o por nombre similar)
+    // Primero buscamos la categoría (exacta o por nombre similar o numérica)
     const normalized = categoryNameOrId.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-    
-    const cats = await getCategories();
-    const match = cats.find(c => 
-        c.id === categoryNameOrId || 
-        c.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(normalized)
-    );
+    const isNumeric = /^\d+$/.test(normalized);
+    const numericIndex = isNumeric ? parseInt(normalized) : -1;
 
-    if (!match) return [];
+    const cats = await getCategories();
+    console.log(`[DB CRITICAL] Total active categories found: ${cats.length}`);
+
+    const match = cats.find((c, index) => {
+        const catNormalized = c.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        return (
+            c.id === categoryNameOrId || 
+            catNormalized.includes(normalized) ||
+            (numericIndex !== -1 && (index + 1 === numericIndex || c.sort_order === numericIndex))
+        );
+    });
+
+    if (!match) {
+        console.warn(`[DB CRITICAL] NO MATCH FOUND for input: "${categoryNameOrId}"`);
+        return [];
+    }
+
+    console.log(`[DB CRITICAL] MATCH FOUND: ${match.name} (ID: ${match.id})`);
 
     const results = await withTimeout(
         db.query.services.findMany({
@@ -86,6 +103,8 @@ export async function getServicesByCategory(categoryNameOrId: string): Promise<S
         }),
         5000, []
     );
+
+    console.log(`[DB CRITICAL] SERVICES FOUND for ${match.name}: ${results.length}`);
 
     return results.map(s => ({
         ...s,

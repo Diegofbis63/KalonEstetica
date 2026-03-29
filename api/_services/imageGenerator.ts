@@ -3,55 +3,42 @@ import { Resvg } from '@resvg/resvg-js';
 import fs from 'fs';
 import path from 'path';
 
-let fontData: Buffer | null = null;
-const secondaryFontData: Buffer | null = null;
-let logoData: string | null = null;
-
 /**
  * Los archivos en 'api/' se incluyen en el bundle de Vercel de forma más fiable.
- * No usamos fetch externo para evitar HANGS (cuelgues) por timeouts de red.
  */
-function getFontData() {
-    if (fontData) return fontData;
+async function loadFont(fileName: string): Promise<Buffer> {
     const paths = [
-        path.join(process.cwd(), 'api', 'fonts', 'Inter-SemiBold.ttf'),
-        path.join(process.cwd(), 'api', '_services', 'fonts', 'Inter-SemiBold.ttf'),
-        path.join(process.cwd(), 'public', 'fonts', 'Inter-SemiBold.ttf'),
-        '/var/task/api/fonts/Inter-SemiBold.ttf',
-        '/var/task/public/fonts/Inter-SemiBold.ttf'
+        path.join(process.cwd(), 'api', 'fonts', fileName),
+        path.join(process.cwd(), 'api', '_services', 'fonts', fileName),
+        path.join(process.cwd(), 'public', 'fonts', fileName),
+        `/var/task/api/fonts/${fileName}`,
+        `/var/task/public/fonts/${fileName}`
     ];
+
     for (const p of paths) {
-        if (fs.existsSync(p)) {
-            console.log(`[imageGenerator] Found Font: ${p}`);
-            fontData = fs.readFileSync(p);
-            return fontData;
-        }
+        try {
+            if (fs.existsSync(p)) {
+                console.info(`[imageGenerator] Found Font: ${p}`);
+                return fs.readFileSync(p);
+            }
+        } catch (e) {}
     }
-    // Fallback: Si no hay fuente, tiramos error rápido para no colgar el stream
-    throw new Error("Critical: Font data missing for Satori rendering!");
-}
-
-function getSecondaryFontData() {
-    if (secondaryFontData) return secondaryFontData;
-    // Si no tenemos Cinzel, usamos Inter para no arriesgar fetch externo
-    return getFontData();
-}
-
-function getLogoData() {
-    if (logoData) return logoData;
-    const logoPath = path.join(process.cwd(), 'public', 'logo.png');
-    if (fs.existsSync(logoPath)) {
-        logoData = `data:image/png;base64,${fs.readFileSync(logoPath).toString('base64')}`;
-    }
-    return logoData;
+    throw new Error(`Font file not found: ${fileName}`);
 }
 
 export async function generateMenuImage(title: string, items: { label: string, price?: string | number }[], startIndex: number = 0) {
     try {
-        const font = getFontData();
-        const cinzel = getSecondaryFontData();
-        const isotypeBase64 = getLogoData();
-        
+        if (!items || items.length === 0) {
+            console.warn(`[imageGenerator] Skipping: Empty items list for title "${title}"`);
+            return null;
+        }
+
+        // Carga de fuentes en paralelo
+        const [fontSemi, fontBold] = await Promise.all([
+            loadFont('Inter-SemiBold.ttf'),
+            loadFont('Inter-Bold.ttf')
+        ]);
+
         const finalHeight = Math.max(380 + (items.length * 52), 550);
 
         const satoriConfig: any = {
@@ -59,7 +46,7 @@ export async function generateMenuImage(title: string, items: { label: string, p
             props: {
                 style: {
                     height: `${finalHeight}px`,
-                    width: '650px',
+                    width: '700px',
                     display: 'flex',
                     flexDirection: 'column',
                     backgroundColor: '#fdfcfb',
@@ -81,11 +68,11 @@ export async function generateMenuImage(title: string, items: { label: string, p
                                         children: 'KÂLON'
                                     }
                                 },
-                                { 
-                                    type: 'div', 
-                                    props: { 
-                                        style: { fontSize: '18px', fontWeight: 700, marginTop: '15px', borderBottom: '2px solid #c5a363', padding: '3px 12px', letterSpacing: '3px' }, 
-                                        children: title.toUpperCase() 
+                                {
+                                    type: 'div',
+                                    props: {
+                                        style: { fontSize: '10px', color: '#8d7a6f', letterSpacing: '2px', marginTop: '4px' },
+                                        children: 'ESTÉTICA & BIENESTAR'
                                     }
                                 }
                             ]
@@ -94,14 +81,49 @@ export async function generateMenuImage(title: string, items: { label: string, p
                     {
                         type: 'div',
                         props: {
-                            style: { display: 'flex', flexDirection: 'column', flex: 1 },
+                            style: { 
+                                display: 'flex', 
+                                fontSize: '24px', 
+                                fontWeight: 700, 
+                                color: '#3d2b24', 
+                                marginBottom: '25px', 
+                                borderBottom: '2px solid #c5a363',
+                                paddingBottom: '10px'
+                            },
+                            children: title.toUpperCase()
+                        }
+                    },
+                    {
+                        type: 'div',
+                        props: {
+                            style: { display: 'flex', flexDirection: 'column', width: '100%' },
                             children: items.map((item, idx) => ({
                                 type: 'div',
+                                key: idx,
                                 props: {
-                                    style: { display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(197, 163, 99, 0.2)' },
+                                    style: { 
+                                        display: 'flex', 
+                                        justifyContent: 'space-between', 
+                                        alignItems: 'center',
+                                        padding: '12px 0', 
+                                        borderBottom: '1px solid rgba(197, 163, 99, 0.15)',
+                                        width: '100%'
+                                    },
                                     children: [
-                                        { type: 'span', props: { style: { fontWeight: 600, fontSize: '16px' }, children: `${startIndex + idx + 1}. ${item.label}` } },
-                                        item.price ? { type: 'span', props: { style: { color: '#c5a363', fontWeight: 800, fontSize: '16px' }, children: `$${item.price}` } } : null
+                                        { 
+                                            type: 'div', 
+                                            props: { 
+                                                style: { display: 'flex', fontWeight: 600, fontSize: '16px', color: '#3d2b24' }, 
+                                                children: `${startIndex + idx + 1}. ${item.label}` 
+                                            } 
+                                        },
+                                        item.price ? { 
+                                            type: 'div', 
+                                            props: { 
+                                                style: { display: 'flex', color: '#c5a363', fontWeight: 700, fontSize: '16px' }, 
+                                                children: `$${item.price}` 
+                                            } 
+                                        } : { type: 'div', props: { style: { display: 'flex' }, children: '' } }
                                     ]
                                 }
                             }))
@@ -115,7 +137,10 @@ export async function generateMenuImage(title: string, items: { label: string, p
             width: 700,
             height: finalHeight,
             fonts: [
-                { name: 'Inter', data: font, weight: 600, style: 'normal' }
+                { name: 'Inter', data: fontSemi, weight: 400, style: 'normal' },
+                { name: 'Inter', data: fontSemi, weight: 600, style: 'normal' },
+                { name: 'Inter', data: fontBold, weight: 700, style: 'normal' },
+                { name: 'Inter', data: fontBold, weight: 800, style: 'normal' }
             ],
         });
 
