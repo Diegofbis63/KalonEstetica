@@ -22,10 +22,14 @@ export const db = drizzle(sql, { schema });
 const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> => {
     return Promise.race([
         promise,
-        new Promise<T>((resolve) => setTimeout(() => {
-            console.warn(`[db.ts] TIMEOUT: Operation exceeded ${ms}ms. Falling back.`);
-            resolve(fallback);
-        }, ms))
+        new Promise<T>((resolve) => {
+            const timer = setTimeout(() => {
+                console.warn(`[db.ts] TIMEOUT: Operation exceeded ${ms}ms. Falling back.`);
+                resolve(fallback);
+            }, ms);
+            // Ensure timeout doesn't keep the process alive in environments like Vercel (optional)
+            if (timer.unref) timer.unref();
+        })
     ]);
 };
 
@@ -51,12 +55,41 @@ export async function getActiveServices(): Promise<Service[]> {
             with: { category: true },
             orderBy: [asc(schema.services.sort_order)]
         }),
-        5000, []
+        5000, [] as (typeof schema.services.$inferSelect & { category: typeof schema.categories.$inferSelect })[]
     );
     
     return results.map(s => ({
         ...s,
-        category_name: (s as any).category?.name || "Servicio",
+        category_name: s.category?.name || "Servicio",
+        duration: s.duration || `${s.duration_min} min`
+    })) as unknown as Service[];
+}
+
+export async function getServicesByCategory(categoryNameOrId: string): Promise<Service[]> {
+    console.log(`[db.ts] Fetching services for category: ${categoryNameOrId}`);
+    
+    // Primero buscamos la categoría (exacta o por nombre similar)
+    const normalized = categoryNameOrId.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    
+    const cats = await getCategories();
+    const match = cats.find(c => 
+        c.id === categoryNameOrId || 
+        c.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(normalized)
+    );
+
+    if (!match) return [];
+
+    const results = await withTimeout(
+        db.query.services.findMany({
+            where: and(eq(schema.services.active, true), eq(schema.services.category_id, match.id)),
+            orderBy: [asc(schema.services.sort_order)]
+        }),
+        5000, []
+    );
+
+    return results.map(s => ({
+        ...s,
+        category_name: match.name,
         duration: s.duration || `${s.duration_min} min`
     })) as unknown as Service[];
 }
@@ -70,7 +103,7 @@ export async function getLeadByPhone(phone: string) {
         db.select().from(schema.leads)
             .where(drizzleSql`regexp_replace(${schema.leads.contact_info}->>'phone', '\\D', '', 'g') LIKE ${'%' + normalized}`)
             .limit(1),
-        2500, []
+        7000, []
     );
         
     return results.length > 0 ? results[0] : null;
@@ -85,7 +118,7 @@ export async function findLeadByInitId(initId: string) {
         db.query.leads.findFirst({
             where: drizzleSql`(${schema.leads.contact_info}->>'initId') = ${initId}`
         }),
-        2000, // 2s timeout
+        7500, // 7.5s timeout para tolerar cold start
         null
     );
         
@@ -132,15 +165,21 @@ export async function updateLeadState(leadId: string, state: ConvState) {
 }
 
 // --- SLOTS ---
-export async function getAvailableSlotsFromDB(categoryId: string, startDate: Date, endDate: Date) {
+export async function getAvailableSlotsFromDB(categoryId: string, startDate: Date, endDate: Date): Promise<any[]> {
     console.log(`[db.ts] Calling availability DB for category: ${categoryId}`);
     const query = drizzleSql`
         SELECT slot_time as "slot_time", professional_id as "staff_id"
         FROM get_available_slots(${categoryId}, ${startDate.toISOString()}, ${endDate.toISOString()}, 30)
         ORDER BY slot_time ASC
     `;
-    const results = await withTimeout(db.execute(query), 5000, { rows: [] });
-    return (results.rows as any) || [];
+    const results = await withTimeout(db.execute(query), 5000, { 
+        rows: [] as Record<string, unknown>[],
+        fields: [],
+        command: 'SELECT',
+        rowCount: 0,
+        rowAsArray: false
+    } as any);
+    return results.rows || [];
 }
 
 export async function createAppointment(leadId: string, orgId: string | null, dateTime: string, catNames: string, price: number, duration: number, selectedServices: Service[]) {

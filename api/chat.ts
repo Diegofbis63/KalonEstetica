@@ -28,7 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             try {
                 const lead = await Promise.race([
                     findLeadByInitId(initId),
-                    new Promise<null>((r) => setTimeout(() => r(null), 2000))
+                    new Promise<null>((r) => setTimeout(() => r(null), 7000))
                 ]);
                 leadId = lead?.id || null;
                 console.log(`[chat.ts] Lead found: ${leadId || 'none'}`);
@@ -134,7 +134,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             try {
                 const title = item.toolName === 'listar_categorias_principales' ? 'NUESTRAS ESPECIALIDADES' : 'SERVICIOS DISPONIBLES';
                 const menuItems = (item.data as any[]).map((r) => ({
-                    label: r.nombre || r.name || r.categoria || 'Servicio',
+                    label: r.label || r.title || r.nombre || r.name || r.categoria || 'Servicio',
                     price: r.precio || r.price || undefined
                 }));
                 const buf = await generateMenuImage(title, menuItems);

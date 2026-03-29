@@ -1,13 +1,14 @@
 import { tool } from 'ai';
 import { z } from 'zod';
 import { 
-    getCategories, 
-    getActiveServices, 
+    getCategories,
+    getActiveServices,
     getAvailableSlotsFromDB, 
     getStaffByCategory,
     createLead,
     type ContactInfo,
-    createAppointment
+    createAppointment,
+    getServicesByCategory
 } from './db.js';
 
 /**
@@ -26,7 +27,7 @@ export const buildTools = (leadId: string | null, orgId: string | null, initId?:
             nombre: z.string().describe('Nombre de pila del cliente'),
             apellido: z.string().describe('Apellido del cliente'),
         }),
-        execute: async ({ nombre, apellido }) => {
+        execute: async ({ nombre, apellido }: { nombre: string; apellido: string }) => {
             try {
                 const fullName = `${nombre} ${apellido}`.trim();
                 const contactInfo: ContactInfo = { 
@@ -73,49 +74,26 @@ export const buildTools = (leadId: string | null, orgId: string | null, initId?:
         parameters: z.object({
             categoriaNombre: z.string().describe('Nombre de la categoría (ej: "Depilación", "Pestañas"). También acepta UUID.')
         }),
-        execute: async ({ categoriaNombre }) => {
+        execute: async ({ categoriaNombre }: { categoriaNombre: string }) => {
             try {
-                const [categories, services] = await Promise.all([
-                    getCategories(),
-                    getActiveServices()
-                ]);
+                const results = await getServicesByCategory(categoriaNombre);
                 
-                const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-                const searchTerm = normalize(categoriaNombre);
-                
-                const filteredCats = categories.filter(c => 
-                    c.id === categoriaNombre || 
-                    normalize(c.name).includes(searchTerm) ||
-                    searchTerm.includes(normalize(c.name))
-                );
-
-                if (filteredCats.length === 0) {
-                    console.log(`[Tool:consultar_servicios] No match for "${categoriaNombre}". Available: ${categories.map(c => c.name).join(', ')}`);
+                if (results.length === 0) {
+                    const categories = await getCategories();
+                    console.log(`[Tool:consultar_servicios] No match for "${categoriaNombre}"`);
                     return [{ 
                         error: `No encontré la categoría "${categoriaNombre}".`, 
                         categorias_disponibles: categories.map((c, i) => `${i+1}. ${c.name}`).join(', ')
                     }];
                 }
 
-                const allMatchServices: any[] = [];
-                filteredCats.forEach(cat => {
-                    const catServices = services.filter(s => s.category_id === cat.id && s.active);
-                    catServices.forEach(s => {
-                        allMatchServices.push({
-                            label: s.title,
-                            price: s.price,
-                            id: s.id,
-                            category: cat.name
-                        });
-                    });
-                });
-
-                if (allMatchServices.length === 0) {
-                    return [{ error: `No hay servicios activos en ${filteredCats[0].name}.` }];
-                }
-
-                console.log(`[Tool:consultar_servicios] Found ${allMatchServices.length} services for ${categoriaNombre}`);
-                return allMatchServices;
+                console.log(`[Tool:consultar_servicios] Found ${results.length} services for ${categoriaNombre}`);
+                return results.map(s => ({
+                    label: s.title,
+                    price: s.price || 0,
+                    id: s.id,
+                    category: (s as any).category_name || "General"
+                }));
             } catch (err) {
                 console.error('[Tool:consultar_servicios] ERROR:', err);
                 return [{ error: 'No se pudieron cargar los servicios.' }];
@@ -129,7 +107,7 @@ export const buildTools = (leadId: string | null, orgId: string | null, initId?:
             categoriaId: z.string().describe('UUID de la categoría del servicio'),
             fecha: z.string().describe('Fecha en formato YYYY-MM-DD'),
         }),
-        execute: async ({ categoriaId, fecha }) => {
+        execute: async ({ categoriaId, fecha }: { categoriaId: string; fecha: string }) => {
             try {
                 const staff = await getStaffByCategory(categoriaId);
                 if (staff.length === 0) {
@@ -170,7 +148,7 @@ export const buildTools = (leadId: string | null, orgId: string | null, initId?:
             serviceIds: z.array(z.string()).describe('IDs de los servicios elegidos'),
             dateTimeIso: z.string().describe('Fecha y hora en ISO, ej: "2026-03-27T15:00:00"'),
         }),
-        execute: async ({ serviceIds, dateTimeIso }) => {
+        execute: async ({ serviceIds, dateTimeIso }: { serviceIds: string[]; dateTimeIso: string }) => {
             if (!leadId) {
                 return { success: false, error: 'Primero necesito el nombre del cliente para agendar.' };
             }
