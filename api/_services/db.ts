@@ -2,7 +2,8 @@ import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import * as schema from './schema.js';
 import { eq, and, sql as drizzleSql, asc, desc, like, or } from 'drizzle-orm';
-import type { ConvState, Category, Service } from './stateMachine.js';
+import type { ConvState, Category, Service } from './schema.js';
+
 
 export interface ContactInfo {
     phone: string;
@@ -11,16 +12,35 @@ export interface ContactInfo {
 }
 
 const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+
 if (!connectionString) {
     console.error("[db.ts] CRITICAL: Database connection string is missing!");
 }
 
-export const sql = neon(connectionString!);
-export const db = drizzle(sql, { schema });
+// Inicialización diferida o protegida para evitar crashes en el Edge
+export const sql = connectionString ? neon(connectionString) : null as any;
+export const db = connectionString ? drizzle(sql, { schema }) : null as any;
+
+/**
+ * Helper para guardar logs de chat de forma asíncrona.
+ */
+export async function saveChatLog(leadId: string, role: 'user' | 'assistant', content: string) {
+    if (!db || !leadId) return;
+    try {
+        await db.insert(schema.chat_logs).values({
+            lead_id: leadId,
+            role,
+            content,
+            created_at: new Date()
+        });
+    } catch (e) {
+        console.error(`[db.ts] Error saving chat log:`, e);
+    }
+}
 
 // --- HELPERS ---
 const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> => {
-    let timer: NodeJS.Timeout;
+    let timer: any;
     const timeoutPromise = new Promise<T>((resolve) => {
         timer = setTimeout(() => {
             console.warn(`[db.ts] TIMEOUT: Operation exceeded ${ms}ms. Falling back.`);
@@ -30,7 +50,7 @@ const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
 
     return Promise.race([
         promise.then((res) => {
-            clearTimeout(timer);
+            if (timer) clearTimeout(timer);
             return res;
         }),
         timeoutPromise

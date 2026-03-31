@@ -8,19 +8,19 @@ import { createOpenAI } from '@ai-sdk/openai';
  */
 export const getKalonModel = () => {
     const rawKey = process.env.OPENROUTER_API_KEY;
+    
     if (!rawKey) {
-        throw new Error("[ai.ts] CRITICAL: OPENROUTER_API_KEY no está configurada.");
+        console.error("[ai.ts] ERROR: OPENROUTER_API_KEY no encontrada.");
+        // Retornar un error descriptivo en lugar de crashear el proceso
+        throw new Error("Configuración de IA incompleta (Falta API Key).");
     }
-    
-    const apiKey = rawKey.trim().replace(/[\r\n]/g, '');
-    console.log(`[ai.ts] OpenRouter key loaded: ${apiKey.slice(0, 12)}...${apiKey.slice(-4)} (${apiKey.length} chars)`);
-    
+
     const openrouter = createOpenAI({
-        apiKey: apiKey.trim(),
         baseURL: 'https://openrouter.ai/api/v1',
+        apiKey: rawKey,
         headers: {
             'HTTP-Referer': 'https://kalon-estetica.vercel.app',
-            'X-Title': 'KALON Estetica Chatbot',
+            'X-Title': 'Kalon Estética Chatbot',
         },
     });
 

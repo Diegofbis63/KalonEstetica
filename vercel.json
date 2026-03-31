@@ -1,5 +1,17 @@
 {
   "rewrites": [
+    { "source": "/api/chat", "destination": "/api/chat" },
+    { "source": "/api/auth", "destination": "/api/admin?section=users" },
+    { "source": "/api/users", "destination": "/api/admin?section=users" },
+    { "source": "/api/dashboard", "destination": "/api/admin?section=dashboard" },
+    { "source": "/api/appointments", "destination": "/api/admin?section=appointments" },
+    { "source": "/api/income", "destination": "/api/admin?section=income" },
+    { "source": "/api/categories", "destination": "/api/admin?section=catalogs&type=categories" },
+    { "source": "/api/services", "destination": "/api/admin?section=catalogs&type=services" },
+    { "source": "/api/staff", "destination": "/api/admin?section=catalogs&type=staff" },
+    { "source": "/api/clients", "destination": "/api/leads_master?section=clients" },
+    { "source": "/api/leads/identify", "destination": "/api/leads_master?section=identify" },
+    { "source": "/api/leads/chat", "destination": "/api/leads_master?section=tracking" },
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]

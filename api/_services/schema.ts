@@ -1,6 +1,53 @@
 import { relations } from 'drizzle-orm';
 import { pgTable, uuid, text, numeric, integer, boolean, timestamp, jsonb } from 'drizzle-orm/pg-core';
 
+export interface ConvState {
+  clientName: string | null;
+  clientPhone: string | null;
+  selectedServiceIds: string[];
+  currentCategoryId: string | null;
+  pendingCategoryIds: string[];
+  stage: string;
+  pendingDate: string | null;
+  pendingTime: string | null;
+  requestedDate: string | null;
+  requestedTime: string | null;
+  rejectedDates: string[];
+  requestedAllOptions: boolean;
+  lastIntent?: string;
+  isBotEnabled: boolean;
+  currentFlow?: 'none' | 'booking_funnel';
+  errorType?: string;
+  optionMap?: Record<string, string>;
+  justSelectedCategoryIds?: string[];
+}
+
+export interface Category {
+
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  image_url?: string | null;
+  active?: boolean | null;
+  sort_order?: number | null;
+}
+
+export interface Service {
+  id: string;
+  category_id?: string | null;
+  category_name?: string;
+  title: string;
+  description?: string | null;
+  price?: string | null;
+  duration?: string | null;
+  duration_min: number;
+  image_url?: string | null;
+  active?: boolean | null;
+  sort_order?: number | null;
+}
+
+
 export const admin_users = pgTable('admin_users', {
   id: uuid('id').primaryKey().defaultRandom(),
   email: text('email').notNull().unique(),
