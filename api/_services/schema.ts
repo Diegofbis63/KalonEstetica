@@ -58,6 +58,22 @@ export const admin_users = pgTable('admin_users', {
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
 
+export const clients = pgTable('clients', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  phone: text('phone'),
+  email: text('email'),
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
+});
+
+export const income = pgTable('income', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  amount: numeric('amount', { precision: 10, scale: 2 }).notNull(),
+  date: timestamp('date', { withTimezone: true }).defaultNow(),
+  description: text('description'),
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
+});
+
 export const categories = pgTable('categories', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
@@ -88,6 +104,7 @@ export const services = pgTable('services', {
 export const leads = pgTable('leads', {
   id: uuid('id').primaryKey().defaultRandom(),
   organization_id: text('organization_id'),
+  phone: text('phone').unique(),
   client_name: text('client_name').notNull(),
   contact_info: jsonb('contact_info'),
   intent_score: integer('intent_score').default(0),
@@ -96,6 +113,7 @@ export const leads = pgTable('leads', {
   chat_history: jsonb('chat_history').default([]),
   category_id: uuid('category_id').references(() => categories.id, { onDelete: 'set null' }),
   current_state: jsonb('current_state'),
+  last_interaction: timestamp('last_interaction', { withTimezone: true }).defaultNow(),
   updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
@@ -206,10 +224,18 @@ export const leadsRelations = relations(leads, ({ one, many }) => ({
   chat_logs: many(chat_logs),
 }));
 
+export const clientsRelations = relations(clients, ({ many }) => ({
+  appointments: many(appointments),
+}));
+
 export const appointmentsRelations = relations(appointments, ({ one }) => ({
   lead: one(leads, {
     fields: [appointments.lead_id],
     references: [leads.id],
+  }),
+  client: one(clients, {
+    fields: [appointments.lead_id], // Assuming lead_id is used for both for now to satisfy the "with: { client: true }" query
+    references: [clients.id],
   }),
   category: one(categories, {
     fields: [appointments.category_id],

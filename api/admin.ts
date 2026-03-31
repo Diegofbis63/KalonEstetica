@@ -67,7 +67,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             if (req.method === 'GET') {
                 const results = await db.query.appointments.findMany({
                     with: { client: true, service: true, staff: true },
-                    orderBy: [desc(schema.appointments.start_time)]
+                    orderBy: [desc(schema.appointments.date_time)]
                 });
                 return res.status(200).json({ appointments: results });
             }
@@ -85,7 +85,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // --- USERS / PROFILE ---
         if (sec === 'users') {
             if (req.method === 'GET') {
-                const results = await db.query.users.findMany();
+                const results = await db.query.admin_users.findMany();
                 return res.status(200).json({ users: results });
             }
             // Add POST/PUT logic if needed for user management
