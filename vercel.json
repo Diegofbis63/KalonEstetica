@@ -1,7 +1,7 @@
 {
   "rewrites": [
     { "source": "/api/chat", "destination": "/api/chat" },
-    { "source": "/api/auth", "destination": "/api/admin?section=users" },
+    { "source": "/api/auth", "destination": "/api/admin?section=auth" },
     { "source": "/api/users", "destination": "/api/admin?section=users" },
     { "source": "/api/dashboard", "destination": "/api/admin?section=dashboard" },
     { "source": "/api/appointments", "destination": "/api/admin?section=appointments" },

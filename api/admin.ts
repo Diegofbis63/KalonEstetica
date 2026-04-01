@@ -3,6 +3,11 @@ import * as schema from './_services/schema.js';
 import { requireAuth } from '../utils/auth.js';
 import { eq, asc, desc, and, sql } from 'drizzle-orm';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import cookie from 'cookie';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-nova-estetica-key';
 
 /**
  * NÚCLEO MAESTRO DE ADMINISTRACIÓN KÂLON (v14)
@@ -16,7 +21,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const catType = type as string;
 
     try {
-        // --- PUBLIC GETS (Categories / Services for Landing) ---
+        // --- 1. PUBLIC GETS (Categories / Services for Landing) ---
         if (req.method === 'GET') {
             if (sec === 'catalogs' && catType === 'categories') {
                 const results = await db.query.categories.findMany({
@@ -43,7 +48,60 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
         }
 
-        // --- AUTH REQUIRED FOR EVERYTHING ELSE ---
+        // --- 2. AUTHENTICATION (POST /api/admin?section=auth) ---
+        if (sec === 'auth' && req.method === 'POST') {
+            const { username, password } = req.body;
+            
+            // Buscar usuario
+            const user = await db.query.admin_users.findFirst({
+                where: eq(schema.admin_users.username, username)
+            });
+
+            if (!user) {
+                return res.status(401).json({ error: 'Usuario no encontrado' });
+            }
+
+            // Verificar password (bcrypt hash o raw fallback si no hay hash)
+            let isMatch = false;
+            if (user.password_hash && user.password_hash.startsWith('$2')) {
+                isMatch = await bcrypt.compare(password, user.password_hash);
+            } else {
+                // Fallback para usuarios legacy o raw_password si existe
+                isMatch = (password === user.password_hash) || (password === user.raw_password);
+            }
+
+            if (!isMatch) {
+                return res.status(401).json({ error: 'Credenciales inválidas' });
+            }
+
+            // Generar Token
+            const token = jwt.sign({ 
+                id: user.id, 
+                username: user.username, 
+                role: user.role 
+            }, JWT_SECRET, { expiresIn: '24h' });
+
+            // Set Cookie
+            res.setHeader('Set-Cookie', cookie.serialize('nova_token', token, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'strict',
+                maxAge: 60 * 60 * 24, // 24 hours
+                path: '/',
+            }));
+
+            return res.status(200).json({ 
+                success: true, 
+                user: {
+                    id: user.id,
+                    username: user.username,
+                    role: user.role,
+                    email: user.email
+                }
+            });
+        }
+
+        // --- 3. AUTH REQUIRED FOR EVERYTHING ELSE ---
         const user = await requireAuth(req, res);
         if (!user) return;
 
