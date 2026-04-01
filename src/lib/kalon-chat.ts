@@ -12,6 +12,7 @@ export async function streamKalonChat({
   clientPhone,
   mediaUrl,
   identificationId,
+  onIdUpdate,
 }: {
   messages: Msg[];
   onDelta: (deltaText: string) => void;
@@ -19,6 +20,7 @@ export async function streamKalonChat({
   onError: (error: string) => void;
   onStage?: (stage: string) => void;
   onMedia?: (url: string) => void;
+  onIdUpdate?: (id: string) => void;
   clientPhone?: string;
   mediaUrl?: string;
   identificationId?: string;
@@ -102,6 +104,7 @@ export async function streamKalonChat({
           const parsed = JSON.parse(jsonStr);
           if (parsed.stage && onStage) onStage(parsed.stage);
           if (parsed.media_url && onMedia) onMedia(parsed.media_url);
+          if (parsed.leadId && onIdUpdate) onIdUpdate(parsed.leadId);
           const content = parsed.choices?.[0]?.delta?.content as string | undefined;
           if (content) onDelta(content);
         } catch {
@@ -124,6 +127,7 @@ export async function streamKalonChat({
           const parsed = JSON.parse(jsonStr);
           if (parsed.stage && onStage) onStage(parsed.stage);
           if (parsed.media_url && onMedia) onMedia(parsed.media_url);
+          if (parsed.leadId && onIdUpdate) onIdUpdate(parsed.leadId);
           const content = parsed.choices?.[0]?.delta?.content as string | undefined;
           if (content) onDelta(content);
         } catch {

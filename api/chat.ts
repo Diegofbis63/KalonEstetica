@@ -53,7 +53,7 @@ export default async function handler(req: Request) {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
-        const send = (data: any) => {
+        const send = (data: Record<string, any>) => {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
         };
 
@@ -73,14 +73,18 @@ export default async function handler(req: Request) {
             if (part.type === 'tool-result') {
               const { toolName, result: toolResults } = part;
               
-              // Satori Image Injection (Legacy Format compatible with src/lib/kalon-chat.ts)
+              // 1. PERSISTENCIA DE IDENTIDAD: Capturamos el leadId si se acaba de crear
+              if (toolName === 'registrar_cliente' && (toolResults as any).leadId) {
+                console.log(`[STREAM] Nuevo Lead detectado: ${(toolResults as any).leadId}`);
+                send({ leadId: (toolResults as any).leadId });
+              }
+
+              // 2. INYECCIÓN DE IMÁGENES SATORI: Para Categorías y Servicios
               if (toolName === 'listar_categorias_principales' || toolName === 'consultar_servicios') {
-                // GENERACIÓN DE MENÚ VISUAL (SATORI)
                 const isCategory = toolName === 'listar_categorias_principales';
-                const title = isCategory ? 'Categorías de Servicios' : 'Nuestros Servicios';
+                const title = isCategory ? 'Categorías de Especialidad' : 'Nuestros Servicios';
                 
-                // Mapeamos los resultados para el generador
-                // Algunos tools devuelven un array directo, otros un objeto con { servicios: [] }
+                // Mapeamos los resultados para el generador de Satori
                 const items = Array.isArray(toolResults) ? toolResults : (toolResults as any).servicios || [];
                 
                 const menuData = items.map((item: any) => ({
@@ -89,22 +93,17 @@ export default async function handler(req: Request) {
                 }));
 
                 if (menuData.length > 0) {
-                    // Codificamos los datos en Base64 para pasarlos por URL
                     const encodedData = Buffer.from(JSON.stringify(menuData)).toString('base64');
-                    
-                    // Usamos el Host de la request actual para asegurar que llegue al mismo deployment
                     const host = req.headers.get('host') || 'kalon-estetica.vercel.app';
                     const protocol = host.includes('localhost') ? 'http' : 'https';
                     const satoriUrl = `${protocol}://${host}/api/satori-image?title=${encodeURIComponent(title)}&data=${encodedData}`;
 
-                    console.log(`[CHAT LOG] Generated Satori URL: ${satoriUrl}`);
+                    console.log(`[CHAT LOG] Generated Satori URL for ${toolName}: ${satoriUrl}`);
 
+                    // Enviamos la URL de la imagen en el delta para que el componente ChatMessage la renderice
                     send({
                         choices: [{
-                            delta: {
-                                content: `\n\n aquí tienes las opciones disponibles:`,
-                                media_url: satoriUrl
-                            }
+                            delta: { content: "", media_url: satoriUrl }
                         }]
                     });
                 }
@@ -136,8 +135,9 @@ export default async function handler(req: Request) {
       },
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[api/chat] Fatal Error:', error);
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return new Response(JSON.stringify({ error: message }), { status: 500 });
   }
 }

@@ -1,7 +1,7 @@
 import { db } from './_services/db.js';
 import * as schema from './_services/schema.js';
 import { requireAuth } from '../utils/auth.js';
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc, and, sql } from 'drizzle-orm';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 /**
@@ -22,19 +22,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // --- CLIENTS MANAGEMENT ---
         if (sec === 'clients') {
             if (req.method === 'GET') {
-                // We use leads table as the source for clients to restore data visibility
-                const results = await db.query.leads.findMany({ 
-                    orderBy: [desc(schema.leads.created_at)] 
-                });
+                // We perform a join to get appointment stats, required by the frontend ClientSchema
+                const results = await db.select({
+                    id: schema.leads.id,
+                    client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente sin nombre')`,
+                    phone: schema.leads.phone,
+                    status: schema.leads.status,
+                    is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, true)`,
+                    created_at: schema.leads.created_at,
+                    total_appointments: sql<number>`count(${schema.appointments.id})::int`,
+                    last_appointment: sql<string | null>`max(${schema.appointments.date_time})`
+                })
+                .from(schema.leads)
+                .leftJoin(schema.appointments, eq(schema.leads.id, schema.appointments.lead_id))
+                .groupBy(
+                    schema.leads.id, 
+                    schema.leads.client_name, 
+                    schema.leads.phone, 
+                    schema.leads.status, 
+                    schema.leads.is_bot_enabled, 
+                    schema.leads.created_at
+                )
+                .orderBy(desc(schema.leads.created_at));
+
                 return res.status(200).json({ clients: results });
             }
             if (req.method === 'POST') {
-                const [item] = await db.insert(schema.leads).values(req.body).returning();
+                const { client_name, name, ...rest } = req.body as { client_name?: string, name?: string };
+                const finalName = client_name || name;
+                const [item] = await db.insert(schema.leads).values({ ...rest, client_name: finalName }).returning();
                 return res.status(201).json({ client: item });
             }
             if (req.method === 'PUT' || req.method === 'PATCH') {
                 const id = req.query.id as string;
-                const [updated] = await db.update(schema.leads).set(req.body).where(eq(schema.leads.id, id)).returning();
+                const { client_name, name, ...rest } = req.body as { client_name?: string, name?: string };
+                const finalName = client_name || name;
+                const updateData: Record<string, any> = { ...rest };
+                if (finalName) updateData.client_name = finalName;
+                
+                const [updated] = await db.update(schema.leads).set(updateData).where(eq(schema.leads.id, id)).returning();
                 return res.status(200).json({ client: updated });
             }
         }

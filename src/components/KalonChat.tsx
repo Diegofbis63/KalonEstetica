@@ -36,6 +36,12 @@ export default function KalonChat() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [zoomImage, setZoomImage] = useState<string | null>(null);
   
+  // Persistencia de Identidad (Lead ID)
+  const [persistentLeadId, setPersistentLeadId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return sessionStorage.getItem('kalon_lead_id');
+  });
+  
   const [chatInitId] = useState(() => {
     if (typeof window === 'undefined') return "";
     const saved = sessionStorage.getItem('kalon_chat_init_id');
@@ -107,9 +113,14 @@ export default function KalonChat() {
     await streamKalonChat({
       messages: history,
       clientPhone: phone || (identifiedLead?.contact_info?.phone) || undefined,
-      identificationId: chatInitId,
+      identificationId: persistentLeadId || chatInitId,
       mediaUrl: mediaToSend,
       onDelta: (chunk) => upsertAssistant(chunk),
+      onIdUpdate: (newId) => {
+        console.log("🌸 [KalonChat] Identidad vinculada:", newId);
+        setPersistentLeadId(newId);
+        sessionStorage.setItem('kalon_lead_id', newId);
+      },
       onStage: (s) => setCurrentStage(s),
       onMedia: (url) => setMessages(prev => {
         const last = prev[prev.length-1];
@@ -197,6 +208,7 @@ export default function KalonChat() {
           onClick={() => {
             if (confirm("¿Quieres reiniciar la conversación?")) {
               sessionStorage.removeItem('kalon_chat_init_id');
+              sessionStorage.removeItem('kalon_lead_id');
               window.location.reload();
             }
           }}
