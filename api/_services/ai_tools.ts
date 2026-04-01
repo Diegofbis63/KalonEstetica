@@ -51,9 +51,12 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
         }),
 
         listar_categorias_principales: tool({
-            description: 'Lista las categorías principales de servicios de KÂLON (ej: Depilación, Pestañas, Uñas, etc). Usalo después de registrar al cliente para mostrarle el menú.',
+            description: 'Lista las categorías principales de servicios. REQUIERE IDENTIFICACIÓN PREVIA.',
             parameters: z.object({}),
             execute: async () => {
+                if (!currentLeadId) {
+                    return { error: 'Primero necesito tu nombre y apellido para poder mostrarte nuestras especialidades.' };
+                }
                 try {
                     const categories = await getCategories();
                     console.log(`[Tool:listar_categorias] ${categories.length} categorías encontradas`);
@@ -71,11 +74,14 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
         }),
 
         consultar_servicios: tool({
-            description: 'Muestra los servicios específicos con precios dentro de una categoría. Acepta el nombre de la categoría (ej: "depilacion", "pestañas") o su UUID.',
+            description: 'Muestra los servicios específicos con precios dentro de una categoría. REQUIERE IDENTIFICACIÓN PREVIA.',
             parameters: z.object({
                 categoriaNombre: z.string().describe('Nombre de la categoría (ej: "Depilación", "Pestañas"). También acepta UUID.')
             }),
             execute: async ({ categoriaNombre }: { categoriaNombre: string }) => {
+                if (!currentLeadId) {
+                    return { success: false, error: 'Primero necesito tu nombre y apellido para poder mostrarte los servicios.', servicios: [] };
+                }
                 try {
                     const results = await getServicesByCategory(categoriaNombre);
                     
@@ -110,12 +116,15 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
         }),
 
         consultar_disponibilidad: tool({
-            description: 'Busca horarios disponibles para un servicio en una fecha específica.',
+            description: 'Busca horarios disponibles. REQUIERE IDENTIFICACIÓN PREVIA.',
             parameters: z.object({
                 categoriaId: z.string().describe('UUID de la categoría del servicio'),
                 fecha: z.string().describe('Fecha en formato YYYY-MM-DD'),
             }),
             execute: async ({ categoriaId, fecha }: { categoriaId: string; fecha: string }) => {
+                if (!currentLeadId) {
+                    return { disponible: false, error: 'Primero necesito tu nombre y apellido para ver disponibilidad.' };
+                }
                 try {
                     const staffMembers = await getStaffByCategory(categoriaId);
                     if (staffMembers.length === 0) {
