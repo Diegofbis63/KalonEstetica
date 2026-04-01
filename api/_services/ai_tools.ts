@@ -35,17 +35,22 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                         initId: initId || null
                     };
                     const newLead = await createLead(orgId, fullName, contactInfo);
-                    currentLeadId = newLead.id; // Actualizar para herramientas siguientes
+                    
+                    if (!newLead) {
+                        return { success: false, error: 'Hubo un problemita guardando tus datos. ¿Podrías decirme tu nombre de nuevo? Perdón la molestia.' };
+                    }
+
+                    currentLeadId = newLead.id; 
                     console.log(`[Tool:registrar_cliente] Lead creado: ${newLead.id} (${fullName})`);
                     return { 
                         success: true, 
                         leadId: newLead.id, 
                         nombre: fullName,
-                        mensaje: `Cliente ${fullName} registrado exitosamente. Podés continuar consultando servicios o agendando.` 
+                        mensaje: `¡Excelente, ${fullName}! Ya te anoté en mi agenda. ¿En qué puedo ayudarte hoy?` 
                     };
                 } catch (err) {
                     console.error('[Tool:registrar_cliente] ERROR:', err);
-                    return { success: false, error: 'No se pudo registrar al cliente. Intentá de nuevo.', leadId: null, nombre: null, mensaje: null };
+                    return { success: false, error: 'No se pudo registrar al cliente por un error técnico. Intentá de nuevo.' };
                 }
             }
         }),

@@ -186,10 +186,10 @@ export async function createLead(orgId: string | null, name: string, contactInfo
             is_bot_enabled: true,
             chat_history: []
         }).returning({ id: schema.leads.id }),
-        3500, []
+        8000, []
     );
     
-    return results[0] || { id: "temporary-" + Date.now() };
+    return results[0] || null;
 }
 
 // --- UPDATES ---
