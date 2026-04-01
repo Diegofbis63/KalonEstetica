@@ -92,7 +92,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (sec === 'dashboard' && req.method === 'GET') {
             const [ordersCount] = await db.select({ count: sql`count(*)` }).from(schema.appointments);
             const [leadsCount] = await db.select({ count: sql`count(*)` }).from(schema.leads);
-            const incomeRes = await db.select({ total: sql`sum(total_price)` }).from(schema.appointments);
+            const incomeRes = await db.select({ total: sql`sum(total_price)` })
+                .from(schema.appointments)
+                .where(inArray(schema.appointments.status, ['realizada', 'concluida', 'pagada', 'REALIZADA', 'CONCLUIDA', 'PAGADA']));
 
             // Fetch leads for dashboard table
             const dashboardLeads = await db.select({
@@ -144,7 +146,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     date_time: a.date_time ? new Date(a.date_time).toISOString() : undefined,
                     created_at: a.created_at ? new Date(a.created_at).toISOString() : undefined,
                     total_price: Number(a.total_price || 0),
-                    total_duration: Number(a.total_duration || 0)
+                    total_duration: Number(a.total_duration || 0),
+                    selected_services: Array.isArray(a.selected_services) ? a.selected_services.map((s: any) => ({
+                        ...s,
+                        price: s.price ? Number(s.price) : null,
+                        duration: s.duration ? parseInt(String(s.duration).replace(/\D/g, ''), 10) || 0 : null
+                    })) : []
                 })),
                 stats: {
                     totalAppointments: Number(ordersCount.count),
@@ -185,7 +192,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         date_time: a.date_time ? new Date(a.date_time).toISOString() : undefined,
                         created_at: a.created_at ? new Date(a.created_at).toISOString() : undefined,
                         total_price: Number(a.total_price || 0),
-                        total_duration: Number(a.total_duration || 0)
+                        total_duration: Number(a.total_duration || 0),
+                        selected_services: Array.isArray(a.selected_services) ? a.selected_services.map((s: any) => ({
+                            ...s,
+                            price: s.price ? Number(s.price) : null,
+                            duration: s.duration ? parseInt(String(s.duration).replace(/\D/g, ''), 10) || 0 : null
+                        })) : []
                     }))
                 });
             }
@@ -212,12 +224,77 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // --- INCOME / CASHFLOW ---
         if (sec === 'income') {
             if (req.method === 'GET') {
-                const results = await db.query.income.findMany({ orderBy: [desc(schema.income.date)] });
-                return res.status(200).json({ income: results });
-            }
-            if (req.method === 'POST') {
-                const [item] = await db.insert(schema.income).values(req.body).returning();
-                return res.status(201).json({ income: item });
+                const results = await db.select({
+                    id: schema.appointments.id,
+                    lead_id: schema.appointments.lead_id,
+                    client_name: schema.leads.client_name,
+                    phone: schema.leads.phone,
+                    service_type: schema.appointments.service_type,
+                    category_name: schema.categories.name,
+                    date_time: schema.appointments.date_time,
+                    status: schema.appointments.status,
+                    total_price: schema.appointments.total_price,
+                    selected_services: schema.appointments.selected_services,
+                    is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, false)`
+                })
+                .from(schema.appointments)
+                .leftJoin(schema.leads, eq(schema.appointments.lead_id, schema.leads.id))
+                .leftJoin(schema.categories, eq(schema.appointments.category_id, schema.categories.id))
+                .where(inArray(schema.appointments.status, ['realizada', 'concluida', 'pagada', 'REALIZADA', 'CONCLUIDA', 'PAGADA']))
+                .orderBy(desc(schema.appointments.date_time));
+                
+                let totalRevenue = 0;
+                let count = results.length;
+                let evolutionMap: Record<string, number> = {};
+                
+                const payments = results.map(a => {
+                    const amount = Number(a.total_price || 0);
+                    totalRevenue += amount;
+                    
+                    if (a.date_time) {
+                         const dateObj = new Date(a.date_time);
+                         const monthKey = dateObj.toLocaleString('es-ES', { month: 'short' }).charAt(0).toUpperCase() + dateObj.toLocaleString('es-ES', { month: 'short' }).slice(1);
+                         evolutionMap[monthKey] = (evolutionMap[monthKey] || 0) + amount;
+                    }
+                    
+                    return {
+                        id: a.id,
+                        lead_id: a.lead_id,
+                        client_name: a.client_name || 'Cliente sin nombre',
+                        is_bot_enabled: a.is_bot_enabled,
+                        parent_service: a.category_name || a.service_type,
+                        selected_services: Array.isArray(a.selected_services) ? a.selected_services.map((s: any) => ({
+                            title: s.title || 'Servicio',
+                            price: s.price ? Number(s.price) : 0,
+                            duration: s.duration ? parseInt(String(s.duration).replace(/\D/g, ''), 10) || 0 : null
+                        })) : [],
+                        date: a.date_time ? new Date(a.date_time).toISOString() : new Date().toISOString(),
+                        amount: amount,
+                        status: 'completado',
+                        payment_method: 'Efectivo', // Default as we dont have payment_method tracking currently
+                        phone: a.phone
+                    };
+                });
+                
+                const evolution = Object.keys(evolutionMap).map(name => ({
+                    name,
+                    Facturado: evolutionMap[name]
+                }));
+
+                // Ensure at least some empty months if data is totally empty
+                if (evolution.length === 0) {
+                    evolution.push({ name: 'Mes Actual', Facturado: 0 });
+                }
+
+                return res.status(200).json({
+                    stats: {
+                        revenue: totalRevenue,
+                        ticket: count > 0 ? Math.round(totalRevenue / count) : 0,
+                        count: count
+                    },
+                    evolution,
+                    payments
+                });
             }
         }
 
