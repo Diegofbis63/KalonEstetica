@@ -1,7 +1,7 @@
 import { db } from './_services/db.js';
 import * as schema from './_services/schema.js';
 import { requireAuth } from '../utils/auth.js';
-import { eq, asc, desc, and, sql } from 'drizzle-orm';
+import { eq, asc, desc, and, sql, inArray } from 'drizzle-orm';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
@@ -94,7 +94,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const [leadsCount] = await db.select({ count: sql`count(*)` }).from(schema.leads);
             const incomeRes = await db.select({ total: sql`sum(total_price)` })
                 .from(schema.appointments)
-                .where(inArray(schema.appointments.status, ['realizada', 'concluida', 'pagada', 'REALIZADA', 'CONCLUIDA', 'PAGADA']));
+                .where(inArray(schema.appointments.status, [
+                    'realizada', 'concluida', 'pagada', 'confirmed', 'completada', 'completado',
+                    'REALIZADA', 'CONCLUIDA', 'PAGADA', 'CONFIRMED', 'COMPLETADA', 'COMPLETADO'
+                ]));
 
             // Fetch leads for dashboard table
             const dashboardLeads = await db.select({
@@ -240,21 +243,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 .from(schema.appointments)
                 .leftJoin(schema.leads, eq(schema.appointments.lead_id, schema.leads.id))
                 .leftJoin(schema.categories, eq(schema.appointments.category_id, schema.categories.id))
-                .where(inArray(schema.appointments.status, ['realizada', 'concluida', 'pagada', 'REALIZADA', 'CONCLUIDA', 'PAGADA']))
+                .where(inArray(schema.appointments.status, [
+                    'realizada', 'concluida', 'pagada', 'confirmed', 'completada', 'completado',
+                    'REALIZADA', 'CONCLUIDA', 'PAGADA', 'CONFIRMED', 'COMPLETADA', 'COMPLETADO'
+                ]))
                 .orderBy(desc(schema.appointments.date_time));
                 
-                let totalRevenue = 0;
-                let count = results.length;
-                let evolutionMap: Record<string, number> = {};
+                const totalRevenueVal = results.reduce((acc, a) => acc + Number(a.total_price || 0), 0);
+                const count = results.length;
+                const evolutionMap: Record<string, number> = {};
                 
                 const payments = results.map(a => {
                     const amount = Number(a.total_price || 0);
-                    totalRevenue += amount;
-                    
                     if (a.date_time) {
                          const dateObj = new Date(a.date_time);
                          const monthKey = dateObj.toLocaleString('es-ES', { month: 'short' }).charAt(0).toUpperCase() + dateObj.toLocaleString('es-ES', { month: 'short' }).slice(1);
-                         evolutionMap[monthKey] = (evolutionMap[monthKey] || 0) + amount;
+                         evolutionMap[monthKey] = (evolutionMap[monthKey] || 0) + Number(a.total_price || 0);
                     }
                     
                     return {
@@ -288,8 +292,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
                 return res.status(200).json({
                     stats: {
-                        revenue: totalRevenue,
-                        ticket: count > 0 ? Math.round(totalRevenue / count) : 0,
+                        revenue: totalRevenueVal,
+                        ticket: count > 0 ? Math.round(totalRevenueVal / count) : 0,
                         count: count
                     },
                     evolution,
@@ -323,6 +327,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         ...s, 
                         price: s.price ? Number(s.price) : null,
                         duration: s.duration_min ? Number(s.duration_min) : (s.duration ? parseInt(String(s.duration).replace(/\D/g, ''), 10) || 0 : null)
+                    }));
+                } else if (catType === 'categories') {
+                    formatted = results.map((c: any) => ({
+                        ...c,
+                        services: c.services?.map((s: any) => ({
+                            ...s,
+                            price: s.price ? Number(s.price) : null,
+                            duration: s.duration_min ? Number(s.duration_min) : (s.duration ? parseInt(String(s.duration).replace(/\D/g, ''), 10) || 0 : null)
+                        }))
                     }));
                 } else if (catType === 'staff') {
                     // Map specialties to array of category IDs
