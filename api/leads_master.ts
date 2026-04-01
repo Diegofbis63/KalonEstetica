@@ -22,16 +22,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // --- CLIENTS MANAGEMENT ---
         if (sec === 'clients') {
             if (req.method === 'GET') {
-                const results = await db.query.clients.findMany({ orderBy: [desc(schema.clients.created_at)] });
+                // We use leads table as the source for clients to restore data visibility
+                const results = await db.query.leads.findMany({ 
+                    orderBy: [desc(schema.leads.created_at)] 
+                });
                 return res.status(200).json({ clients: results });
             }
             if (req.method === 'POST') {
-                const [item] = await db.insert(schema.clients).values(req.body).returning();
+                const [item] = await db.insert(schema.leads).values(req.body).returning();
                 return res.status(201).json({ client: item });
             }
             if (req.method === 'PUT' || req.method === 'PATCH') {
                 const id = req.query.id as string;
-                const [updated] = await db.update(schema.clients).set(req.body).where(eq(schema.clients.id, id)).returning();
+                const [updated] = await db.update(schema.leads).set(req.body).where(eq(schema.leads.id, id)).returning();
                 return res.status(200).json({ client: updated });
             }
         }

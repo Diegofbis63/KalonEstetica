@@ -233,9 +233,9 @@ export const appointmentsRelations = relations(appointments, ({ one }) => ({
     fields: [appointments.lead_id],
     references: [leads.id],
   }),
-  client: one(clients, {
-    fields: [appointments.lead_id], // Assuming lead_id is used for both for now to satisfy the "with: { client: true }" query
-    references: [clients.id],
+  client: one(leads, {
+    fields: [appointments.lead_id],
+    references: [leads.id],
   }),
   category: one(categories, {
     fields: [appointments.category_id],

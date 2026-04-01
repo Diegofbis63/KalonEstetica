@@ -50,14 +50,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // --- DASHBOARD / STATS ---
         if (sec === 'dashboard' && req.method === 'GET') {
             const [orders] = await db.select({ count: sql`count(*)` }).from(schema.appointments);
-            const [rev] = await db.select({ total: sql`sum(amount)` }).from(schema.income);
-            const [clients] = await db.select({ count: sql`count(*)` }).from(schema.clients);
+            const [leadsCount] = await db.select({ count: sql`count(*)` }).from(schema.leads);
+            
+            // Revenue should probably come from appointments total_price for now if income is empty
+            const incomeRes = await db.select({ total: sql`sum(total_price)` }).from(schema.appointments);
+
             return res.status(200).json({
                 stats: {
                     totalAppointments: Number(orders.count),
-                    totalRevenue: Number(rev.total || 0),
-                    totalClients: Number(clients.count),
-                    activeStaff: 5 // Mock or count staff
+                    totalRevenue: Number(incomeRes[0]?.total || 0),
+                    totalClients: Number(leadsCount.count),
+                    activeStaff: 5
                 }
             });
         }

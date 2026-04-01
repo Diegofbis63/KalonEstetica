@@ -71,22 +71,43 @@ export default async function handler(req: Request) {
             }
 
             if (part.type === 'tool-result') {
-              const { toolName, result: toolResult } = part;
+              const { toolName, result: toolResults } = part;
               
               // Satori Image Injection (Legacy Format compatible with src/lib/kalon-chat.ts)
               if (toolName === 'listar_categorias_principales' || toolName === 'consultar_servicios') {
-                const isCat = toolName === 'listar_categorias_principales';
-                const title = isCat ? 'Categorías' : 'Servicios';
+                // GENERACIÓN DE MENÚ VISUAL (SATORI)
+                const isCategory = toolName === 'listar_categorias_principales';
+                const title = isCategory ? 'Categorías de Servicios' : 'Nuestros Servicios';
                 
-                // Format items for the image generator
-                const items = isCat 
-                  ? (toolResult as any[]).map(c => ({ label: c.nombre }))
-                  : (toolResult as any).servicios.map((s: any) => ({ label: s.label, price: s.price }));
+                // Mapeamos los resultados para el generador
+                // Algunos tools devuelven un array directo, otros un objeto con { servicios: [] }
+                const items = Array.isArray(toolResults) ? toolResults : (toolResults as any).servicios || [];
+                
+                const menuData = items.map((item: any) => ({
+                    label: item.nombre || item.label || 'Servicio',
+                    price: item.price ? `$${item.price}` : undefined
+                }));
 
-                const base64Data = Buffer.from(JSON.stringify(items)).toString('base64');
-                const satoriUrl = `https://kalon-estetica.vercel.app/api/satori-image?title=${encodeURIComponent(title)}&data=${encodeURIComponent(base64Data)}&v=${Date.now()}`;
-                
-                send({ media_url: satoriUrl });
+                if (menuData.length > 0) {
+                    // Codificamos los datos en Base64 para pasarlos por URL
+                    const encodedData = Buffer.from(JSON.stringify(menuData)).toString('base64');
+                    
+                    // Usamos el Host de la request actual para asegurar que llegue al mismo deployment
+                    const host = req.headers.get('host') || 'kalon-estetica.vercel.app';
+                    const protocol = host.includes('localhost') ? 'http' : 'https';
+                    const satoriUrl = `${protocol}://${host}/api/satori-image?title=${encodeURIComponent(title)}&data=${encodedData}`;
+
+                    console.log(`[CHAT LOG] Generated Satori URL: ${satoriUrl}`);
+
+                    send({
+                        choices: [{
+                            delta: {
+                                content: `\n\n aquí tienes las opciones disponibles:`,
+                                media_url: satoriUrl
+                            }
+                        }]
+                    });
+                }
               }
             }
           }
