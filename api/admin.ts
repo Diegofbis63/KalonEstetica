@@ -242,7 +242,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 // Format results
                 let formatted = results;
                 if (catType === 'services') {
-                    formatted = results.map((s: any) => ({ ...s, price: s.price ? Number(s.price) : null }));
+                    formatted = results.map((s: any) => ({ 
+                        ...s, 
+                        price: s.price ? Number(s.price) : null,
+                        duration: s.duration_min ? Number(s.duration_min) : (s.duration ? parseInt(String(s.duration).replace(/\D/g, ''), 10) || 0 : null)
+                    }));
                 } else if (catType === 'staff') {
                     // Map specialties to array of category IDs
                     formatted = results.map((s: any) => ({

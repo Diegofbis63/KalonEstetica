@@ -45,12 +45,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 )
                 .orderBy(desc(schema.leads.created_at));
 
+                // Safe date formatter for client data
+                const safeISO = (dateStr: any) => {
+                    if (!dateStr) return null;
+                    try {
+                        const date = new Date(dateStr);
+                        if (isNaN(date.getTime())) return null;
+                        return date.toISOString();
+                    } catch (err) {
+                        return null;
+                    }
+                };
+
                 // Formatear para satisfacer ClientSchema (validations.ts)
                 const clients = results.map(c => ({
                     ...c,
                     // Asegurar que las fechas sean strings ISO para evitar fallos de validación en el frontend
-                    created_at: c.created_at ? new Date(c.created_at).toISOString() : undefined,
-                    last_appointment: c.last_appointment ? new Date(c.last_appointment).toISOString() : null,
+                    created_at: safeISO(c.created_at) || undefined,
+                    last_appointment: safeISO(c.last_appointment),
                     // Campos requeridos por el esquema pero que no están en la tabla leads directamente
                     email: null,
                     note: null,
