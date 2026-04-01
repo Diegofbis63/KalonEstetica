@@ -45,7 +45,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 )
                 .orderBy(desc(schema.leads.created_at));
 
-                return res.status(200).json({ clients: results });
+                // Add empty history to satisfy Zod schema if not present
+                const clients = results.map(c => ({
+                    ...c,
+                    appointment_history: []
+                }));
+
+                return res.status(200).json({ clients });
             }
             if (req.method === 'POST') {
                 const { client_name, name, ...rest } = req.body as { client_name?: string, name?: string };

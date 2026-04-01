@@ -22,30 +22,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     try {
         // --- 1. PUBLIC GETS (Categories / Services for Landing) ---
-        if (req.method === 'GET') {
-            if (sec === 'catalogs' && catType === 'categories') {
-                const results = await db.query.categories.findMany({
-                    where: eq(schema.categories.active, true),
-                    orderBy: [asc(schema.categories.sort_order), desc(schema.categories.created_at)]
-                });
-                return res.status(200).json({ categories: results });
-            }
-
-            if (sec === 'catalogs' && catType === 'services') {
-                const { categoryId, categorySlug } = req.query;
-                let effectiveId = categoryId as string;
-                if (!effectiveId && categorySlug) {
-                    const cat = await db.query.categories.findFirst({ where: eq(schema.categories.slug, categorySlug as string) });
-                    if (cat) effectiveId = cat.id;
-                }
-                const where = effectiveId ? eq(schema.services.category_id, effectiveId) : undefined;
-                const results = await db.query.services.findMany({
-                    where,
-                    orderBy: [asc(schema.services.sort_order), desc(schema.services.created_at)],
-                    with: { category: true }
-                });
-                return res.status(200).json({ services: results.map((s: any) => ({ ...s, duration: s.duration_min || 0 })) });
-            }
+        // This is temporarily simplified for landing page requests that don't pass 'section'
+        if (req.method === 'GET' && !section) {
+            const results = await db.query.categories.findMany({ 
+                with: { services: true },
+                orderBy: [sql`sort_order ASC`]
+            });
+            return res.status(200).json({ categories: results });
         }
 
         // --- 2. AUTHENTICATION (POST /api/admin?section=auth) ---
@@ -224,6 +207,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (sec === 'catalogs') {
             const table = catType === 'categories' ? schema.categories : (catType === 'services' ? schema.services : schema.staff);
             
+            if (req.method === 'GET') {
+                const findOptions: any = {
+                    orderBy: [(table as any).sort_order ? sql`sort_order ASC` : (table as any).created_at ? desc((table as any).created_at) : undefined]
+                };
+
+                // Add relations if needed
+                if (catType === 'staff') {
+                    findOptions.with = { specialties: true };
+                } else if (catType === 'categories') {
+                    findOptions.with = { services: true };
+                }
+
+                const results = await (db.query as any)[catType].findMany(findOptions);
+
+                // Format results
+                let formatted = results;
+                if (catType === 'services') {
+                    formatted = results.map((s: any) => ({ ...s, price: s.price ? Number(s.price) : null }));
+                } else if (catType === 'staff') {
+                    // Map specialties to array of category IDs
+                    formatted = results.map((s: any) => ({
+                        ...s,
+                        specialties: s.specialties?.map((sp: any) => sp.category_id) || []
+                    }));
+                }
+
+                return res.status(200).json({ [catType]: formatted });
+            }
+
             if (req.method === 'POST') {
                 const [item] = await db.insert(table as any).values(req.body).returning();
                 return res.status(201).json({ [catType.slice(0,-1)]: item });
