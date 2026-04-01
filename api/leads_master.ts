@@ -25,7 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 // We perform a join to get appointment stats, required by the frontend ClientSchema
                 const results = await db.select({
                     id: schema.leads.id,
-                    client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente sin nombre')`,
+                    client_name: schema.leads.client_name,
                     phone: schema.leads.phone,
                     status: schema.leads.status,
                     is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, true)`,
@@ -45,10 +45,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 )
                 .orderBy(desc(schema.leads.created_at));
 
-                // Add empty history to satisfy Zod schema if not present
+                // Formatear para satisfacer ClientSchema (validations.ts)
                 const clients = results.map(c => ({
                     ...c,
-                    appointment_history: []
+                    // Asegurar que las fechas sean strings ISO para evitar fallos de validación en el frontend
+                    created_at: c.created_at ? new Date(c.created_at).toISOString() : undefined,
+                    last_appointment: c.last_appointment ? new Date(c.last_appointment).toISOString() : null,
+                    // Campos requeridos por el esquema pero que no están en la tabla leads directamente
+                    email: null,
+                    note: null,
+                    appointment_history: [] // El esquema lo espera pero no se requiere para el listado inicial
                 }));
 
                 return res.status(200).json({ clients });

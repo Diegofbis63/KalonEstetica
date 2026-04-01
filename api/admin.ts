@@ -134,8 +134,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .limit(50);
 
             return res.status(200).json({
-                leads: dashboardLeads,
-                appointments: dashboardAppointments,
+                leads: dashboardLeads.map(l => ({
+                    ...l,
+                    created_at: l.created_at ? new Date(l.created_at).toISOString() : undefined,
+                    updated_at: l.updated_at ? new Date(l.updated_at).toISOString() : null,
+                })),
+                appointments: dashboardAppointments.map(a => ({
+                    ...a,
+                    date_time: a.date_time ? new Date(a.date_time).toISOString() : undefined,
+                    created_at: a.created_at ? new Date(a.created_at).toISOString() : undefined,
+                    total_price: Number(a.total_price || 0),
+                    total_duration: Number(a.total_duration || 0)
+                })),
                 stats: {
                     totalAppointments: Number(ordersCount.count),
                     totalRevenue: Number(incomeRes[0]?.total || 0),
@@ -169,7 +179,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 .leftJoin(schema.categories, eq(schema.appointments.category_id, schema.categories.id))
                 .orderBy(desc(schema.appointments.date_time));
 
-                return res.status(200).json({ appointments: results });
+                return res.status(200).json({
+                    appointments: results.map(a => ({
+                        ...a,
+                        date_time: a.date_time ? new Date(a.date_time).toISOString() : undefined,
+                        created_at: a.created_at ? new Date(a.created_at).toISOString() : undefined,
+                        total_price: Number(a.total_price || 0),
+                        total_duration: Number(a.total_duration || 0)
+                    }))
+                });
             }
             if (req.method === 'POST') {
                 const [item] = await db.insert(schema.appointments).values(req.body).returning();
