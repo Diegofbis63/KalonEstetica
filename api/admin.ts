@@ -1,7 +1,7 @@
 import { db } from './_services/db.js';
 import * as schema from './_services/schema.js';
 import { requireAuth } from '../utils/auth.js';
-import { eq, asc, desc, and, sql, inArray } from 'drizzle-orm';
+import { eq, asc, desc, and, sql, inArray, count } from 'drizzle-orm';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
@@ -93,15 +93,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const [ordersCount] = await db.select({ count: sql`count(*)` }).from(schema.appointments);
             const [leadsCount] = await db.select({ count: sql`count(*)` }).from(schema.leads);
             
-            // Fix: total_price is numeric. cast to text nullif can fail. simplification is safer and better.
+            const dateFilter = sql`1=1`;
             const statsIncome = await db.select({
-                total: sql<string>`SUM(COALESCE(${schema.appointments.total_price}, 0))`,
-                count: sql`count(*)`
+                total: sql<number>`SUM(COALESCE(${schema.appointments.total_price}, 0))`,
+                count: count()
             })
-                .from(schema.appointments)
-                .where(inArray(sql<string>`lower(${schema.appointments.status})`, [
-                    'realizada', 'concluida', 'pagada', 'confirmed', 'completada', 'completado', 'finalizada', 'servido'
-                ]));
+            .from(schema.appointments)
+            .where(and(
+                inArray(sql<string>`lower(${schema.appointments.status})`, ['realizada', 'concluida', 'pagada', 'confirmed', 'completada', 'completado', 'finalizada', 'servido']),
+                dateFilter
+            ));
 
             // Fetch leads for dashboard table
             const dashboardLeads = await db.select({
@@ -231,10 +232,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // --- INCOME / CASHFLOW ---
         if (sec === 'income') {
             if (req.method === 'GET') {
+                const { startDate, endDate } = req.query;
+                let dateFilter = sql`1=1`;
+                if (startDate && endDate) {
+                    dateFilter = and(
+                        sql`${schema.appointments.date_time} >= ${startDate}`,
+                        sql`${schema.appointments.date_time} <= ${endDate}`
+                    );
+                }
+
                 const results = await db.select({
                     id: schema.appointments.id,
                     lead_id: schema.appointments.lead_id,
-                    client_name: schema.leads.client_name,
+                    client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente sin nombre')`,
                     phone: schema.leads.phone,
                     service_type: schema.appointments.service_type,
                     category_name: schema.categories.name,
@@ -247,9 +257,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 .from(schema.appointments)
                 .leftJoin(schema.leads, eq(schema.appointments.lead_id, schema.leads.id))
                 .leftJoin(schema.categories, eq(schema.appointments.category_id, schema.categories.id))
-                .where(inArray(sql<string>`lower(${schema.appointments.status})`, [
-                    'realizada', 'concluida', 'pagada', 'confirmed', 'completada', 'completado', 'finalizada', 'servido'
-                ]))
+                .where(and(
+                    inArray(sql<string>`lower(${schema.appointments.status})`, [
+                        'realizada', 'concluida', 'pagada', 'confirmed', 'completada', 'completado', 'finalizada', 'servido'
+                    ]),
+                    dateFilter
+                ))
                 .orderBy(desc(schema.appointments.date_time));
                 
                 const totalRevenueVal = results.reduce((acc, a) => acc + Number(a.total_price || 0), 0);
@@ -261,16 +274,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     if (a.date_time) {
                          const dateObj = new Date(a.date_time);
                          const monthKey = dateObj.toLocaleString('es-ES', { month: 'short' }).charAt(0).toUpperCase() + dateObj.toLocaleString('es-ES', { month: 'short' }).slice(1);
-                         evolutionMap[monthKey] = (evolutionMap[monthKey] || 0) + Number(a.total_price || 0);
+                         evolutionMap[monthKey] = (evolutionMap[monthKey] || 0) + amount;
                     }
                     
                     return {
                         id: a.id,
                         lead_id: a.lead_id,
-                        client_name: a.client_name || 'Cliente sin nombre',
+                        client_name: a.client_name,
                         is_bot_enabled: a.is_bot_enabled,
                         parent_service: a.category_name || a.service_type,
-                        selected_services: Array.isArray(a.selected_services) ? a.selected_services.map((s: any) => ({
+                        selected_services: Array.isArray(a.selected_services) ? (a.selected_services as any[]).map((s: any) => ({
                             title: s.title || 'Servicio',
                             price: s.price ? Number(s.price) : 0,
                             duration: s.duration ? parseInt(String(s.duration).replace(/\D/g, ''), 10) || 0 : null
@@ -278,7 +291,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         date: a.date_time ? new Date(a.date_time).toISOString() : new Date().toISOString(),
                         amount: amount,
                         status: 'completado',
-                        payment_method: 'Efectivo', // Default as we dont have payment_method tracking currently
+                        payment_method: 'Efectivo',
                         phone: a.phone
                     };
                 });
