@@ -1,42 +1,65 @@
-import { neon } from '@neondatabase/serverless';
-import 'dotenv/config';
+
+import { db } from '../api/_services/db.js';
+import * as schema from '../api/_services/schema.js';
+import { sql, eq } from 'drizzle-orm';
 
 async function diagnose() {
-  const sql = neon(process.env.DATABASE_URL!);
-  
-  console.log('--- DATABASE DIAGNOSTICS ---');
+  console.log('--- DIAGNÓSTICO DE BASE DE DATOS ---');
   
   try {
-    const tables = await sql`
-      SELECT table_name 
-      FROM information_schema.tables 
-      WHERE table_schema = 'public'
-    `;
+    // 1. Contar citas y ver estados únicos
+    const statusCounts = await db.select({
+      status: schema.appointments.status,
+      count: sql`count(*)`
+    }).from(schema.appointments)
+    .groupBy(schema.appointments.status);
     
-    console.log('Tables found:', tables.map(t => t.table_name));
+    console.log('Distribución de Estados en Appointments:');
+    console.table(statusCounts);
 
-    for (const { table_name } of tables) {
-      const [{ count }] = await sql`SELECT count(*) FROM ${sql(table_name)}`;
-      console.log(`Table: ${table_name} | Rows: ${count}`);
+    // 2. Buscar a "Diego Federico"
+    const diegoLeads = await db.select().from(schema.leads)
+      .where(sql`client_name ILIKE '%Diego Federico%'`);
+    
+    console.log('\nLeads encontrados para "Diego Federico":');
+    console.table(diegoLeads);
+
+    if (diegoLeads.length > 0) {
+      for (const lead of diegoLeads) {
+        const apps = await db.select().from(schema.appointments)
+          .where(eq(schema.appointments.lead_id, lead.id));
+        
+        console.log(`\nCitas para Lead ID ${lead.id} (${lead.client_name}):`);
+        console.table(apps.map(a => ({
+          id: a.id,
+          status: a.status,
+          total_price: a.total_price,
+          date_time: a.date_time
+        })));
+      }
     }
+
+    // 3. Verificar si hay citas "huérfanas" (sin lead_id válido)
+    const [orphanApps] = await db.select({ count: sql`count(*)` })
+      .from(schema.appointments)
+      .leftJoin(schema.leads, eq(schema.appointments.lead_id, schema.leads.id))
+      .where(sql`${schema.leads.id} IS NULL`);
     
-    // Check specific columns for critical tables
-    const appointmentsColumns = await sql`
-      SELECT column_name, data_type 
-      FROM information_schema.columns 
-      WHERE table_name = 'appointments'
-    `;
-    console.log('Appointments Columns:', appointmentsColumns.map(c => `${c.column_name} (${c.data_type})`));
+    console.log('\nCitas sin Lead (Huérfanas):', orphanApps.count);
 
-    const leadsColumns = await sql`
-      SELECT column_name, data_type 
-      FROM information_schema.columns 
-      WHERE table_name = 'leads'
-    `;
-    console.log('Leads Columns:', leadsColumns.map(c => `${c.column_name} (${c.data_type})`));
+    // 4. Ver los primeros 5 registros de appointments para ver el formato de total_price
+    const samples = await db.select().from(schema.appointments).limit(5);
+    console.log('\nMuestra de Appointments:');
+    console.table(samples.map(a => ({
+      status: a.status,
+      total_price: a.total_price,
+      raw_price_type: typeof a.total_price
+    })));
 
-  } catch (err) {
-    console.error('Diagnosis failed:', err);
+  } catch (error) {
+    console.error('Error durante el diagnóstico:', error);
+  } finally {
+    process.exit(0);
   }
 }
 

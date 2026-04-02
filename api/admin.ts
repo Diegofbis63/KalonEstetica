@@ -92,8 +92,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (sec === 'dashboard' && req.method === 'GET') {
             const [ordersCount] = await db.select({ count: sql`count(*)` }).from(schema.appointments);
             const [leadsCount] = await db.select({ count: sql`count(*)` }).from(schema.leads);
-            const incomeRes = await db.select({ 
-                total: sql<string>`SUM(CAST(nullif(${schema.appointments.total_price}, '') AS DECIMAL))` 
+            
+            // Fix: total_price is numeric. cast to text nullif can fail. simplification is safer and better.
+            const statsIncome = await db.select({
+                total: sql<string>`SUM(COALESCE(${schema.appointments.total_price}, 0))`,
+                count: sql`count(*)`
             })
                 .from(schema.appointments)
                 .where(inArray(sql<string>`lower(${schema.appointments.status})`, [
@@ -159,7 +162,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 })),
                 stats: {
                     totalAppointments: Number(ordersCount.count),
-                    totalRevenue: Number(incomeRes[0]?.total || 0),
+                    totalRevenue: Number(statsIncome[0]?.total || 0),
                     totalClients: Number(leadsCount.count),
                     activeStaff: 5
                 }
@@ -305,17 +308,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // --- CATALOGS ADMIN (POST/PUT/DELETE) ---
         if (sec === 'catalogs') {
             const table = catType === 'categories' ? schema.categories : (catType === 'services' ? schema.services : schema.staff);
+            const categoryId = req.query.categoryId as string;
             
             if (req.method === 'GET') {
                 const findOptions: any = {
-                    orderBy: [(table as any).sort_order ? sql`sort_order ASC` : (table as any).created_at ? desc((table as any).created_at) : undefined]
+                    orderBy: []
                 };
 
-                // Add relations if needed
+                // Better sorting logic
+                if ((table as any).sort_order) {
+                    findOptions.orderBy.push(asc((table as any).sort_order));
+                } else if ((table as any).created_at) {
+                    findOptions.orderBy.push(desc((table as any).created_at));
+                }
+
+                // Add relations and filters
                 if (catType === 'staff') {
                     findOptions.with = { specialties: true };
                 } else if (catType === 'categories') {
                     findOptions.with = { services: true };
+                } else if (catType === 'services' && categoryId) {
+                    findOptions.where = eq(schema.services.category_id, categoryId);
                 }
 
                 const results = await (db.query as any)[catType].findMany(findOptions);
