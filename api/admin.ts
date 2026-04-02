@@ -157,7 +157,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     total_duration: Number(a.total_duration || 0),
                     selected_services: Array.isArray(a.selected_services) ? (a.selected_services as any[]).map((s: any) => ({
                         ...s,
-                        price: s.price ? Number(s.price) : null,
+                        price: s.price ? Number(s.price) : 0,
                         duration: s.duration ? parseInt(String(s.duration).replace(/\D/g, ''), 10) || 0 : null
                     })) : []
                 })),
@@ -265,16 +265,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 ))
                 .orderBy(desc(schema.appointments.date_time));
                 
-                const totalRevenueVal = results.reduce((acc, a) => acc + Number(a.total_price || 0), 0);
-                const count = results.length;
+                const validResults = results.filter(a => !isNaN(Number(a.total_price || 0)));
+                const totalRevenueVal = validResults.reduce((acc, a) => acc + Number(a.total_price || 0), 0);
+                const count = validResults.length;
                 const evolutionMap: Record<string, number> = {};
                 
-                const payments = results.map(a => {
+                const payments = validResults.map(a => {
                     const amount = Number(a.total_price || 0);
                     if (a.date_time) {
                          const dateObj = new Date(a.date_time);
-                         const monthKey = dateObj.toLocaleString('es-ES', { month: 'short' }).charAt(0).toUpperCase() + dateObj.toLocaleString('es-ES', { month: 'short' }).slice(1);
-                         evolutionMap[monthKey] = (evolutionMap[monthKey] || 0) + amount;
+                         // Use YYYY-MM-DD or Month name for evolution. Frontend expects 'date' string.
+                         const dateKey = dateObj.toISOString().split('T')[0]; // Use ISO date for stability
+                         evolutionMap[dateKey] = (evolutionMap[dateKey] || 0) + amount;
                     }
                     
                     return {
@@ -286,7 +288,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         selected_services: Array.isArray(a.selected_services) ? (a.selected_services as any[]).map((s: any) => ({
                             title: s.title || 'Servicio',
                             price: s.price ? Number(s.price) : 0,
-                            duration: s.duration ? parseInt(String(s.duration).replace(/\D/g, ''), 10) || 0 : null
                         })) : [],
                         date: a.date_time ? new Date(a.date_time).toISOString() : new Date().toISOString(),
                         amount: amount,
@@ -296,14 +297,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     };
                 });
                 
-                const evolution = Object.keys(evolutionMap).map(name => ({
-                    name,
-                    Facturado: evolutionMap[name]
+                const evolution = Object.keys(evolutionMap).sort().map(date => ({
+                    date,
+                    revenue: evolutionMap[date]
                 }));
 
                 // Ensure at least some empty months if data is totally empty
                 if (evolution.length === 0) {
-                    evolution.push({ name: 'Mes Actual', Facturado: 0 });
+                    evolution.push({ date: new Date().toISOString().split('T')[0], revenue: 0 });
                 }
 
                 return res.status(200).json({
@@ -364,10 +365,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         }))
                     }));
                 } else if (catType === 'staff') {
-                    // Map specialties to array of category IDs
+                    // Map specialties to array of category IDs as strings
                     formatted = results.map((s: any) => ({
                         ...s,
-                        specialties: s.specialties?.map((sp: any) => sp.category_id) || []
+                        specialties: s.specialties?.map((sp: any) => String(sp.category_id)) || []
                     }));
                 }
 

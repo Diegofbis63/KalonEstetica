@@ -61,12 +61,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 const clients = results.map(c => ({
                     ...c,
                     // Asegurar que las fechas sean strings ISO para evitar fallos de validación en el frontend
-                    created_at: safeISO(c.created_at) || undefined,
+                    created_at: safeISO(c.created_at) || new Date().toISOString(),
                     last_appointment: safeISO(c.last_appointment),
                     // Campos requeridos por el esquema pero que no están en la tabla leads directamente
                     email: null,
                     note: null,
-                    appointment_history: [] // El esquema lo espera pero no se requiere para el listado inicial
+                    appointment_history: []
                 }));
 
                 return res.status(200).json({ clients });
