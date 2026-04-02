@@ -92,11 +92,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (sec === 'dashboard' && req.method === 'GET') {
             const [ordersCount] = await db.select({ count: sql`count(*)` }).from(schema.appointments);
             const [leadsCount] = await db.select({ count: sql`count(*)` }).from(schema.leads);
-            const incomeRes = await db.select({ total: sql`sum(total_price)` })
+            const incomeRes = await db.select({ 
+                total: sql<string>`SUM(CAST(nullif(${schema.appointments.total_price}, '') AS DECIMAL))` 
+            })
                 .from(schema.appointments)
-                .where(inArray(schema.appointments.status, [
-                    'realizada', 'concluida', 'pagada', 'confirmed', 'completada', 'completado',
-                    'REALIZADA', 'CONCLUIDA', 'PAGADA', 'CONFIRMED', 'COMPLETADA', 'COMPLETADO'
+                .where(inArray(sql<string>`lower(${schema.appointments.status})`, [
+                    'realizada', 'concluida', 'pagada', 'confirmed', 'completada', 'completado', 'finalizada', 'servido'
                 ]));
 
             // Fetch leads for dashboard table
@@ -150,7 +151,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     created_at: a.created_at ? new Date(a.created_at).toISOString() : undefined,
                     total_price: Number(a.total_price || 0),
                     total_duration: Number(a.total_duration || 0),
-                    selected_services: Array.isArray(a.selected_services) ? a.selected_services.map((s: any) => ({
+                    selected_services: Array.isArray(a.selected_services) ? (a.selected_services as any[]).map((s: any) => ({
                         ...s,
                         price: s.price ? Number(s.price) : null,
                         duration: s.duration ? parseInt(String(s.duration).replace(/\D/g, ''), 10) || 0 : null
@@ -196,7 +197,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         created_at: a.created_at ? new Date(a.created_at).toISOString() : undefined,
                         total_price: Number(a.total_price || 0),
                         total_duration: Number(a.total_duration || 0),
-                        selected_services: Array.isArray(a.selected_services) ? a.selected_services.map((s: any) => ({
+                        selected_services: Array.isArray(a.selected_services) ? (a.selected_services as any[]).map((s: any) => ({
                             ...s,
                             price: s.price ? Number(s.price) : null,
                             duration: s.duration ? parseInt(String(s.duration).replace(/\D/g, ''), 10) || 0 : null
@@ -243,9 +244,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 .from(schema.appointments)
                 .leftJoin(schema.leads, eq(schema.appointments.lead_id, schema.leads.id))
                 .leftJoin(schema.categories, eq(schema.appointments.category_id, schema.categories.id))
-                .where(inArray(schema.appointments.status, [
-                    'realizada', 'concluida', 'pagada', 'confirmed', 'completada', 'completado',
-                    'REALIZADA', 'CONCLUIDA', 'PAGADA', 'CONFIRMED', 'COMPLETADA', 'COMPLETADO'
+                .where(inArray(sql<string>`lower(${schema.appointments.status})`, [
+                    'realizada', 'concluida', 'pagada', 'confirmed', 'completada', 'completado', 'finalizada', 'servido'
                 ]))
                 .orderBy(desc(schema.appointments.date_time));
                 
