@@ -25,13 +25,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 // We perform a join to get appointment stats, required by the frontend ClientSchema
                 const results = await db.select({
                     id: schema.leads.id,
-                    client_name: schema.leads.client_name,
-                    phone: schema.leads.phone,
-                    status: schema.leads.status,
-                    intent_score: schema.leads.intent_score,
+                    client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente')`,
+                    phone: sql<string>`COALESCE(${schema.leads.phone}, '')`,
+                    status: sql<string>`COALESCE(${schema.leads.status}, 'new')`,
+                    intent_score: sql<number>`COALESCE(${schema.leads.intent_score}, 0)`,
                     category_id: schema.leads.category_id,
-                    category_name: schema.categories.name,
-                    is_bot_enabled: schema.leads.is_bot_enabled,
+                    category_name: sql<string>`COALESCE(${schema.categories.name}, 'General')`,
+                    is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, true)`,
                     created_at: schema.leads.created_at,
                     total_appointments: sql<number>`count(${schema.appointments.id})::int`,
                     last_appointment: sql<string | null>`max(${schema.appointments.date_time})`
@@ -53,7 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 .orderBy(desc(schema.leads.created_at));
 
                 // Safe date formatter for client data
-                const safeISO = (dateStr: any) => {
+                const safeISO = (dateStr: string | Date | null | undefined) => {
                     if (!dateStr) return null;
                     try {
                         const date = new Date(dateStr);
@@ -65,13 +65,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 };
 
                 // Formatear para satisfacer ClientSchema (validations.ts)
-                const clients = results.map(c => ({
+                const clients = results.map((c: { 
+                    id: string, 
+                    client_name: string, 
+                    phone: string, 
+                    status: string, 
+                    created_at: string | Date | null, 
+                    last_appointment: string | Date | null,
+                    category_name: string | null,
+                    is_bot_enabled: boolean | null
+                }) => ({
                     ...c,
+                    client_name: c.client_name || 'Cliente',
+                    phone: c.phone || '',
+                    status: c.status || 'new',
                     created_at: safeISO(c.created_at) || new Date().toISOString(),
                     last_appointment: safeISO(c.last_appointment),
                     email: null,
                     note: null,
-                    category_name: c.category_name || 'Sin Categoría',
+                    is_bot_enabled: Boolean(c.is_bot_enabled),
+                    category_name: c.category_name || 'General',
                     appointment_history: []
                 }));
 
@@ -85,9 +98,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
             if (req.method === 'PUT' || req.method === 'PATCH') {
                 const id = req.query.id as string;
-                const { client_name, name, ...rest } = req.body as { client_name?: string, name?: string };
+                const { client_name, name, ...rest } = req.body as { client_name?: string, name?: string, phone?: string, status?: string };
                 const finalName = client_name || name;
-                const updateData: Record<string, any> = { ...rest };
+                const updateData: Record<string, string | number | boolean | null | Date> = { ...rest };
                 if (finalName) updateData.client_name = finalName;
                 
                 const [updated] = await db.update(schema.leads).set(updateData).where(eq(schema.leads.id, id)).returning();
@@ -98,8 +111,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // --- LEADS TRACKING / IDENTIFY ---
         if (sec === 'tracking' || sec === 'identify' || sec === 'leads') {
             if (req.method === 'GET') {
-                const results = await db.query.leads.findMany({ orderBy: [desc(schema.leads.last_interaction)] });
-                return res.status(200).json({ leads: results });
+                const results = await db.select({
+                    id: schema.leads.id,
+                    client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente')`,
+                    phone: sql<string>`COALESCE(${schema.leads.phone}, '')`,
+                    status: sql<string>`COALESCE(${schema.leads.status}, 'new')`,
+                    intent_score: sql<number>`COALESCE(${schema.leads.intent_score}, 0)`,
+                    category_id: schema.leads.category_id,
+                    category_name: sql<string>`COALESCE(${schema.categories.name}, 'General')`,
+                    created_at: schema.leads.created_at,
+                    updated_at: schema.leads.updated_at,
+                    is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, true)`
+                })
+                .from(schema.leads)
+                .leftJoin(schema.categories, eq(schema.leads.category_id, schema.categories.id))
+                .orderBy(desc(schema.leads.last_interaction));
+
+                const leads = results.map((l: {
+                    id: string,
+                    client_name: string,
+                    phone: string,
+                    status: string,
+                    intent_score: number,
+                    category_id: string | null,
+                    category_name: string | null,
+                    created_at: string | Date | null,
+                    updated_at: string | Date | null,
+                    is_bot_enabled: boolean | null
+                }) => ({
+                    ...l,
+                    email: null, // Lead table doesn't have email column
+                    created_at: l.created_at ? new Date(l.created_at).toISOString() : new Date().toISOString(),
+                    updated_at: l.updated_at ? new Date(l.updated_at).toISOString() : null,
+                    canManage: true
+                }));
+
+                return res.status(200).json({ leads });
             }
             if (req.method === 'POST') {
                 const { phone, name, status } = req.body;
@@ -112,8 +159,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         return res.status(405).json({ error: 'Method not allowed or Section missing' });
-    } catch (e) {
-        console.error(`[LEADS API ERROR] ${sec}:`, e);
-        return res.status(500).json({ error: 'Internal Server Error', details: (e as Error).message });
+    } catch (e: unknown) {
+        console.error('[ADMIN API ERROR] ', e);
+        const errorMessage = e instanceof Error ? e.message : 'Unknown error';
+        return res.status(500).json({ error: 'Internal Server Error', details: errorMessage });
     }
 }

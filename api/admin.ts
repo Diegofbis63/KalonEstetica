@@ -129,18 +129,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const dashboardAppointments = await db.select({
                 id: schema.appointments.id,
                 lead_id: schema.appointments.lead_id,
-                client_name: schema.leads.client_name,
-                phone: schema.leads.phone,
-                service_type: schema.appointments.service_type,
-                category_name: schema.categories.name,
+                client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente')`,
+                phone: sql<string>`COALESCE(${schema.leads.phone}, '')`,
+                service_type: sql<string>`COALESCE(${schema.appointments.service_type}, 'Servicio')`,
+                category_name: sql<string>`COALESCE(${schema.categories.name}, 'General')`,
                 category_id: schema.appointments.category_id,
                 date_time: schema.appointments.date_time,
-                status: schema.appointments.status,
+                status: sql<string>`COALESCE(${schema.appointments.status}, 'pending')`,
                 created_at: schema.appointments.created_at,
                 total_price: schema.appointments.total_price,
                 total_duration: schema.appointments.total_duration,
                 selected_services: schema.appointments.selected_services,
-                is_bot_enabled: schema.leads.is_bot_enabled
+                is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, true)`
             })
             .from(schema.appointments)
             .leftJoin(schema.leads, eq(schema.appointments.lead_id, schema.leads.id))
@@ -148,24 +148,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .orderBy(desc(schema.appointments.date_time))
             .limit(50);
 
+            const formattedAppts = dashboardAppointments.map((a) => ({
+                ...a,
+                date_time: a.date_time ? new Date(a.date_time).toISOString() : new Date().toISOString(),
+                created_at: a.created_at ? new Date(a.created_at).toISOString() : new Date().toISOString(),
+                total_price: Number(a.total_price || 0),
+                total_duration: Number(a.total_duration || 0),
+                selected_services: Array.isArray(a.selected_services) ? (a.selected_services as Array<{id?: string, title?: string, price?: string | number, duration?: string | number}>).map((s) => ({
+                    ...s,
+                    price: s.price ? Number(s.price) : 0,
+                    duration: s.duration ? parseInt(String(s.duration).replace(/\D/g, ''), 10) || 0 : 0
+                })) : []
+            }));
+
             return res.status(200).json({
                 leads: dashboardLeads.map(l => ({
                     ...l,
                     created_at: l.created_at ? new Date(l.created_at).toISOString() : undefined,
                     updated_at: l.updated_at ? new Date(l.updated_at).toISOString() : null,
                 })),
-                appointments: dashboardAppointments.map(a => ({
-                    ...a,
-                    date_time: a.date_time ? new Date(a.date_time).toISOString() : undefined,
-                    created_at: a.created_at ? new Date(a.created_at).toISOString() : undefined,
-                    total_price: Number(a.total_price || 0),
-                    total_duration: Number(a.total_duration || 0),
-                    selected_services: Array.isArray(a.selected_services) ? (a.selected_services as any[]).map((s: any) => ({
-                        ...s,
-                        price: s.price ? Number(s.price) : 0,
-                        duration: s.duration ? parseInt(String(s.duration).replace(/\D/g, ''), 10) || 0 : null
-                    })) : []
-                })),
+                appointments: formattedAppts,
                 stats: {
                     totalAppointments: Number(ordersCount?.count || 0),
                     totalRevenue: Number(incomeData.total || 0),
@@ -181,38 +183,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 const results = await db.select({
                     id: schema.appointments.id,
                     lead_id: schema.appointments.lead_id,
-                    client_name: schema.leads.client_name,
-                    phone: schema.leads.phone,
-                    service_type: schema.appointments.service_type,
-                    category_name: schema.categories.name,
+                    client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente')`,
+                    phone: sql<string>`COALESCE(${schema.leads.phone}, '')`,
+                    service_type: sql<string>`COALESCE(${schema.appointments.service_type}, 'Servicio')`,
+                    category_name: sql<string>`COALESCE(${schema.categories.name}, 'General')`,
                     category_id: schema.appointments.category_id,
                     date_time: schema.appointments.date_time,
-                    status: schema.appointments.status,
+                    status: sql<string>`COALESCE(${schema.appointments.status}, 'pending')`,
                     created_at: schema.appointments.created_at,
                     total_price: schema.appointments.total_price,
                     total_duration: schema.appointments.total_duration,
                     selected_services: schema.appointments.selected_services,
-                    is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, false)`
+                    is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, true)`
                 })
                 .from(schema.appointments)
                 .leftJoin(schema.leads, eq(schema.appointments.lead_id, schema.leads.id))
                 .leftJoin(schema.categories, eq(schema.appointments.category_id, schema.categories.id))
                 .orderBy(desc(schema.appointments.date_time));
 
-                return res.status(200).json({
-                    appointments: results.map(a => ({
-                        ...a,
-                        date_time: a.date_time ? new Date(a.date_time).toISOString() : undefined,
-                        created_at: a.created_at ? new Date(a.created_at).toISOString() : undefined,
-                        total_price: Number(a.total_price || 0),
-                        total_duration: Number(a.total_duration || 0),
-                        selected_services: Array.isArray(a.selected_services) ? (a.selected_services as any[]).map((s: any) => ({
-                            ...s,
-                            price: s.price ? Number(s.price) : null,
-                            duration: s.duration ? parseInt(String(s.duration).replace(/\D/g, ''), 10) || 0 : null
-                        })) : []
-                    }))
-                });
+                const formattedAppts = results.map((a) => ({
+                    ...a,
+                    date_time: a.date_time ? new Date(a.date_time).toISOString() : new Date().toISOString(),
+                    created_at: a.created_at ? new Date(a.created_at).toISOString() : new Date().toISOString(),
+                    total_price: Number(a.total_price || 0),
+                    total_duration: Number(a.total_duration || 0),
+                    selected_services: Array.isArray(a.selected_services) ? (a.selected_services as Array<{id?: string, title?: string, price?: string | number, duration?: string | number}>).map((s) => ({
+                        ...s,
+                        price: s.price ? Number(s.price) : 0,
+                        duration: s.duration ? parseInt(String(s.duration).replace(/\D/g, ''), 10) || 0 : 0
+                    })) : []
+                }));
+
+                return res.status(200).json({ appointments: formattedAppts });
             }
             if (req.method === 'POST') {
                 const [item] = await db.insert(schema.appointments).values(req.body).returning();
@@ -229,16 +231,58 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (sec === 'users') {
             if (req.method === 'GET') {
                 const results = await db.query.admin_users.findMany();
-                return res.status(200).json({ users: results });
+                const detail = results.map((row: {
+                    id: string,
+                    username: string,
+                    role: string | null,
+                    email: string | null
+                }) => ({
+                    id: row.id,
+                    username: row.username,
+                    role: row.role,
+                    email: row.email
+                }));
+                return res.status(200).json({ users: detail });
             }
             // Add POST/PUT logic if needed for user management
+        }
+
+        // --- STAFF MANAGEMENT ---
+        if (sec === 'staff') {
+            if (req.method === 'GET') {
+                const results = await db.select({
+                    id: schema.staff.id,
+                    name: schema.staff.name,
+                    role: schema.staff.role,
+                    is_active: schema.staff.is_active,
+                    category_name: schema.categories.name
+                })
+                .from(schema.staff)
+                .leftJoin(schema.staff_specialties, eq(schema.staff.id, schema.staff_specialties.staff_id))
+                .leftJoin(schema.categories, eq(schema.staff_specialties.category_id, schema.categories.id));
+
+                const detail = results.map((row: {
+                    id: string,
+                    name: string,
+                    role: string | null,
+                    is_active: boolean | null,
+                    category_name: string | null
+                }) => ({
+                    id: row.id,
+                    name: row.name,
+                    role: row.role,
+                    is_active: row.is_active,
+                    category_name: row.category_name
+                }));
+                return res.status(200).json({ staff: detail });
+            }
         }
 
         // --- INCOME / CASHFLOW ---
         if (sec === 'income') {
             if (req.method === 'GET') {
                 const { startDate, endDate } = req.query;
-                let dateFilter: any = sql`1=1`;
+                let dateFilter = sql`1=1`;
                 if (startDate && endDate) {
                     dateFilter = and(
                         sql`${schema.appointments.date_time} >= ${startDate}`,
@@ -288,7 +332,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         client_name: a.client_name,
                         is_bot_enabled: a.is_bot_enabled,
                         parent_service: a.category_name || a.service_type,
-                        selected_services: Array.isArray(a.selected_services) ? (a.selected_services as any[]).map((s: any) => ({
+                        selected_services: Array.isArray(a.selected_services) ? (a.selected_services as Array<{title?: string, price?: string | number}>).map((s) => ({
                             title: s.title || 'Servicio',
                             price: s.price ? Number(s.price) : 0,
                         })) : [],
