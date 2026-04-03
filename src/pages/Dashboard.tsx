@@ -976,10 +976,18 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                           </TableCell>
                           <TableCell className="px-5 py-6 text-center font-sans">
                             <div className="text-sm font-medium text-cream/60 capitalize whitespace-nowrap">
-                              {new Intl.DateTimeFormat('es-AR', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'America/Argentina/Cordoba' }).format(new Date(a.date_time))}
+                              {(() => {
+                                const d = new Date(a.date_time);
+                                if (isNaN(d.getTime())) return 'Fecha N/A';
+                                return new Intl.DateTimeFormat('es-AR', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'America/Argentina/Cordoba' }).format(d);
+                              })()}
                               <span className="mx-2 text-cream/10">•</span>
                               <span className="text-gold font-bold">
-                                {new Date(a.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Cordoba' })}hs
+                                {(() => {
+                                  const d = new Date(a.date_time);
+                                  if (isNaN(d.getTime())) return '--:--';
+                                  return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Cordoba' });
+                                })()}hs
                               </span>
                             </div>
                           </TableCell>
@@ -1176,15 +1184,21 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                           </TableCell>
                           <TableCell className="px-5 py-6 text-center">
                             <div className="text-sm text-cream/40 flex flex-col items-center">
-                                {l.updated_at || l.created_at ? (
-                                    <div className="flex items-center gap-2 whitespace-nowrap">
-                                        <span>{new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Cordoba' }).format(new Date(l.updated_at || l.created_at))}</span>
-                                        <span className="text-cream/10">•</span>
-                                        <span className="text-gold font-bold">
-                                            {new Date(l.updated_at || l.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Cordoba' })}hs
-                                        </span>
-                                    </div>
-                                ) : '-'}
+                                {(() => {
+                                    const ts = l.updated_at || l.created_at;
+                                    if (!ts) return '-';
+                                    const d = new Date(ts);
+                                    if (isNaN(d.getTime())) return '-';
+                                    return (
+                                        <div className="flex items-center gap-2 whitespace-nowrap">
+                                            <span>{new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Cordoba' }).format(d)}</span>
+                                            <span className="text-cream/10">•</span>
+                                            <span className="text-gold font-bold">
+                                                {d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Cordoba' })}hs
+                                            </span>
+                                        </div>
+                                    );
+                                })()}
                             </div>
                           </TableCell>
                           <TableCell className="px-5 py-6 text-right">

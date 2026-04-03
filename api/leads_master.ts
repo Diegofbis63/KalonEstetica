@@ -60,15 +60,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 // Formatear para satisfacer ClientSchema (validations.ts)
                 const clients = results.map((c) => ({
                     id: c.id,
-                    name: c.name || 'Cliente',
+                    client_name: c.name || 'Cliente',
                     phone: c.phone || '',
                     email: null, 
                     status: c.status || 'active',
                     created_at: safeISO(c.created_at) || new Date().toISOString(),
                     last_interaction: safeISO(c.last_interaction),
+                    last_appointment: safeISO(c.last_interaction) || new Date().toISOString(),
                     total_appointments: c.total_appointments || 0,
                     total_spent: c.total_spent || 0,
-                    notes: ''
+                    note: ''
                 }));
 
                 return res.status(200).json({ clients });

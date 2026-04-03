@@ -379,13 +379,13 @@ export default function Clients() {
                                     {isEditing ? (
                                       <SheetTitle className="text-2xl font-serif text-cream">Editando Perfil</SheetTitle>
                                     ) : (
-                                      <SheetTitle className="text-2xl font-serif text-cream">{selectedClient.client_name}</SheetTitle>
+                                      <SheetTitle className="text-2xl font-serif text-cream">{selectedClient.client_name || 'Cliente Sin Nombre'}</SheetTitle>
                                     )}
                                     <div className="flex items-center gap-2 mt-1">
                                       <Badge className="bg-gold/10 text-gold border-gold/20 text-[10px]">
-                                        {selectedClient.total_appointments > 5 ? 'CLIENTE VIP' : 'CLIENTE REGULAR'}
+                                        {(selectedClient.total_appointments ?? 0) > 5 ? 'CLIENTE VIP' : 'CLIENTE REGULAR'}
                                       </Badge>
-                                      <span className="text-[10px] text-cream/20 uppercase tracking-widest font-black">ID: {selectedClient.id.slice(0,8)}</span>
+                                      <span className="text-[10px] text-cream/20 uppercase tracking-widest font-black">ID: {selectedClient.id?.slice(0,8) ?? 'N/A'}</span>
                                     </div>
                                   </div>
                                 </div>
@@ -462,12 +462,12 @@ export default function Clients() {
                                 <div className="grid grid-cols-2 gap-4 mb-8">
                                   <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/5 group hover:border-gold/20 transition-colors">
                                     <p className="text-[10px] text-cream/40 uppercase tracking-widest mb-1">Total Visitas</p>
-                                    <p className="text-2xl font-serif text-gold">{selectedClient.total_appointments}</p>
+                                    <p className="text-2xl font-serif text-gold">{selectedClient.total_appointments ?? 0}</p>
                                   </div>
                                   <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/5 group hover:border-gold/20 transition-colors">
                                     <p className="text-[10px] text-cream/40 uppercase tracking-widest mb-1">Última vez</p>
                                     <p className="text-lg font-serif text-cream">
-                                      {Math.floor((new Date().getTime() - new Date(selectedClient.last_appointment).getTime()) / (1000 * 60 * 60 * 24))} días
+                                      {selectedClient.last_appointment ? Math.floor((new Date().getTime() - new Date(selectedClient.last_appointment).getTime()) / (1000 * 60 * 60 * 24)) : '-'} días
                                     </p>
                                   </div>
                                 </div>
@@ -485,23 +485,23 @@ export default function Clients() {
                                             <div className="absolute left-[-5px] top-1 w-2 h-2 rounded-full bg-gold/40 shadow-[0_0_8px_rgba(212,175,55,0.4)]" />
                                             <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-all">
                                               <div className="flex justify-between items-start mb-2">
-                                                <p className="font-bold text-cream text-lg">{appt.service_type}</p>
+                                                <p className="font-bold text-cream text-lg">{appt.service_type || 'Servicio'}</p>
                                                 <Badge variant="outline" className={`text-[9px] ${
                                                   appt.status === 'completed' ? 'border-emerald-500/30 text-emerald-400' :
                                                   appt.status === 'canceled' ? 'border-rose-500/30 text-rose-400' :
                                                   'border-gold/30 text-gold'
                                                 }`}>
-                                                  {appt.status.toUpperCase()}
+                                                  {(appt.status || 'PENDING').toUpperCase()}
                                                 </Badge>
                                               </div>
                                               <div className="flex items-center gap-3 text-xs text-cream/40">
                                                 <div className="flex items-center gap-1">
                                                   <Calendar className="w-3 h-3" />
-                                                  {new Date(appt.date_time).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                                  {appt.date_time ? new Date(appt.date_time).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' }) : 'N/A'}
                                                 </div>
                                                 <div className="flex items-center gap-1">
                                                   <Activity className="w-3 h-3" />
-                                                                                                     {new Date(appt.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}hs
+                                                  {appt.date_time ? new Date(appt.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : 'N/A'}hs
                                                 </div>
                                               </div>
                                             </div>

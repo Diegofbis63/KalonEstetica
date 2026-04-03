@@ -9,8 +9,8 @@ const coerceNumber = z.preprocess((val) => {
 }, z.number().default(0));
 
 // Helper for robust string coercion (handles null/undefined)
-const coerceString = (fallback = '') => z.preprocess((val) => {
-  if (val === null || val === undefined) return fallback;
+const coerceString = (fallback: any = '') => z.preprocess((val) => {
+  if (val === null || val === undefined) return typeof fallback === 'function' ? fallback() : fallback;
   return String(val);
 }, z.string().default(fallback));
 
@@ -120,14 +120,16 @@ export const DashboardResponseSchema = z.object({
 // --- CLIENTS ---
 export const ClientSchema = z.object({
   id: z.string(),
-  name: z.string().optional().nullable().default('Cliente'),
-  phone: z.string().optional().nullable().default(''),
-  email: z.string().optional().nullable(),
-  last_interaction: z.string().optional().nullable(),
-  total_appointments: z.number().optional().default(0),
-  total_spent: coerceNumber.optional().default(0),
-  status: z.string().optional().default('active'),
-  notes: z.string().optional().nullable(),
+  client_name: coerceString('Cliente'),
+  phone: coerceString(''),
+  email: coerceString().nullable(),
+  last_interaction: coerceString().nullable(),
+  last_appointment: coerceString(() => new Date().toISOString()),
+  total_appointments: coerceNumber,
+  total_spent: coerceNumber,
+  status: coerceString('active'),
+  note: coerceString(''),
+  appointment_history: z.array(AppointmentSchema).optional().default([]),
 });
 
 export const ClientsResponseSchema = z.object({
@@ -137,19 +139,19 @@ export const ClientsResponseSchema = z.object({
 // --- INCOME ---
 export const PaymentSchema = z.object({
   id: z.string(),
-  lead_id: z.string().optional().nullable(),
-  client_name: z.string().optional().nullable().default('Cliente'),
+  lead_id: coerceString().nullable(),
+  client_name: coerceString('Cliente'),
   is_bot_enabled: z.boolean().optional().default(false),
-  parent_service: z.string().optional().nullable(),
+  parent_service: coerceString('Servicio'),
   selected_services: z.array(z.object({
-    title: z.string().optional().default('Servicio'),
-    price: coerceNumber.optional().default(0),
+    title: coerceString('Servicio'),
+    price: coerceNumber,
   })).optional().default([]),
-  date: z.string().optional().nullable().default(() => new Date().toISOString()),
-  amount: coerceNumber.optional().default(0),
-  status: z.string().optional().default('pending'),
-  payment_method: z.string().optional().default('other'),
-  phone: z.string().optional().nullable().default(''),
+  date: coerceString(() => new Date().toISOString()),
+  amount: coerceNumber,
+  status: coerceString('pending'),
+  payment_method: coerceString('other'),
+  phone: coerceString(''),
 });
 
 export const IncomeResponseSchema = z.object({
