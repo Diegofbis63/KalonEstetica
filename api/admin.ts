@@ -110,13 +110,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const dashboardLeads = await db.select({
                 id: schema.leads.id,
                 client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente sin nombre')`,
-                phone: schema.leads.phone,
-                status: schema.leads.status,
+                phone: sql<string>`COALESCE(${schema.leads.phone}, '')`,
+                status: sql<string>`COALESCE(${schema.leads.status}, 'new')`,
                 is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, true)`,
                 created_at: schema.leads.created_at,
-                intent_score: schema.leads.intent_score,
+                intent_score: sql<number>`COALESCE(${schema.leads.intent_score}, 0)`,
                 category_id: schema.leads.category_id,
-                category_name: schema.categories.name,
+                category_name: sql<string>`COALESCE(${schema.categories.name}, 'General')`,
                 updated_at: schema.leads.updated_at,
                 canManage: sql<boolean>`true`
             })
@@ -364,21 +364,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
                 const results = await (db.query as any)[catType].findMany(findOptions);
 
-                // Format results
+                // Format results with numeric safety
+                const safeNum = (v: any) => {
+                    const n = Number(v);
+                    return isNaN(n) ? 0 : n;
+                };
+
                 let formatted = results;
                 if (catType === 'services') {
                     formatted = results.map((s: any) => ({ 
                         ...s, 
-                        price: s.price ? Number(s.price) : null,
-                        duration: s.duration_min ? Number(s.duration_min) : (s.duration ? parseInt(String(s.duration).replace(/\D/g, ''), 10) || 0 : null)
+                        price: s.price ? safeNum(s.price) : 0,
+                        duration: s.duration_min ? safeNum(s.duration_min) : (s.duration ? parseInt(String(s.duration).replace(/\D/g, ''), 10) || 0 : 0)
                     }));
                 } else if (catType === 'categories') {
                     formatted = results.map((c: any) => ({
                         ...c,
                         services: c.services?.map((s: any) => ({
                             ...s,
-                            price: s.price ? Number(s.price) : null,
-                            duration: s.duration_min ? Number(s.duration_min) : (s.duration ? parseInt(String(s.duration).replace(/\D/g, ''), 10) || 0 : null)
+                            price: s.price ? safeNum(s.price) : 0,
+                            duration: s.duration_min ? safeNum(s.duration_min) : (s.duration ? parseInt(String(s.duration).replace(/\D/g, ''), 10) || 0 : 0)
                         }))
                     }));
                 } else if (catType === 'staff') {

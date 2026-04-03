@@ -1,7 +1,12 @@
 import { z } from "zod";
 
-// Helper for robust numeric coercion (handles strings like "30 min" or "$1500")
-const coerceNumber = z.coerce.number();
+// Helper for robust numeric coercion (handles strings like "30 min", null, undefined or NaN)
+const coerceNumber = z.preprocess((val) => {
+  if (val === null || val === undefined || val === '') return 0;
+  const processed = typeof val === 'string' ? val.replace(/[^0-9.]/g, '') : val;
+  const num = Number(processed);
+  return isNaN(num) ? 0 : num;
+}, z.number().default(0));
 
 // --- CATEGORIES ---
 export const CategorySchema = z.object({
@@ -76,7 +81,7 @@ export const LeadSchema = z.object({
   created_at: z.string().optional().nullable(),
   intent_score: z.number().optional().default(0),
   category_id: z.string().optional().nullable(),
-  category_name: z.string().optional().default('General'),
+  category_name: z.string().optional().nullable().default('General'),
   email: z.string().optional().nullable(),
   total_appointments: z.number().optional().default(0),
   total_spent: coerceNumber.optional().default(0),
@@ -194,27 +199,23 @@ export async function safeFetch<T>(url: string, schema: z.ZodType<T>, defaultVal
     const res = await fetch(url);
     if (!res.ok) {
       console.warn(`SafeFetch: ${url} returned ${res.status}`);
-      try {
-          return defaultValue ?? (schema.parse({}) as unknown as T);
-      } catch {
-          return defaultValue ?? (schema.parse([]) as unknown as T);
-      }
+      return defaultValue ?? (schema.parse({}) as unknown as T);
     }
     const data = await res.json();
-    const result = schema.safeParse(data);
-    if (!result.success) {
-      console.error(`SafeFetch Validation Error for ${url}:`, result.error);
-      return defaultValue ?? (schema.parse({}) as unknown as T); // Try to parse empty object if possible
-    }
-    return result.data;
-  } catch (error) {
-    console.error(`SafeFetch Network Error for ${url}:`, error);
-    // Be very careful here. If defaultValue is undefined, we need a safe fallback.
-    // Given our schemas use .default([]), .parse({}) usually works to get those defaults.
+    return schema.parse(data);
+  } catch (err) {
+    console.error(`SafeFetch Error [${url}]:`, err);
+    if (defaultValue !== undefined) return defaultValue;
     try {
-        return defaultValue ?? (schema.parse({}) as unknown as T);
+      // Fallback to schema defaults
+      return schema.parse({}) as unknown as T;
     } catch {
-        return defaultValue as T;
+      // Final fallback if even schema.parse({}) fails (e.g. for arrays)
+      try {
+        return schema.parse([]) as unknown as T;
+      } catch {
+        return {} as T;
+      }
     }
   }
 }
