@@ -8,6 +8,12 @@ const coerceNumber = z.preprocess((val) => {
   return isNaN(num) ? 0 : num;
 }, z.number().default(0));
 
+// Helper for robust string coercion (handles null/undefined)
+const coerceString = (fallback = '') => z.preprocess((val) => {
+  if (val === null || val === undefined) return fallback;
+  return String(val);
+}, z.string().default(fallback));
+
 // --- CATEGORIES ---
 export const CategorySchema = z.object({
   id: z.string(),
@@ -27,15 +33,15 @@ export const CategoriesResponseSchema = z.object({
 // --- SERVICES ---
 export const ServiceSchema = z.object({
   id: z.string(),
-  category_id: z.string().optional().nullable(),
-  title: z.string(),
-  description: z.string().optional().nullable(),
+  category_id: coerceString().nullable(),
+  title: coerceString('Servicio'),
+  description: coerceString().nullable(),
   price: coerceNumber,
-  duration: coerceNumber.optional().nullable(),
-  image_url: z.string().optional().nullable(),
+  duration: coerceNumber,
+  image_url: coerceString().nullable(),
   active: z.boolean().optional().default(true),
-  sort_order: coerceNumber.optional().default(0),
-  category_name: z.string().optional().nullable(),
+  sort_order: coerceNumber,
+  category_name: coerceString('General').nullable(),
 });
 
 export const ServicesResponseSchema = z.object({
@@ -45,22 +51,22 @@ export const ServicesResponseSchema = z.object({
 // --- APPOINTMENTS ---
 export const AppointmentSchema = z.object({
   id: z.string(),
-  lead_id: z.string().optional().nullable(),
-  client_name: z.string().optional().nullable().default('Cliente'),
-  phone: z.string().optional().nullable().default(''),
-  service_type: z.string().optional().nullable().default('Servicio'),
-  category_name: z.string().optional().nullable().default('Sin categoría'),
-  category_id: z.string().optional().nullable(),
-  date_time: z.string().optional().nullable().default(() => new Date().toISOString()),
-  status: z.string().optional().nullable().default('pending'),
-  created_at: z.string().optional().nullable(),
-  total_price: coerceNumber.optional().nullable().default(0),
-  total_duration: coerceNumber.optional().nullable().default(0),
+  lead_id: coerceString().nullable(),
+  client_name: coerceString('Cliente'),
+  phone: coerceString(''),
+  service_type: coerceString('Servicio'),
+  category_name: coerceString('General'),
+  category_id: coerceString().nullable(),
+  date_time: coerceString(() => new Date().toISOString()),
+  status: coerceString('pending'),
+  created_at: coerceString().nullable(),
+  total_price: coerceNumber,
+  total_duration: coerceNumber,
   selected_services: z.array(z.object({
-    id: z.string().optional(),
-    title: z.string().optional().default('Sin título'),
-    price: coerceNumber.optional().nullable().default(0),
-    duration: coerceNumber.optional().nullable().default(0),
+    id: coerceString().optional(),
+    title: coerceString('Sin título'),
+    price: coerceNumber,
+    duration: coerceNumber,
   })).optional().default([]),
   canManage: z.boolean().optional().default(true),
   is_bot_enabled: z.boolean().optional().default(true),
@@ -73,16 +79,16 @@ export const AppointmentsResponseSchema = z.object({
 // --- LEADS ---
 export const LeadSchema = z.object({
   id: z.string(),
-  client_name: z.string().optional().nullable().default('Cliente'),
-  phone: z.string().optional().nullable().default(''),
-  status: z.string().optional().default('new'),
+  client_name: coerceString('Cliente'),
+  phone: coerceString(''),
+  status: coerceString('new'),
   is_bot_enabled: z.boolean().optional().default(true),
-  last_interaction: z.string().optional().nullable(),
-  created_at: z.string().optional().nullable(),
-  intent_score: z.number().optional().default(0),
-  category_id: z.string().optional().nullable(),
-  category_name: z.string().optional().nullable().default('General'),
-  email: z.string().optional().nullable(),
+  last_interaction: coerceString().nullable(),
+  created_at: coerceString().nullable(),
+  intent_score: coerceNumber,
+  category_id: coerceString().nullable(),
+  category_name: coerceString('General'),
+  email: coerceString().nullable(),
   total_appointments: z.number().optional().default(0),
   total_spent: coerceNumber.optional().default(0),
   canManage: z.boolean().optional().default(true),
