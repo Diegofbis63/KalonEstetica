@@ -1,21 +1,17 @@
-import { neon } from '@neondatabase/serverless';
-import * as dotenv from 'dotenv';
-dotenv.config();
+import { db } from '../api/_services/db.ts';
+import { sql } from 'drizzle-orm';
 
-const sql = neon(process.env.DATABASE_URL!);
+async function inspectDb() {
+  const tables = await db.execute(sql`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`);
+  console.log('Tables:', JSON.stringify(tables.rows, null, 2));
 
-async function inspect() {
-    const tables = ['categories', 'services', 'leads', 'staff', 'appointments'];
-    for (const table of tables) {
-        console.log(`\n--- TABLE: ${table} ---`);
-        const columns = await sql`
-            SELECT column_name, data_type, is_nullable, column_default
-            FROM information_schema.columns
-            WHERE table_name = ${table}
-            ORDER BY ordinal_position;
-        `;
-        console.table(columns);
-    }
+  const columns = await db.execute(sql`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public' ORDER BY table_name`);
+  console.log('Columns:', JSON.stringify(columns.rows, null, 2));
+  
+  process.exit(0);
 }
 
-inspect().catch(console.error);
+inspectDb().catch(err => {
+  console.error(err);
+  process.exit(1);
+});

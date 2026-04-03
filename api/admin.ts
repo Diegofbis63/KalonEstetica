@@ -96,13 +96,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const dateFilter = sql`1=1`;
             const statsIncome = await db.select({
                 total: sql<number>`SUM(COALESCE(${schema.appointments.total_price}, 0))`,
-                count: count()
+                count: sql<number>`COUNT(*)`
             })
             .from(schema.appointments)
             .where(and(
-                inArray(sql<string>`lower(${schema.appointments.status})`, ['realizada', 'concluida', 'pagada', 'confirmed', 'completada', 'completado', 'finalizada', 'servido']),
+                sql`LOWER(${schema.appointments.status}) IN ('realizada', 'concluida', 'pagada', 'confirmed', 'completada', 'completado', 'finalizada', 'servido')`,
                 dateFilter
             ));
+
+            const incomeData = statsIncome[0] || { total: 0, count: 0 };
 
             // Fetch leads for dashboard table
             const dashboardLeads = await db.select({
@@ -114,11 +116,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 created_at: schema.leads.created_at,
                 intent_score: schema.leads.intent_score,
                 category_id: schema.leads.category_id,
-                updated_at: schema.leads.updated_at
+                category_name: schema.categories.name,
+                updated_at: schema.leads.updated_at,
+                canManage: sql<boolean>`true`
             })
             .from(schema.leads)
+            .leftJoin(schema.categories, eq(schema.leads.category_id, schema.categories.id))
             .orderBy(desc(schema.leads.last_interaction))
-            .limit(50);
+            .limit(15);
 
             // Fetch appointments for dashboard table
             const dashboardAppointments = await db.select({
@@ -135,7 +140,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 total_price: schema.appointments.total_price,
                 total_duration: schema.appointments.total_duration,
                 selected_services: schema.appointments.selected_services,
-                is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, false)`
+                is_bot_enabled: schema.leads.is_bot_enabled
             })
             .from(schema.appointments)
             .leftJoin(schema.leads, eq(schema.appointments.lead_id, schema.leads.id))
@@ -162,9 +167,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     })) : []
                 })),
                 stats: {
-                    totalAppointments: Number(ordersCount.count),
-                    totalRevenue: Number(statsIncome[0]?.total || 0),
-                    totalClients: Number(leadsCount.count),
+                    totalAppointments: Number(ordersCount?.count || 0),
+                    totalRevenue: Number(incomeData.total || 0),
+                    totalClients: Number(leadsCount?.count || 0),
                     activeStaff: 5
                 }
             });
@@ -233,7 +238,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (sec === 'income') {
             if (req.method === 'GET') {
                 const { startDate, endDate } = req.query;
-                let dateFilter = sql`1=1`;
+                let dateFilter: any = sql`1=1`;
                 if (startDate && endDate) {
                     dateFilter = and(
                         sql`${schema.appointments.date_time} >= ${startDate}`,
@@ -252,15 +257,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     status: schema.appointments.status,
                     total_price: schema.appointments.total_price,
                     selected_services: schema.appointments.selected_services,
-                    is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, false)`
+                    is_bot_enabled: schema.leads.is_bot_enabled
                 })
                 .from(schema.appointments)
                 .leftJoin(schema.leads, eq(schema.appointments.lead_id, schema.leads.id))
                 .leftJoin(schema.categories, eq(schema.appointments.category_id, schema.categories.id))
                 .where(and(
-                    inArray(sql<string>`lower(${schema.appointments.status})`, [
-                        'realizada', 'concluida', 'pagada', 'confirmed', 'completada', 'completado', 'finalizada', 'servido'
-                    ]),
+                    sql`LOWER(${schema.appointments.status}) IN ('realizada', 'concluida', 'pagada', 'confirmed', 'completada', 'completado', 'finalizada', 'servido')`,
                     dateFilter
                 ))
                 .orderBy(desc(schema.appointments.date_time));
@@ -313,8 +316,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         ticket: count > 0 ? Math.round(totalRevenueVal / count) : 0,
                         count: count
                     },
-                    evolution,
-                    payments
+                    payments,
+                    evolution
                 });
             }
         }
@@ -325,6 +328,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const categoryId = req.query.categoryId as string;
             
             if (req.method === 'GET') {
+                if (catType === 'services') {
+                    const filters = [eq(schema.services.active, true)];
+                    if (categoryId) filters.push(eq(schema.services.category_id, categoryId));
+
+                    const servicesData = await db.query.services.findMany({
+                        orderBy: [asc(schema.services.sort_order)],
+                        where: and(...filters)
+                    });
+                    return res.status(200).json({ services: servicesData });
+                }
+
                 const findOptions: any = {
                     orderBy: []
                 };
@@ -341,8 +355,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     findOptions.with = { specialties: true };
                 } else if (catType === 'categories') {
                     findOptions.with = { services: true };
-                } else if (catType === 'services' && categoryId) {
-                    findOptions.where = eq(schema.services.category_id, categoryId);
                 }
 
                 const results = await (db.query as any)[catType].findMany(findOptions);
@@ -365,9 +377,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         }))
                     }));
                 } else if (catType === 'staff') {
-                    // Map specialties to array of category IDs as strings
+                    // Map specialties to array of category IDs as strings to match StaffSchema
                     formatted = results.map((s: any) => ({
                         ...s,
+                        is_active: s.active ?? true, // Support both naming variants if they exist
                         specialties: s.specialties?.map((sp: any) => String(sp.category_id)) || []
                     }));
                 }

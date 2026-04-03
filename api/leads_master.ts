@@ -28,18 +28,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     client_name: schema.leads.client_name,
                     phone: schema.leads.phone,
                     status: schema.leads.status,
-                    is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, true)`,
+                    intent_score: schema.leads.intent_score,
+                    category_id: schema.leads.category_id,
+                    category_name: schema.categories.name,
+                    is_bot_enabled: schema.leads.is_bot_enabled,
                     created_at: schema.leads.created_at,
                     total_appointments: sql<number>`count(${schema.appointments.id})::int`,
                     last_appointment: sql<string | null>`max(${schema.appointments.date_time})`
                 })
                 .from(schema.leads)
                 .leftJoin(schema.appointments, eq(schema.leads.id, schema.appointments.lead_id))
+                .leftJoin(schema.categories, eq(schema.leads.category_id, schema.categories.id))
                 .groupBy(
                     schema.leads.id, 
                     schema.leads.client_name, 
                     schema.leads.phone, 
                     schema.leads.status, 
+                    schema.leads.intent_score,
+                    schema.leads.category_id,
+                    schema.categories.name,
                     schema.leads.is_bot_enabled, 
                     schema.leads.created_at
                 )
@@ -60,12 +67,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 // Formatear para satisfacer ClientSchema (validations.ts)
                 const clients = results.map(c => ({
                     ...c,
-                    // Asegurar que las fechas sean strings ISO para evitar fallos de validación en el frontend
                     created_at: safeISO(c.created_at) || new Date().toISOString(),
                     last_appointment: safeISO(c.last_appointment),
-                    // Campos requeridos por el esquema pero que no están en la tabla leads directamente
                     email: null,
                     note: null,
+                    category_name: c.category_name || 'Sin Categoría',
                     appointment_history: []
                 }));
 
