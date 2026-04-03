@@ -25,16 +25,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 // We perform a join to get appointment stats, required by the frontend ClientSchema
                 const results = await db.select({
                     id: schema.leads.id,
-                    client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente')`,
+                    name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente')`,
                     phone: sql<string>`COALESCE(${schema.leads.phone}, '')`,
-                    status: sql<string>`COALESCE(${schema.leads.status}, 'new')`,
-                    intent_score: sql<number>`COALESCE(${schema.leads.intent_score}, 0)`,
-                    category_id: schema.leads.category_id,
-                    category_name: sql<string>`COALESCE(${schema.categories.name}, 'General')`,
-                    is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, true)`,
+                    status: sql<string>`COALESCE(${schema.leads.status}, 'active')`,
                     created_at: schema.leads.created_at,
-                    total_appointments: sql<number>`count(${schema.appointments.id})::int`,
-                    last_appointment: sql<string | null>`max(${schema.appointments.date_time})`
+                    total_appointments: sql<number>`COUNT(${schema.appointments.id})::int`,
+                    total_spent: sql<number>`SUM(COALESCE(${schema.appointments.total_price}, 0))::float`,
+                    last_interaction: sql<string | null>`MAX(${schema.appointments.date_time})`
                 })
                 .from(schema.leads)
                 .leftJoin(schema.appointments, eq(schema.leads.id, schema.appointments.lead_id))
@@ -44,10 +41,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     schema.leads.client_name, 
                     schema.leads.phone, 
                     schema.leads.status, 
-                    schema.leads.intent_score,
-                    schema.leads.category_id,
-                    schema.categories.name,
-                    schema.leads.is_bot_enabled, 
                     schema.leads.created_at
                 )
                 .orderBy(desc(schema.leads.created_at));
@@ -65,27 +58,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 };
 
                 // Formatear para satisfacer ClientSchema (validations.ts)
-                const clients = results.map((c: { 
-                    id: string, 
-                    client_name: string, 
-                    phone: string, 
-                    status: string, 
-                    created_at: string | Date | null, 
-                    last_appointment: string | Date | null,
-                    category_name: string | null,
-                    is_bot_enabled: boolean | null
-                }) => ({
-                    ...c,
-                    client_name: c.client_name || 'Cliente',
+                const clients = results.map((c) => ({
+                    id: c.id,
+                    name: c.name || 'Cliente',
                     phone: c.phone || '',
-                    status: c.status || 'new',
+                    email: null, 
+                    status: c.status || 'active',
                     created_at: safeISO(c.created_at) || new Date().toISOString(),
-                    last_appointment: safeISO(c.last_appointment),
-                    email: null,
-                    note: null,
-                    is_bot_enabled: Boolean(c.is_bot_enabled),
-                    category_name: c.category_name || 'General',
-                    appointment_history: []
+                    last_interaction: safeISO(c.last_interaction),
+                    total_appointments: c.total_appointments || 0,
+                    total_spent: c.total_spent || 0,
+                    notes: ''
                 }));
 
                 return res.status(200).json({ clients });

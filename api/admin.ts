@@ -125,7 +125,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .orderBy(desc(schema.leads.last_interaction))
             .limit(15);
 
-            // Fetch appointments for dashboard table
             const dashboardAppointments = await db.select({
                 id: schema.appointments.id,
                 lead_id: schema.appointments.lead_id,
@@ -135,12 +134,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 category_name: sql<string>`COALESCE(${schema.categories.name}, 'General')`,
                 category_id: schema.appointments.category_id,
                 date_time: schema.appointments.date_time,
-                status: sql<string>`COALESCE(${schema.appointments.status}, 'pending')`,
+                status: sql<string>`COALESCE(${schema.appointments.status}, 'confirmed')`,
                 created_at: schema.appointments.created_at,
-                total_price: schema.appointments.total_price,
-                total_duration: schema.appointments.total_duration,
-                selected_services: schema.appointments.selected_services,
-                is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, true)`
+                total_price: sql<number>`COALESCE(${schema.appointments.total_price}, 0)::float`,
             })
             .from(schema.appointments)
             .leftJoin(schema.leads, eq(schema.appointments.lead_id, schema.leads.id))
@@ -152,13 +148,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 ...a,
                 date_time: a.date_time ? new Date(a.date_time).toISOString() : new Date().toISOString(),
                 created_at: a.created_at ? new Date(a.created_at).toISOString() : new Date().toISOString(),
-                total_price: Number(a.total_price || 0),
-                total_duration: Number(a.total_duration || 0),
-                selected_services: Array.isArray(a.selected_services) ? (a.selected_services as Array<{id?: string, title?: string, price?: string | number, duration?: string | number}>).map((s) => ({
-                    ...s,
-                    price: s.price ? Number(s.price) : 0,
-                    duration: s.duration ? parseInt(String(s.duration).replace(/\D/g, ''), 10) || 0 : 0
-                })) : []
             }));
 
             return res.status(200).json({
@@ -191,7 +180,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     date_time: schema.appointments.date_time,
                     status: sql<string>`COALESCE(${schema.appointments.status}, 'pending')`,
                     created_at: schema.appointments.created_at,
-                    total_price: schema.appointments.total_price,
+                    total_price: sql<number>`COALESCE(${schema.appointments.total_price}, 0)::float`,
                     total_duration: schema.appointments.total_duration,
                     selected_services: schema.appointments.selected_services,
                     is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, true)`
@@ -244,38 +233,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 }));
                 return res.status(200).json({ users: detail });
             }
-            // Add POST/PUT logic if needed for user management
         }
 
-        // --- STAFF MANAGEMENT ---
+        // --- STAFF MANAGEMENT REDIRECT TO CATALOGS ---
         if (sec === 'staff') {
-            if (req.method === 'GET') {
-                const results = await db.select({
-                    id: schema.staff.id,
-                    name: schema.staff.name,
-                    role: schema.staff.role,
-                    is_active: schema.staff.is_active,
-                    category_name: schema.categories.name
-                })
-                .from(schema.staff)
-                .leftJoin(schema.staff_specialties, eq(schema.staff.id, schema.staff_specialties.staff_id))
-                .leftJoin(schema.categories, eq(schema.staff_specialties.category_id, schema.categories.id));
-
-                const detail = results.map((row: {
-                    id: string,
-                    name: string,
-                    role: string | null,
-                    is_active: boolean | null,
-                    category_name: string | null
-                }) => ({
-                    id: row.id,
-                    name: row.name,
-                    role: row.role,
-                    is_active: row.is_active,
-                    category_name: row.category_name
-                }));
-                return res.status(200).json({ staff: detail });
-            }
+            return res.status(200).json({ redirect: '/api/admin?section=catalogs&type=staff' });
         }
 
         // --- INCOME / CASHFLOW ---
@@ -338,9 +300,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         })) : [],
                         date: a.date_time ? new Date(a.date_time).toISOString() : new Date().toISOString(),
                         amount: amount,
-                        status: 'completado',
-                        payment_method: 'Efectivo',
-                        phone: a.phone
+                        status: a.status || 'paid',
+                        payment_method: 'Manual/Bot',
+                        phone: a.phone || ''
                     };
                 });
                 
@@ -349,7 +311,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     revenue: evolutionMap[date]
                 }));
 
-                // Ensure at least some empty months if data is totally empty
                 if (evolution.length === 0) {
                     evolution.push({ date: new Date().toISOString().split('T')[0], revenue: 0 });
                 }

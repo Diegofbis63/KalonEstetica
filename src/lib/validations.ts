@@ -70,14 +70,16 @@ export const LeadSchema = z.object({
   id: z.string(),
   client_name: z.string().optional().nullable().default('Cliente'),
   phone: z.string().optional().nullable().default(''),
-  email: z.string().optional().nullable(),
-  status: z.string().optional().nullable().default('new'),
-  intent_score: coerceNumber.optional().nullable().default(0),
-  category_id: z.string().optional().nullable(),
-  category_name: z.string().optional().nullable().default('General'),
-  created_at: z.string().optional().nullable().default(() => new Date().toISOString()),
-  updated_at: z.string().optional().nullable(),
+  status: z.string().optional().default('new'),
   is_bot_enabled: z.boolean().optional().default(true),
+  last_interaction: z.string().optional().nullable(),
+  created_at: z.string().optional().nullable(),
+  intent_score: z.number().optional().default(0),
+  category_id: z.string().optional().nullable(),
+  category_name: z.string().optional().default('General'),
+  email: z.string().optional().nullable(),
+  total_appointments: z.number().optional().default(0),
+  total_spent: coerceNumber.optional().default(0),
   canManage: z.boolean().optional().default(true),
 });
 
@@ -107,19 +109,14 @@ export const DashboardResponseSchema = z.object({
 // --- CLIENTS ---
 export const ClientSchema = z.object({
   id: z.string(),
-  client_name: z.string().optional().nullable().default('Cliente'),
+  name: z.string().optional().nullable().default('Cliente'),
   phone: z.string().optional().nullable().default(''),
   email: z.string().optional().nullable(),
-  note: z.string().optional().nullable(),
-  is_bot_enabled: z.boolean().optional().default(true),
-  total_appointments: z.coerce.number().optional().default(0),
-  last_appointment: z.string().optional().nullable(),
-  appointment_history: z.array(z.object({
-    id: z.string(),
-    date_time: z.string().optional().nullable().default(() => new Date().toISOString()),
-    service_type: z.string().optional().nullable().default('Servicio'),
-    status: z.string().optional().nullable().default('pending'),
-  })).optional().default([]),
+  last_interaction: z.string().optional().nullable(),
+  total_appointments: z.number().optional().default(0),
+  total_spent: coerceNumber.optional().default(0),
+  status: z.string().optional().default('active'),
+  notes: z.string().optional().nullable(),
 });
 
 export const ClientsResponseSchema = z.object({
@@ -130,18 +127,18 @@ export const ClientsResponseSchema = z.object({
 export const PaymentSchema = z.object({
   id: z.string(),
   lead_id: z.string().optional().nullable(),
-  client_name: z.string(),
+  client_name: z.string().optional().nullable().default('Cliente'),
   is_bot_enabled: z.boolean().optional().default(false),
   parent_service: z.string().optional().nullable(),
   selected_services: z.array(z.object({
-    title: z.string(),
-    price: coerceNumber,
+    title: z.string().optional().default('Servicio'),
+    price: coerceNumber.optional().default(0),
   })).optional().default([]),
-  date: z.string(),
-  amount: coerceNumber,
-  status: z.string(),
-  payment_method: z.string(),
-  phone: z.string().optional().nullable(),
+  date: z.string().optional().nullable().default(() => new Date().toISOString()),
+  amount: coerceNumber.optional().default(0),
+  status: z.string().optional().default('pending'),
+  payment_method: z.string().optional().default('other'),
+  phone: z.string().optional().nullable().default(''),
 });
 
 export const IncomeResponseSchema = z.object({
@@ -160,13 +157,13 @@ export const IncomeResponseSchema = z.object({
 // --- STAFF ---
 export const StaffSchema = z.object({
   id: z.string(),
-  name: z.string(),
-  phone: z.string().optional().nullable(),
+  name: z.string().optional().nullable().default('Staff Member'),
+  phone: z.string().optional().nullable().default(''),
   role: z.string().optional().default('staff'),
   is_active: z.boolean().optional().default(true),
   work_start: z.string().optional().default('09:00'),
   work_end: z.string().optional().default('18:00'),
-  specialties: z.array(z.string()).default([]), // Array of category_id strings
+  specialties: z.array(z.string()).default([]),
 });
 
 export const StaffResponseSchema = z.object({
