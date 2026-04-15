@@ -1,7 +1,15 @@
 import { z } from "zod";
 
+export const PaginationSchema = z.object({
+  total: z.number().default(0),
+  limit: z.number().default(50),
+  offset: z.number().default(0),
+  hasMore: z.boolean().default(false),
+});
+
+
 // Helper for robust numeric coercion (handles strings like "30 min", null, undefined or NaN)
-const coerceNumber = z.preprocess((val) => {
+const coerceNumber = z.preprocess((val: unknown) => {
   if (val === null || val === undefined || val === '') return 0;
   const processed = typeof val === 'string' ? val.replace(/[^0-9.]/g, '') : val;
   const num = Number(processed);
@@ -9,10 +17,10 @@ const coerceNumber = z.preprocess((val) => {
 }, z.number().default(0));
 
 // Helper for robust string coercion (handles null/undefined)
-const coerceString = (fallback: any = '') => z.preprocess((val) => {
+const coerceString = (fallback: unknown = '') => z.preprocess((val: unknown) => {
   if (val === null || val === undefined) return typeof fallback === 'function' ? fallback() : fallback;
   return String(val);
-}, z.string().default(fallback));
+}, z.string().default(fallback as string));
 
 // --- CATEGORIES ---
 export const CategorySchema = z.object({
@@ -74,7 +82,9 @@ export const AppointmentSchema = z.object({
 
 export const AppointmentsResponseSchema = z.object({
   appointments: z.array(AppointmentSchema).default([]),
+  metadata: PaginationSchema.optional(),
 });
+
 
 // --- LEADS ---
 export const LeadSchema = z.object({
@@ -124,17 +134,20 @@ export const ClientSchema = z.object({
   phone: coerceString(''),
   email: coerceString().nullable(),
   last_interaction: coerceString().nullable(),
-  last_appointment: coerceString(() => new Date().toISOString()),
-  total_appointments: coerceNumber,
-  total_spent: coerceNumber,
-  status: coerceString('active'),
-  note: coerceString(''),
+  last_appointment: z.string().default(() => new Date().toISOString()),
+  total_appointments: z.number().default(0),
+  total_spent: z.number().default(0),
+  note: z.string().nullish(),
+  is_bot_enabled: z.boolean().default(true),
+  intent_score: z.number().default(0),
   appointment_history: z.array(AppointmentSchema).optional().default([]),
 });
 
 export const ClientsResponseSchema = z.object({
   clients: z.array(ClientSchema).default([]),
+  metadata: PaginationSchema.optional(),
 });
+
 
 // --- INCOME ---
 export const PaymentSchema = z.object({

@@ -16,7 +16,9 @@ const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-nova-estetica-key';
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     
-    const { section, type } = req.query;
+    const { section, type, limit: qLimit, offset: qOffset } = req.query;
+    const limit = Math.min(Number(qLimit || 50), 100);
+    const offset = Number(qOffset || 0);
     const sec = section as string;
     const catType = type as string;
 
@@ -169,6 +171,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // --- APPOINTMENTS ---
         if (sec === 'appointments') {
             if (req.method === 'GET') {
+                const reqStatus = req.query.status as string;
+                const reqDate = req.query.date as string;
+
+                const conditions = [];
+                if (reqStatus === 'completed') {
+                    conditions.push(eq(schema.appointments.status, 'completed'));
+                }
+                if (reqDate === 'hoy') {
+                    const todayStr = new Date().toLocaleDateString('sv-SE');
+                    conditions.push(sql`DATE(${schema.appointments.date_time}) = ${todayStr}`);
+                } else if (reqDate === 'tomorrow') {
+                    const t = new Date();
+                    t.setDate(t.getDate() + 1);
+                    const tmrwStr = t.toLocaleDateString('sv-SE');
+                    conditions.push(sql`DATE(${schema.appointments.date_time}) = ${tmrwStr}`);
+                }
+                const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+                const [totalCountObj] = await db.select({ count: sql`count(*)` })
+                                        .from(schema.appointments)
+                                        .where(whereClause);
+                
                 const results = await db.select({
                     id: schema.appointments.id,
                     lead_id: schema.appointments.lead_id,
@@ -188,8 +212,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 .from(schema.appointments)
                 .leftJoin(schema.leads, eq(schema.appointments.lead_id, schema.leads.id))
                 .leftJoin(schema.categories, eq(schema.appointments.category_id, schema.categories.id))
-                .orderBy(desc(schema.appointments.date_time));
+                .where(whereClause)
+                .orderBy(desc(schema.appointments.date_time))
+                .limit(limit)
+                .offset(offset);
 
+                const count = Number(totalCountObj?.count || 0);
                 const formattedAppts = results.map((a) => ({
                     ...a,
                     date_time: a.date_time ? new Date(a.date_time).toISOString() : new Date().toISOString(),
@@ -203,7 +231,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     })) : []
                 }));
 
-                return res.status(200).json({ appointments: formattedAppts });
+                return res.status(200).json({ 
+                    appointments: formattedAppts,
+                    metadata: {
+                        total: count,
+                        limit,
+                        offset,
+                        hasMore: offset + limit < count
+                    }
+                });
             }
             if (req.method === 'POST') {
                 const [item] = await db.insert(schema.appointments).values(req.body).returning();

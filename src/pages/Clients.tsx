@@ -82,6 +82,9 @@ export default function Clients() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'new' | 'recurrent' | 'vip'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+  const [currentPage, setCurrentPage] = useState(0);
+  const PAGE_SIZE = 20;
+
 
   const { openChat } = useChat();
   const queryClient = useQueryClient();
@@ -92,10 +95,11 @@ export default function Clients() {
   const [editNote, setEditNote] = useState("");
 
   const { data, isLoading } = useQuery({
-    queryKey: ['clients-list'],
-    queryFn: () => safeFetch('/api/clients', ClientsResponseSchema, { clients: [] }),
+    queryKey: ['clients-list', currentPage, searchTerm, filterType, filterStatus],
+    queryFn: () => safeFetch(`/api/clients?limit=${PAGE_SIZE}&offset=${currentPage * PAGE_SIZE}`, ClientsResponseSchema, { clients: [] }),
     refetchInterval: 60000,
   });
+
 
   const updateClient = useMutation({
     mutationFn: async (clientData: { client_name: string; phone: string; email: string; note: string }) => {
@@ -545,7 +549,38 @@ export default function Clients() {
           </TableBody>
         </Table>
         </div>
+        
+        {/* Pagination Controls */}
+        <div className="px-8 py-4 bg-white/[0.02] border-t border-white/5 flex items-center justify-between">
+          <p className="text-[10px] text-cream/30 uppercase tracking-widest font-black">
+            Total: {data?.metadata?.total || 0} clientes
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage === 0 || isLoading}
+              onClick={() => setCurrentPage(prev => Math.max(0, prev - 1))}
+              className="bg-noir border-white/5 text-cream/40 hover:text-gold"
+            >
+              Anterior
+            </Button>
+            <div className="flex items-center px-4 bg-gold/10 rounded-xl border border-gold/20">
+              <span className="text-xs font-bold text-gold">{currentPage + 1}</span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!data?.metadata?.hasMore || isLoading}
+              onClick={() => setCurrentPage(prev => prev + 1)}
+              className="bg-noir border-white/5 text-cream/40 hover:text-gold"
+            >
+              Siguiente
+            </Button>
+          </div>
+        </div>
       </div>
+
 
       {/* Footer Info */}
       <div className="bg-gold/5 border border-gold/10 p-6 rounded-3xl flex items-center gap-4">

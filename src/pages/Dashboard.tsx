@@ -99,6 +99,9 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
   const { openChat } = useChat();
   const [dateFilter, setDateFilter] = useState<'all' | 'hoy' | 'tomorrow'>('all');
   const [showCompleted, setShowCompleted] = useState(false);
+  const [apptPage, setApptPage] = useState(0);
+  const APPT_PAGE_SIZE = 20;
+
 
   // Dialog states
   const [isNewAppointmentModalOpen, setIsNewAppointmentModalOpen] = useState(false);
@@ -137,6 +140,14 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
     staleTime: 60000,
     retry: 3,
   });
+  
+  const { data: apptsData, isLoading: apptsLoading } = useQuery({
+    queryKey: ['appointments-paginated', apptPage, showCompleted, dateFilter],
+    queryFn: () => safeFetch(`/api/appointments?limit=${APPT_PAGE_SIZE}&offset=${apptPage * APPT_PAGE_SIZE}&status=${showCompleted ? 'completed' : 'all'}&date=${dateFilter}`, AppointmentsResponseSchema, { appointments: [] }),
+    enabled: currentTab === 'appointments',
+    refetchInterval: 30000,
+  });
+
 
   const { data: timelineData } = useQuery({
     queryKey: ['timeline', todayStr],
@@ -815,7 +826,16 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                       </TableRow>
                     </TableHeader>
                       <TableBody>
-                      {filteredAppointments.map((a, i) => (
+                      {apptsLoading ? (
+                        <TableRow>
+                          <TableCell colSpan={10} className="h-32 text-center">
+                            <div className="flex flex-col items-center justify-center gap-2 text-cream/20">
+                              <Loader2 className="w-6 h-6 animate-spin" />
+                              <span className="text-[10px] uppercase font-bold tracking-widest">Cargando turnos...</span>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : (apptsData?.appointments || []).map((a) => (
                          <TableRow key={a.id} className={`border-b border-cream/5 hover:bg-cream/[0.02] transition-colors group ${!(a.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? 'opacity-40 grayscale-[0.5]' : ''}`}>
                            <TableCell className="px-5 py-6">
                              <div className="font-serif font-bold text-lg text-cream tracking-tight whitespace-nowrap">
@@ -1097,7 +1117,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                           </TableCell>
                         </TableRow>
                       ))}
-                      {filteredAppointments.length === 0 && (
+                      {(!apptsLoading && (!apptsData?.appointments || apptsData.appointments.length === 0)) && (
                         <TableRow>
                           <TableCell colSpan={6} className="h-48 text-center text-cream/10 italic font-serif">
                             <CalendarCheck className="w-8 h-8 mx-auto mb-2 opacity-5" />
@@ -1107,6 +1127,36 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                       )}
                     </TableBody>
                   </Table>
+                  </div>
+                  
+                  {/* Pagination Controls */}
+                  <div className="px-8 py-4 bg-white/[0.02] border-t border-white/5 flex items-center justify-between">
+                    <p className="text-[10px] text-cream/30 uppercase tracking-widest font-black">
+                      Total: {apptsData?.metadata?.total || 0} turnos
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={apptPage === 0 || apptsLoading}
+                        onClick={() => setApptPage(prev => Math.max(0, prev - 1))}
+                        className="bg-noir border-white/5 text-cream/40 hover:text-gold"
+                      >
+                        Anterior
+                      </Button>
+                      <div className="flex items-center px-4 bg-gold/10 rounded-xl border border-gold/20">
+                        <span className="text-xs font-bold text-gold">{apptPage + 1}</span>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!apptsData?.metadata?.hasMore || apptsLoading}
+                        onClick={() => setApptPage(prev => prev + 1)}
+                        className="bg-noir border-white/5 text-cream/40 hover:text-gold"
+                      >
+                        Siguiente
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </section>

@@ -1,5 +1,5 @@
 import { relations } from 'drizzle-orm';
-import { pgTable, uuid, text, numeric, integer, boolean, timestamp, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, numeric, integer, boolean, timestamp, jsonb, index } from 'drizzle-orm/pg-core';
 
 export interface ConvState {
   clientName: string | null;
@@ -116,7 +116,9 @@ export const leads = pgTable('leads', {
   last_interaction: timestamp('last_interaction', { withTimezone: true }).defaultNow(),
   updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
-});
+}, (table) => ({
+  leads_created_idx: index('leads_created_at_idx').on(table.created_at),
+}));
 
 export const staff = pgTable('staff', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -137,7 +139,7 @@ export const staff_specialties = pgTable('staff_specialties', {
 
 export const appointments = pgTable('appointments', {
   id: uuid('id').primaryKey().defaultRandom(),
-  lead_id: uuid('lead_id').references(() => leads.id, { onDelete: 'cascade' }),
+  lead_id: uuid('lead_id').references(() => leads.id, { onDelete: 'set null' }),
   organization_id: text('organization_id'),
   staff_id: uuid('staff_id').references(() => staff.id, { onDelete: 'set null' }),
   date_time: timestamp('date_time', { withTimezone: true }).notNull(),
@@ -150,7 +152,10 @@ export const appointments = pgTable('appointments', {
   payment_method: text('payment_method'),
   updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
-});
+}, (table) => ({
+  appt_date_idx: index('appt_date_time_idx').on(table.date_time),
+  appt_created_idx: index('appt_created_at_idx').on(table.created_at),
+}));
 
 export const chat_logs = pgTable('chat_logs', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -161,7 +166,9 @@ export const chat_logs = pgTable('chat_logs', {
   media_data: text('media_data'),
   sent_to_whatsapp: boolean('sent_to_whatsapp').default(false),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
-});
+}, (table) => ({
+  chat_created_idx: index('chat_created_at_idx').on(table.created_at),
+}));
 
 export const user_permissions = pgTable('user_permissions', {
   id: uuid('id').primaryKey().defaultRandom(),

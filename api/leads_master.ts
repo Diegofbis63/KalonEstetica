@@ -11,7 +11,9 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     
-    const { section } = req.query;
+    const { section, limit: qLimit, offset: qOffset } = req.query;
+    const limit = Math.min(Number(qLimit || 50), 100);
+    const offset = Number(qOffset || 0);
     const sec = section as string;
 
     try {
@@ -22,6 +24,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // --- CLIENTS MANAGEMENT ---
         if (sec === 'clients') {
             if (req.method === 'GET') {
+                const [totalCount] = await db.select({ count: sql`count(*)` }).from(schema.leads);
                 // We perform a join to get appointment stats, required by the frontend ClientSchema
                 const results = await db.select({
                     id: schema.leads.id,
@@ -43,8 +46,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     schema.leads.status, 
                     schema.leads.created_at
                 )
-                .orderBy(desc(schema.leads.created_at));
+                .orderBy(desc(schema.leads.created_at))
+                .limit(limit)
+                .offset(offset);
 
+                const count = Number(totalCount?.count || 0);
                 // Safe date formatter for client data
                 const safeISO = (dateStr: string | Date | null | undefined) => {
                     if (!dateStr) return null;
@@ -58,7 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 };
 
                 // Formatear para satisfacer ClientSchema (validations.ts)
-                const clients = results.map((c) => ({
+                const clients = results.map((c: Record<string, unknown>) => ({
                     id: c.id,
                     client_name: c.name || 'Cliente',
                     phone: c.phone || '',
@@ -72,7 +78,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     note: ''
                 }));
 
-                return res.status(200).json({ clients });
+                return res.status(200).json({ 
+                    clients,
+                    metadata: {
+                        total: count,
+                        limit,
+                        offset,
+                        hasMore: offset + limit < count
+                    }
+                });
             }
             if (req.method === 'POST') {
                 const { client_name, name, ...rest } = req.body as { client_name?: string, name?: string };
