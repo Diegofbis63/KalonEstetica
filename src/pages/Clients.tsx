@@ -444,6 +444,7 @@ export default function Clients() {
       </div>
 
       {/* Main Table Container */}
+      <div className="bg-noir/20 border border-white/5 rounded-[2rem] overflow-hidden shadow-2xl relative">
         {/* Mobile View: High Fidelity Cards */}
         <div className="md:hidden divide-y divide-white/5">
           {isLoading ? (
