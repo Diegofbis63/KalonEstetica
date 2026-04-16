@@ -126,11 +126,16 @@ export async function getServicesByCategory(categoryNameOrId: string): Promise<S
 
     console.log(`[DB CRITICAL] SERVICES FOUND for ${match.name}: ${results.length}`);
 
-    return results.map(s => ({
+    const services = results.map(s => ({
         ...s,
         category_name: match.name,
         duration: s.duration || `${s.duration_min} min`
     })) as unknown as Service[];
+
+    return {
+        services,
+        category: match
+    } as any;
 }
 
 // --- LEADS ---

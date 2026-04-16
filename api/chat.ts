@@ -81,31 +81,42 @@ export default async function handler(req: Request) {
 
               // 2. INYECCIÓN DE IMÁGENES SATORI: Para Categorías y Servicios
               if (toolName === 'listar_categorias_principales' || toolName === 'consultar_servicios') {
-                const isCategory = toolName === 'listar_categorias_principales';
-                const title = isCategory ? 'Categorías de Especialidad' : 'Nuestros Servicios';
+                const results = toolResults as any;
                 
-                // Mapeamos los resultados para el generador de Satori
-                const items = Array.isArray(toolResults) ? toolResults : (toolResults as any).servicios || [];
-                
-                const menuData = items.map((item: any) => ({
-                    label: item.nombre || item.label || 'Servicio',
-                    price: item.price ? `$${item.price}` : undefined
-                }));
-
-                if (menuData.length > 0) {
-                    const encodedData = Buffer.from(JSON.stringify(menuData)).toString('base64');
-                    const host = req.headers.get('host') || 'kalon-estetica.vercel.app';
-                    const protocol = host.includes('localhost') ? 'http' : 'https';
-                    const satoriUrl = `${protocol}://${host}/api/satori-image?title=${encodeURIComponent(title)}&data=${encodedData}`;
-
-                    console.log(`[CHAT LOG] Generated Satori URL for ${toolName}: ${satoriUrl}`);
-
-                    // Enviamos la URL de la imagen en el delta para que el componente ChatMessage la renderice
+                // Si ya tenemos una imagen pre-generada de la lista de precios, la usamos directamente
+                if (toolName === 'consultar_servicios' && results.price_list_url) {
+                    console.log(`[CHAT LOG] Using PRE-GENERATED Price List URL for ${toolName}`);
                     send({
                         choices: [{
-                            delta: { content: "", media_url: satoriUrl }
+                            delta: { content: "", media_url: results.price_list_url }
                         }]
                     });
+                } else {
+                    // Si no hay imagen guardada, recurrimos a generarla al vuelo (fallback)
+                    const isCategory = toolName === 'listar_categorias_principales';
+                    const title = isCategory ? 'Categorías de Especialidad' : 'Nuestros Servicios';
+                    
+                    const items = Array.isArray(results) ? results : results.servicios || [];
+                    
+                    const menuData = items.map((item: any) => ({
+                        label: item.nombre || item.label || 'Servicio',
+                        price: item.price ? `$${item.price}` : undefined
+                    }));
+
+                    if (menuData.length > 0) {
+                        const encodedData = Buffer.from(JSON.stringify(menuData)).toString('base64');
+                        const host = req.headers.get('host') || 'kalon-estetica.vercel.app';
+                        const protocol = host.includes('localhost') ? 'http' : 'https';
+                        const satoriUrl = `${protocol}://${host}/api/satori-image?title=${encodeURIComponent(title)}&data=${encodedData}`;
+
+                        console.log(`[CHAT LOG] Generated On-the-fly Satori URL for ${toolName}: ${satoriUrl}`);
+
+                        send({
+                            choices: [{
+                                delta: { content: "", media_url: satoriUrl }
+                            }]
+                        });
+                    }
                 }
               }
             }

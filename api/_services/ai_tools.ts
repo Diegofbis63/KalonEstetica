@@ -88,9 +88,9 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                     return { success: false, error: 'Primero necesito tu nombre y apellido para poder mostrarte los servicios.', servicios: [] };
                 }
                 try {
-                    const results = await getServicesByCategory(categoriaNombre);
+                    const { services, category } = await getServicesByCategory(categoriaNombre);
                     
-                    if (results.length === 0) {
+                    if (services.length === 0) {
                         const categories = await getCategories();
                         console.warn(`[TOOL CRITICAL] No match for category: "${categoriaNombre}"`);
                         return { 
@@ -101,15 +101,16 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                         };
                     }
 
-                    console.log(`[TOOL CRITICAL] Found ${results.length} services for ${categoriaNombre}`);
+                    console.log(`[TOOL CRITICAL] Found ${services.length} services for ${categoriaNombre}`);
                     return {
                         success: true,
-                        servicios: results.map(s => ({
+                        servicios: services.map(s => ({
                             label: s.title || "Servicio",
                             price: s.price || 0,
                             id: s.id,
                             category: s.category_name || "Servicios"
                         })),
+                        price_list_url: category?.price_list_url || null,
                         error: null as string | null,
                         categorias_disponibles: null as string | null
                     };

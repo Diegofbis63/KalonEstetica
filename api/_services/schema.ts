@@ -29,6 +29,7 @@ export interface Category {
   slug: string;
   description?: string | null;
   image_url?: string | null;
+  price_list_url?: string | null;
   active?: boolean | null;
   sort_order?: number | null;
 }
@@ -83,6 +84,7 @@ export const categories = pgTable('categories', {
   active: boolean('active').default(true),
   sort_order: integer('sort_order').default(0),
   organization_id: text('organization_id'),
+  price_list_url: text('price_list_url'),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
 

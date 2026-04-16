@@ -29,6 +29,7 @@ export const CategorySchema = z.object({
   slug: z.string().optional(),
   description: z.string().optional().nullable(),
   image_url: z.string().optional().nullable(),
+  price_list_url: z.string().optional().nullable(),
   active: z.boolean().optional().default(true),
   sort_order: coerceNumber.optional().default(0),
   services: z.array(z.lazy(() => ServiceSchema)).optional(),

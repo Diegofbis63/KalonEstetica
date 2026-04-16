@@ -9,17 +9,9 @@ import {
   Service
 } from "@/lib/validations";
 import { 
-  Plus, 
-  GripVertical, 
-  Edit, 
-  Trash2, 
-  ChevronRight, 
-  Image as ImageIcon,
-  Save,
-  X,
-  Upload,
-  Clock,
-  DollarSign
+  DollarSign,
+  FileText,
+  Loader2
 } from 'lucide-react';
 import { 
   DndContext, 
@@ -57,12 +49,16 @@ const SortableCategoryItem = ({
   isActive, 
   onClick,
   onDelete,
+  onGenerate,
+  isGenerating = false,
   isReadOnly = false
 }: { 
   category: Category; 
   isActive: boolean; 
   onClick: () => void;
   onDelete: () => void;
+  onGenerate: () => void;
+  isGenerating?: boolean;
   isReadOnly?: boolean;
 }) => {
   const {
@@ -98,12 +94,30 @@ const SortableCategoryItem = ({
       )}
       <span className="flex-grow font-serif font-bold text-sm truncate">{category.name}</span>
       {!isReadOnly && (
-        <button 
-          onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          className="p-1 px-1.5 rounded-md hover:bg-rose/10 hover:text-rose transition-all opacity-0 group-hover:opacity-100"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button 
+            disabled={isGenerating}
+            onClick={(e) => { e.stopPropagation(); onGenerate(); }}
+            title="Generar Imagen de Precios para Chatbot"
+            className={`p-1 px-1.5 rounded-md transition-all ${
+              category.price_list_url 
+                ? 'hover:bg-gold/10 text-gold' 
+                : 'hover:bg-cream/10 text-cream/40'
+            }`}
+          >
+            {isGenerating ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <FileText className="w-3.5 h-3.5" />
+            )}
+          </button>
+          <button 
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            className="p-1 px-1.5 rounded-md hover:bg-rose/10 hover:text-rose transition-all"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       )}
       <ChevronRight className={`w-4 h-4 transition-transform ${isActive ? 'translate-x-1 opacity-100' : 'opacity-0 group-hover:opacity-40'}`} />
     </div>
@@ -345,6 +359,50 @@ export default function ServicesManagement() {
       }
   });
 
+  const generatePriceListMutation = useMutation({
+    mutationFn: async (category: Category) => {
+      // 1. Prepare data
+      const items = (category.services || [])
+        .filter(s => s.active)
+        .map(s => ({
+          label: s.title,
+          price: Number(s.price).toLocaleString('es-AR')
+        }));
+
+      if (items.length === 0) throw new Error("La categoría no tiene servicios activos.");
+
+      // 2. Call Satori
+      const dataB64 = btoa(unescape(encodeURIComponent(JSON.stringify(items))));
+      const response = await fetch(`/api/satori-image?title=${encodeURIComponent(category.name)}&data=${dataB64}`);
+      
+      if (!response.ok) throw new Error("Error al generar imagen");
+      
+      const blob = await response.blob();
+      
+      // 3. Convert to Base64 for DB storage (simple approach for now)
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    },
+    onSuccess: async (base64, category) => {
+      // 4. Save to DB
+      await fetch(`/api/categories?id=${category.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...category, price_list_url: base64 })
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      toast.success(`Imagen de lista de precios generada para ${category.name}`);
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Error al generar imagen");
+    }
+  });
+
   // DND Handlers
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -433,6 +491,8 @@ export default function ServicesManagement() {
                             deleteCategoryMutation.mutate(cat.id);
                         }
                     }}
+                    onGenerate={() => generatePriceListMutation.mutate(cat)}
+                    isGenerating={generatePriceListMutation.isPending && generatePriceListMutation.variables?.id === cat.id}
                     isReadOnly={isReadOnly}
                   />
                 ))}
