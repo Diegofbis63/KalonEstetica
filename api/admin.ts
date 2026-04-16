@@ -16,11 +16,12 @@ const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-nova-estetica-key';
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     
-    const { section, type, limit: qLimit, offset: qOffset } = req.query;
+    const { section, type, limit: qLimit, offset: qOffset, date: qDate } = req.query;
     const limit = Math.min(Number(qLimit || 50), 100);
     const offset = Number(qOffset || 0);
     const sec = section as string;
     const catType = type as string;
+    const reqDateGeneral = qDate as string;
 
     try {
         // --- 1. PUBLIC GETS (Categories / Services for Landing) ---
@@ -127,6 +128,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .orderBy(desc(schema.leads.last_interaction))
             .limit(15);
 
+            const conds = [];
+            conds.push(sql`${schema.appointments.status} != 'cancelled'`);
+            if (reqDateGeneral && reqDateGeneral !== 'all') {
+                conds.push(sql`DATE(${schema.appointments.date_time}) = ${reqDateGeneral}`);
+            }
+
             const dashboardAppointments = await db.select({
                 id: schema.appointments.id,
                 lead_id: schema.appointments.lead_id,
@@ -143,6 +150,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .from(schema.appointments)
             .leftJoin(schema.leads, eq(schema.appointments.lead_id, schema.leads.id))
             .leftJoin(schema.categories, eq(schema.appointments.category_id, schema.categories.id))
+            .where(and(...conds))
             .orderBy(desc(schema.appointments.date_time))
             .limit(50);
 

@@ -270,10 +270,10 @@ export default function Clients() {
             <TableHeader className="bg-white/5">
             <TableRow className="border-cream/5 hover:bg-transparent">
               <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4 pl-8">Cliente</TableHead>
-              <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4">Contacto</TableHead>
-              <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4 text-center">BOT</TableHead>
-              <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4">Frecuencia</TableHead>
-              <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4">Última Cita</TableHead>
+              <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4 hidden md:table-cell">Contacto</TableHead>
+              <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4 text-center hidden lg:table-cell">BOT</TableHead>
+              <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4 hidden sm:table-cell">Frecuencia</TableHead>
+              <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4 hidden md:table-cell">Última Cita</TableHead>
               <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4 text-right pr-8">Acciones</TableHead>
             </TableRow>
           </TableHeader>
@@ -307,7 +307,7 @@ export default function Clients() {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="py-5">
+                  <TableCell className="py-5 hidden md:table-cell">
                     <div className="space-y-1">
                       <button
                         onClick={() => {
@@ -333,7 +333,7 @@ export default function Clients() {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="py-5 text-center">
+                  <TableCell className="py-5 text-center hidden lg:table-cell">
                     <div className="flex flex-col items-center justify-center gap-1.5">
                       <Switch 
                         disabled={authUser?.role === 'staff'}
@@ -346,12 +346,12 @@ export default function Clients() {
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell className="py-5">
+                  <TableCell className="py-5 hidden sm:table-cell">
                     <Badge variant="outline" className="bg-gold/5 border-gold/20 text-gold text-[10px] font-bold px-2 py-0.5">
                       {client.total_appointments} {client.total_appointments === 1 ? 'VISITA' : 'VISITAS'}
                     </Badge>
                   </TableCell>
-                  <TableCell className="py-5">
+                  <TableCell className="py-5 hidden md:table-cell">
                     <div className="flex items-center gap-2 text-sm text-cream/60">
                       <Calendar className="w-3.5 h-3.5 text-gold/40" />
                       {new Date(client.last_appointment).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}

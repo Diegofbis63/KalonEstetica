@@ -814,14 +814,14 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                       <TableHeader>
                       <TableRow className="border-b border-cream/5 hover:bg-transparent">
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14">Cliente</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14">Contacto</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 hidden md:table-cell">Contacto</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 w-fit">Servicio</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center">Duración</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center hidden lg:table-cell">Duración</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center">Estado</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center">Fecha / Hora</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center">Precio</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-4 h-14 text-center">BOT</TableHead>
-                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-4 h-14 text-center">Wsp</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-center hidden sm:table-cell">Precio</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-4 h-14 text-center hidden xl:table-cell">BOT</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-4 h-14 text-center hidden md:table-cell">Wsp</TableHead>
                         <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-5 h-14 text-right">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -842,7 +842,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                {(a.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? a.client_name : `Ocupado - ${a.category_name}`}
                              </div>
                            </TableCell>
-                           <TableCell className="px-5 py-6">
+                           <TableCell className="px-5 py-6 hidden md:table-cell">
                              {(a.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') && a.phone && (
                                <button 
                                  onClick={() => {
@@ -933,7 +933,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                               )}
                             </div>
                           </TableCell>
-                          <TableCell className="px-5 py-6 text-center font-sans">
+                          <TableCell className="px-5 py-6 text-center font-sans hidden lg:table-cell">
                             <div className="text-sm font-bold text-cream/70 flex items-center justify-center gap-2 whitespace-nowrap">
                               <Clock className="w-3.5 h-3.5 text-gold/60" />
                               {(() => {
@@ -1011,12 +1011,12 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                               </span>
                             </div>
                           </TableCell>
-                          <TableCell className="px-5 py-6 text-center font-sans">
+                          <TableCell className="px-5 py-6 text-center font-sans hidden sm:table-cell">
                             <div className="text-sm font-bold text-gold/90 whitespace-nowrap">
                               {a.total_price ? `$${Number(a.total_price || 0).toLocaleString('es-AR')}` : "-"}
                             </div>
                           </TableCell>
-                          <TableCell className="px-4 py-6 text-center">
+                          <TableCell className="px-4 py-6 text-center hidden xl:table-cell">
                             <div className="flex items-center justify-center gap-2">
                                  <Switch 
                                      checked={a.is_bot_enabled} 
@@ -1029,7 +1029,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                 </span>
                             </div>
                           </TableCell>
-                          <TableCell className="px-4 py-6 text-center">
+                          <TableCell className="px-4 py-6 text-center hidden md:table-cell">
                               <button 
                                   onClick={() => { 
                                     const leadObj = {
