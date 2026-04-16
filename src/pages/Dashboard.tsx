@@ -627,16 +627,16 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                       </div>
                                       <ScrollArea className="max-h-[280px] overflow-y-auto">
                                         <div className="p-3 space-y-3">
-                                          {appt.selected_services && appt.selected_services.length > 0 ? (
+                                          {Array.isArray(appt.selected_services) && appt.selected_services.length > 0 ? (
                                             appt.selected_services.map((s, idx) => (
                                               <div key={idx} className="flex justify-between items-start gap-2 group/item">
                                                 <div className="space-y-0.5">
-                                                  <p className="text-xs font-bold text-cream group-hover/item:text-gold transition-colors">{s.title}</p>
+                                                  <p className="text-xs font-bold text-cream group-hover/item:text-gold transition-colors">{s?.title || 'Servicio'}</p>
                                                   <p className="text-[10px] text-cream/40 flex items-center gap-1">
-                                                    <Clock className="w-2.5 h-2.5" /> {s.duration}
+                                                    <Clock className="w-2.5 h-2.5" /> {s?.duration || '30 min'}
                                                   </p>
                                                 </div>
-                                                <p className="text-xs font-sans font-bold text-cream/80 whitespace-nowrap">${Number(s.price).toLocaleString('es-AR')}</p>
+                                                <p className="text-xs font-sans font-bold text-cream/80 whitespace-nowrap">${Number(s?.price || 0).toLocaleString('es-AR')}</p>
                                               </div>
                                             ))
                                           ) : (
@@ -1390,13 +1390,13 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                     <span>{selectedServices?.length || 0} items</span>
                   </label>
                   <ScrollArea className="h-[200px] rounded-xl border border-white/5 bg-noir-light/30 p-2">
-                    {selectedServices && selectedServices.length > 0 ? (
+                    {Array.isArray(selectedServices) && selectedServices.length > 0 ? (
                       <div className="space-y-2">
                         {selectedServices.map((s, idx) => (
                           <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5 group">
                             <div className="space-y-0.5">
-                              <p className="text-xs font-bold text-cream">{s.title}</p>
-                              <p className="text-[10px] text-cream/40 whitespace-nowrap">{s.duration} • ${Number(s.price).toLocaleString('es-AR')}</p>
+                              <p className="text-xs font-bold text-cream">{s?.title || 'Servicio'}</p>
+                              <p className="text-[10px] text-cream/40 whitespace-nowrap">{s?.duration || '30 min'} • ${Number(s?.price || 0).toLocaleString('es-AR')}</p>
                             </div>
                             <button 
                               onClick={() => setSelectedServices(prev => (prev || []).filter((_, i) => i !== idx))}
