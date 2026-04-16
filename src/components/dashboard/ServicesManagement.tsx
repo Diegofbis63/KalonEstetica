@@ -11,7 +11,17 @@ import {
 import { 
   DollarSign,
   FileText,
-  Loader2
+  Loader2,
+  Plus,
+  Trash2,
+  Edit,
+  GripVertical,
+  ChevronRight,
+  ImageIcon,
+  X,
+  Upload,
+  Save,
+  Clock
 } from 'lucide-react';
 import { 
   DndContext, 

@@ -821,6 +821,7 @@ export default function Incomes() {
               ))}
             </div>
           </div>
+        </div>
 
         {/* Mobile Action Drawer */}
         <Drawer open={isMobileActionOpen} onOpenChange={setIsMobileActionOpen}>
