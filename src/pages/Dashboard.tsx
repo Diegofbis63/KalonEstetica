@@ -6,7 +6,7 @@ import {
   Trash2, CheckCircle2, XCircle, AlertTriangle, Clock, 
   ArrowRight, ShieldAlert, Zap, Bell, CalendarDays, ChevronRight, 
   Phone, MoreHorizontal, Info, X, Plus, Search, ClipboardList,
-  Send, Paperclip, Image as LucideImage, Loader2
+  Send, Paperclip, Image as LucideImage, RefreshCw
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/AuthContext";
@@ -19,7 +19,9 @@ import {
   safeFetch,
   DashboardResponseSchema,
   ServicesResponseSchema,
-  CategoriesResponseSchema
+  CategoriesResponseSchema,
+  AppointmentsResponseSchema,
+  ClientsResponseSchema
 } from "@/lib/validations";
 import { useChat } from "@/context/ChatContext";
 import { maskPhone } from "@/lib/utils";
@@ -43,7 +45,6 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
@@ -126,13 +127,6 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [itemToDelete, setItemToDelete ] = useState<{ id: string, type: 'lead' | 'appointment' | 'service' } | null>(null);
 
-  // Today for timeline
-  const todayStr = useMemo(() => {
-    const d = new Date();
-    return d.toLocaleDateString('sv-SE'); // YYYY-MM-DD in local time
-  }, []);
-
-
   const { data: dashData, isLoading: dashLoading } = useQuery({
     queryKey: ['dashboard'],
     queryFn: () => safeFetch('/api/dashboard', DashboardResponseSchema, { leads: [], appointments: [], stats: {} }),
@@ -141,6 +135,12 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
     staleTime: 60000,
     retry: 3,
   });
+
+  const todayStr = useMemo(() => {
+    const d = new Date();
+    // Get date in Argentina timezone YYYY-MM-DD
+    return d.toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Cordoba' });
+  }, []);
   
   const { data: apptsData, isLoading: apptsLoading } = useQuery({
     queryKey: ['appointments-paginated', apptPage, showCompleted, dateFilter],
@@ -309,13 +309,29 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
 
   const leads: Lead[] = useMemo(() => dashData?.leads || [], [dashData?.leads]);
   const appointments: Appointment[] = useMemo(() => dashData?.appointments || [], [dashData?.appointments]);
-  const timelineAppts: Appointment[] = useMemo(() => {
-    const base = timelineData?.appointments || [];
-    if (!showCompleted) {
-      return base.filter(a => a.status !== 'REALIZADA' && a.status !== 'completed');
-    }
-    return base;
-  }, [timelineData?.appointments, showCompleted]);
+  const timelineAppts = useMemo(() => {
+    const base = dashData?.appointments || [];
+    // Robust filter: ignore case, handle all variations of canceled/anulado
+    const filtered = base.filter(a => {
+      const status = a.status?.toLowerCase() || '';
+      const isCanceled = ['canceled', 'cancelled', 'anulado', 'anulada', 'cancelado', 'cancelada', 'rechazada', 'rechazado'].includes(status);
+      if (isCanceled) return false;
+
+      // Verify date safety for "Agenda del Día" (sv-SE format: YYYY-MM-DD)
+      try {
+        const apptDate = new Date(a.date_time).toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Cordoba' });
+        return apptDate === todayStr;
+      } catch (e) {
+        return false;
+      }
+    });
+
+    if (showCompleted) return filtered;
+    return filtered.filter(a => {
+        const status = a.status?.toLowerCase() || '';
+        return status !== 'completed' && status !== 'realizada';
+    });
+  }, [dashData, showCompleted, todayStr]);
 
   const filteredLeads = useMemo(() => {
     if (showCompleted) return leads;
@@ -323,7 +339,10 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
       if (l.status === 'qualified') return false;
       const leadAppts = appointments.filter(a => a.lead_id === l.id);
       if (leadAppts.length > 0) {
-        const allFinished = leadAppts.every(a => a.status === 'REALIZADA' || a.status === 'completed' || a.status === 'canceled');
+        const allFinished = leadAppts.every(a => {
+            const status = a.status?.toLowerCase() || '';
+            return ['realizada', 'completed', 'canceled', 'cancelled', 'anulado', 'anulada', 'cancelado', 'cancelada', 'rechazada', 'rechazado'].includes(status);
+        });
         if (allFinished) return false;
       }
       return true;
@@ -331,22 +350,29 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
   }, [leads, appointments, showCompleted]);
 
   const filteredAppointments = useMemo(() => {
-    const target = new Date();
-    let base = appointments.filter(a => a.status !== 'canceled');
+    let base = appointments.filter(a => {
+        const status = a.status?.toLowerCase() || '';
+        return !['canceled', 'cancelled', 'anulado', 'anulada', 'cancelado', 'cancelada', 'rechazada', 'rechazado'].includes(status);
+    });
     
     if (!showCompleted) {
-      base = base.filter(a => a.status !== 'REALIZADA' && a.status !== 'completed');
+      base = base.filter(a => {
+          const status = a.status?.toLowerCase() || '';
+          return status !== 'realizada' && status !== 'completed';
+      });
     }
 
     if (dateFilter === 'tomorrow') {
+      const target = new Date();
       target.setDate(target.getDate() + 1);
-      return base.filter(a => new Date(a.date_time).toDateString() === target.toDateString());
+      const targetStr = target.toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Cordoba' });
+      return base.filter(a => new Date(a.date_time).toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Cordoba' }) === targetStr);
     }
     if (dateFilter === 'hoy') {
-      return base.filter(a => new Date(a.date_time).toDateString() === target.toDateString());
+      return base.filter(a => new Date(a.date_time).toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Cordoba' }) === todayStr);
     }
     return base;
-  }, [appointments, dateFilter, showCompleted]);
+  }, [appointments, dateFilter, showCompleted, todayStr]);
 
   const stats = [
     { 
@@ -412,13 +438,13 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
           
           {currentTab === 'dashboard' && (
             <div className="space-y-12 animate-in fade-in slide-in-from-bottom-6 duration-1000">
-              {/* 1. KPI Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* 1. KPI Cards - Horizontal Carousel on Mobile */}
+              <div className="flex overflow-x-auto gap-4 pb-4 no-scrollbar md:grid md:grid-cols-3 md:pb-0">
                 {stats.map((s, i) => (
                   <div 
                     key={i} 
                     onClick={() => s.path && navigate(s.path)}
-                    className={`p-6 rounded-2xl border border-white/[0.03] bg-noir-light/20 backdrop-blur-md group hover:border-gold/20 transition-all ${s.path ? 'cursor-pointer hover:bg-noir-light/40' : ''}`}
+                    className={`flex-none w-[85%] md:w-auto p-6 rounded-3xl border border-white/[0.03] bg-noir-light/20 backdrop-blur-md group hover:border-gold/20 transition-all ${s.path ? 'cursor-pointer hover:bg-noir-light/40' : ''}`}
                   >
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-4">
@@ -457,168 +483,99 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                       </div>
                    </div>
                    
-                   <div className="relative pl-6 sm:pl-8 space-y-6 sm:space-y-8 before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-px before:bg-gradient-to-b before:from-gold/40 before:via-gold/10 before:to-transparent">
+                    {/* Agenda del Día List */}
+                    <div className="space-y-4">
                       {timelineAppts.length > 0 ? (
                         timelineAppts
                           .sort((a,b) => new Date(a.date_time).getTime() - new Date(b.date_time).getTime())
                           .map((appt, i) => (
                           <div 
                             key={appt.id} 
-                            className={`relative p-4 sm:p-5 rounded-2xl border transition-all animate-in fade-in slide-in-from-left-4 ${
-                              (appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') 
-                                ? 'bg-gold/5 border-gold/20 shadow-[0_0_20px_rgba(194,154,91,0.05)]' 
-                                : 'bg-white/[0.02] border-white/5 opacity-80'
-                            }`}
+                            className={`relative group animate-in fade-in slide-in-from-bottom-4 duration-500`}
                             style={{ animationDelay: `${i * 100}ms` }}
                           >
-                            {/* Dot indicator */}
-                            <div className={`absolute -left-[25px] sm:-left-[27px] top-6 sm:top-1/2 sm:-translate-y-1/2 w-4 h-4 rounded-full border-2 ${
-                              (appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? 'bg-gold border-noir' : 'bg-noir-light border-white/10'
-                            }`} />
-
-                            <div className="flex flex-col gap-4">
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-3 mb-2">
-                                    <Clock className={`w-3.5 h-3.5 ${(appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? 'text-gold' : 'text-cream/20'}`} />
-                                    <span className={`text-sm font-bold font-sans ${(appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? 'text-gold' : 'text-cream/40'}`}>
+                            <div className={`p-4 sm:p-6 rounded-3xl border transition-all ${
+                              (appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') 
+                                ? 'bg-white/[0.04] border-white/10 hover:border-gold/30 hover:bg-white/[0.06] shadow-xl' 
+                                : 'bg-white/[0.02] border-white/5 opacity-80'
+                            }`}>
+                              <div className="flex items-center justify-between gap-4 mb-4">
+                                <div className="flex items-center gap-3">
+                                  <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${ (appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? 'bg-gold/10 text-gold' : 'bg-white/5 text-cream/20' }`}>
+                                    <Clock className="w-5 h-5" />
+                                  </div>
+                                  <div>
+                                    <div className={`text-xl font-serif font-black tracking-tight ${(appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? 'text-cream' : 'text-cream/30'}`}>
                                       {new Date(appt.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Cordoba' })}hs
-                                    </span>
-                                  </div>
-                                  
-                                  <h4 className={`text-lg sm:text-xl font-serif font-bold mb-3 ${(appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? 'text-cream' : 'text-cream/30'}`}>
-                                    {(appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? appt.client_name : `Ocupado — ${appt.category_name}`}
-                                  </h4>
-
-                                  <div className="flex flex-wrap items-center gap-3 mb-3">
-                                    <div className="flex items-center gap-2 group/phone">
-                                      <div className="w-7 h-7 rounded-full bg-cream/5 border border-white/5 flex items-center justify-center text-cream/40 group-hover/phone:border-gold/20 group-hover/phone:text-gold transition-all">
-                                        <Phone className="w-3 h-3" />
-                                      </div>
-                                      <span className={`text-xs font-sans font-medium select-none ${(appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? 'text-cream/80' : 'text-cream/20'}`}>
-                                        {maskPhone(appt.phone, authUser?.role)}
-                                      </span>
                                     </div>
+                                    <div className="text-[10px] text-cream/30 uppercase tracking-widest font-black">Turno de Hoy</div>
                                   </div>
-
-                                  {(appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') && (
-                                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                                      {appt.total_duration ? (
-                                        <div className="inline-flex items-center gap-4 px-4 py-2 sm:px-5 sm:py-3 rounded-2xl bg-gold/10 border border-gold/30 shadow-[0_0_30px_rgba(194,154,91,0.15)] group/duration hover:bg-gold/15 transition-all">
-                                          <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gold/20 border border-gold/20 flex-shrink-0">
-                                            <Clock className="w-4 h-4 sm:w-5 h-5 text-gold animate-pulse" />
-                                          </div>
-                                          <div className="flex flex-col">
-                                            <span className="text-[9px] sm:text-[10px] text-gold/50 uppercase font-black tracking-[0.2em] leading-none mb-1">Duración</span>
-                                            <span className="text-xl sm:text-2xl font-serif font-black text-gold leading-none tracking-tight">
-                                              {appt.total_duration >= 60 
-                                                ? `${Math.floor(appt.total_duration/60)}h ${appt.total_duration%60 > 0 ? `${appt.total_duration%60}m` : ''}`
-                                                : `${appt.total_duration} min`
-                                              }
-                                            </span>
-                                          </div>
-                                        </div>
-                                      ) : null}
-
-                                      <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                          <button 
-                                            disabled={authUser?.role === 'staff'}
-                                            className="outline-none focus:outline-none focus-visible:outline-none w-full sm:w-auto"
-                                          >
-                                            <Badge 
-                                              variant="outline"
-                                              className={`
-                                                flex flex-col items-center justify-center h-10 w-24 border-0
-                                                ${(appt.status === 'completed' || appt.status === 'REALIZADA') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 
-                                                  appt.status === 'confirmed' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
-                                                  appt.status === 'canceled' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
-                                                  'bg-amber-500/10 text-amber-500 border-amber-500/20'}
-                                              `}
-                                            >
-                                              <span className="text-[8px] opacity-50 font-sans tracking-widest uppercase">ESTADO</span>
-                                              <span className="text-[10px] font-black uppercase tracking-wider">
-                                                {appt.status === 'completed' || appt.status === 'REALIZADA' ? 'Realizada' : 
-                                                 appt.status === 'confirmed' ? 'Confirmado' :
-                                                 appt.status === 'canceled' ? 'Anulado' :
-                                                 'Pendiente'}
-                                              </span>
-                                            </Badge>
-                                          </button>
-                                        </DropdownMenuTrigger>
-                                        {authUser?.role !== 'staff' && (
-                                          <DropdownMenuContent align="center" className="bg-noir-light border-white/10 text-cream/80 backdrop-blur-xl">
-                                            <DropdownMenuItem className="focus:bg-gold/10 focus:text-gold cursor-pointer" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'pending' })}>
-                                              <Clock className="w-3.5 h-3.5 mr-2" /> Marcar como PENDIENTE
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem className="focus:bg-emerald-500/10 focus:text-emerald-400 cursor-pointer" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'confirmed' })}>
-                                              <CalendarCheck className="w-3.5 h-3.5 mr-2" /> Marcar como CONFIRMADA
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem className="focus:bg-sky-500/10 focus:text-sky-400 cursor-pointer" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'REALIZADA' })}>
-                                              <CheckCircle2 className="w-3.5 h-3.5 mr-2" /> Marcar como REALIZADA
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem className="focus:bg-rose/10 focus:text-rose cursor-pointer" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'canceled' })}>
-                                              <XCircle className="w-3.5 h-3.5 mr-2" /> Marcar como CANCELADA
-                                            </DropdownMenuItem>
-                                          </DropdownMenuContent>
-                                        )}
-                                      </DropdownMenu>
-                                    </div>
-                                  )}
                                 </div>
-                                
-                                { (appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') && (
-                                  <div className="flex sm:flex-col items-center gap-2">
-                                    <button 
-                                      onClick={() => { 
-                                        const leadObj = {
-                                          id: appt.lead_id!,
-                                          client_name: appt.client_name!,
-                                          phone: appt.phone,
-                                          status: appt.status,
-                                          intent_score: 100,
-                                          is_bot_enabled: appt.is_bot_enabled || false,
-                                          created_at: appt.created_at,
-                                          canManage: appt.canManage
-                                        } as Lead;
-                                        openChat(leadObj);
-                                      }}
-                                      disabled={!appt.lead_id || (!appt.canManage && authUser?.role !== 'staff' && authUser?.role !== 'admin')}
-                                      className={`p-3 sm:p-4 rounded-xl bg-white/5 border border-white/10 transition-all flex items-center justify-center group/btn hover:text-gold hover:border-gold/30 flex-1 sm:flex-none ${
-                                        (appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') && appt.lead_id ? '' : 'opacity-20 cursor-not-allowed'
-                                      }`}
-                                    >
-                                      <MessageSquare className="w-4 h-4 sm:w-5 h-5 group-hover/btn:scale-110 transition-transform" />
-                                    </button>
-                                    {authUser?.role !== 'staff' && (
-                                      <button 
-                                        onClick={() => {
-                                          setSelectedAppointmentForEdit(appt);
-                                          const d = new Date(appt.date_time);
-                                          setFormDate(d.toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Cordoba' }));
-                                          setFormTime(d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Cordoba' }));
-                                          setFormService(appt.service_type);
-                                          setFormClientName(appt.client_name || "");
-                                          setFormPhone(appt.phone || "");
-                                          setSelectedServices(appt.selected_services || []);
-                                          setIsEditAppointmentModalOpen(true);
-                                        }}
-                                        className="p-3 sm:p-4 rounded-xl bg-gold text-noir hover:scale-110 active:scale-95 transition-all shadow-lg shadow-gold/10 flex-1 sm:flex-none"
-                                      >
-                                        <Edit className="w-4 h-4 sm:w-5 h-5" />
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
+
+                                <Badge 
+                                  variant="outline"
+                                  className={`
+                                    text-[10px] font-black tracking-widest px-4 py-1.5 rounded-full border
+                                    ${(appt.status === 'completed' || appt.status === 'REALIZADA') ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-400' : 
+                                      appt.status === 'confirmed' ? 'border-blue-500/30 bg-blue-500/5 text-blue-400' :
+                                      appt.status === 'canceled' ? 'border-rose-500/30 bg-rose-500/5 text-rose-400' :
+                                      'border-amber-500/30 bg-amber-500/5 text-amber-500'}
+                                  `}
+                                >
+                                  {appt.status === 'completed' || appt.status === 'REALIZADA' ? 'Realizada' : 
+                                   appt.status === 'confirmed' ? 'Confirmado' :
+                                   appt.status === 'canceled' ? 'Anulado' :
+                                   'Pendiente'}
+                                </Badge>
                               </div>
 
-                              { (appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') && (
-                                <div className="pt-2">
+                              <div className="mb-5">
+                                <h4 className={`text-2xl font-serif font-bold mb-1 tracking-tight ${(appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? 'text-gold' : 'text-cream/20'}`}>
+                                  {(appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? appt.client_name : `Agenda Ocupada`}
+                                </h4>
+                                <div className="flex items-center gap-3 text-cream/40 text-sm italic font-serif">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-gold/50" />
+                                  {Array.isArray(appt.selected_services) && appt.selected_services.length > 0
+                                    ? appt.selected_services.map(s => s?.category_name || "Servicio").join(" • ")
+                                    : appt.service_type || "Tratamiento Boutique"}
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-white/5">
+                                <div className="flex gap-2">
+                                  {(appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') && appt.phone && (
+                                    <button 
+                                      onClick={() => {
+                                        const leadObj = { id: appt.lead_id!, client_name: appt.client_name!, phone: appt.phone, status: appt.status, is_bot_enabled: appt.is_bot_enabled || false, created_at: appt.created_at } as Lead;
+                                        openChat(leadObj);
+                                      }}
+                                      className="h-10 px-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20 text-emerald-400 text-xs font-bold hover:bg-emerald-500/10 transition-all flex items-center gap-2"
+                                    >
+                                      <Phone className="w-3.5 h-3.5" /> WhatsApp
+                                    </button>
+                                  )}
+                                  <button 
+                                    onClick={() => {
+                                      setSelectedAppointmentForEdit(appt);
+                                      const d = new Date(appt.date_time);
+                                      setFormDate(d.toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Cordoba' }));
+                                      setFormTime(d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Cordoba' }));
+                                      setFormClientName(appt.client_name || "");
+                                      setFormPhone(appt.phone || "");
+                                      setSelectedServices(appt.selected_services || []);
+                                      setIsEditAppointmentModalOpen(true);
+                                    }}
+                                    className="h-10 px-4 rounded-xl bg-white/5 border border-white/10 text-cream/60 text-xs font-bold hover:bg-white/10 transition-all flex items-center gap-2"
+                                  >
+                                    <Edit className="w-3.5 h-3.5" /> Editar
+                                  </button>
+                                </div>
+
+                                <div className="flex gap-2 items-center">
                                   <Popover>
                                     <PopoverTrigger asChild>
-                                      <button className="flex items-center gap-1.5 hover:text-gold transition-colors text-left text-[11px] font-bold uppercase tracking-widest bg-white/5 hover:bg-gold/5 border border-white/10 hover:border-gold/30 px-4 py-2 rounded-xl text-cream/50 group/btn w-full sm:w-auto justify-center sm:justify-start">
-                                        <ClipboardList className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
-                                        Ver Servicios <span className="text-cream/30 border-l border-white/10 pl-2 ml-1">({appt.selected_services?.length || 0})</span>
+                                      <button className="flex items-center gap-1.5 hover:text-gold transition-colors text-left text-[11px] font-bold uppercase tracking-widest bg-white/5 hover:bg-gold/5 border border-white/10 hover:border-gold/30 px-3 py-2 rounded-xl text-cream/50 group/btn border-dashed">
+                                        <ClipboardList className="w-4 h-4" />
+                                        <span className="hidden sm:inline">Servicios</span> ({appt.selected_services?.length || 0})
                                       </button>
                                     </PopoverTrigger>
                                     <PopoverContent className="w-72 bg-noir/95 backdrop-blur-xl border-gold/20 shadow-[0_10px_40px_rgba(0,0,0,0.5)] p-0 z-50">
@@ -669,18 +626,55 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                       )}
                                     </PopoverContent>
                                   </Popover>
+
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <button 
+                                        disabled={authUser?.role === 'staff'}
+                                        className="h-10 px-5 rounded-xl bg-gold text-noir text-[10px] font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-lg shadow-gold/20 disabled:opacity-20 flex items-center justify-center cursor-pointer"
+                                      >
+                                        Gestionar
+                                      </button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="bg-noir-light border-white/10 text-cream/80 backdrop-blur-xl w-56 rounded-2xl p-2 shadow-2xl">
+                                      <DropdownMenuItem className="rounded-xl h-11 focus:bg-emerald-500/10 focus:text-emerald-400 cursor-pointer mb-1" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'confirmed' })}>
+                                        <CalendarCheck className="w-4 h-4 mr-3" /> Confirmar Cita
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem className="rounded-xl h-11 focus:bg-sky-500/10 focus:text-sky-400 cursor-pointer mb-1" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'REALIZADA' })}>
+                                        <CheckCircle2 className="w-4 h-4 mr-3" /> Finalizar Sesión
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator className="bg-white/5 my-2" />
+                                      <DropdownMenuItem className="rounded-xl h-11 focus:bg-rose-500/10 focus:text-rose-400 cursor-pointer" onClick={() => updateAppointment.mutate({ id: appt.id, status: 'canceled' })}>
+                                        <XCircle className="w-4 h-4 mr-3" /> Cancelar Turno
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
                                 </div>
-                              )}
+                              </div>
                             </div>
                           </div>
                         ))
                       ) : (
-                        <div className="p-10 text-center border border-dashed border-white/10 rounded-2xl bg-white/[0.01]">
-                          <CalendarDays className="w-12 h-12 text-cream/10 mx-auto mb-4" />
-                          <p className="text-cream/20 font-serif italic text-sm">No hay citas registradas para hoy</p>
+                        <div className="py-20 text-center space-y-4 rounded-3xl border border-white/[0.03] bg-white/[0.01]">
+                          <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-4 border border-white/5">
+                            <CalendarCheck className="w-8 h-8 text-cream/10" />
+                          </div>
+                          <p className="text-cream/20 font-serif italic text-lg px-6">No hay actividades programadas para el resto del día.</p>
+                          <button 
+                            onClick={() => {
+                              setSelectedLeadForAppt(null);
+                              setSelectedServices([]);
+                              setFormClientName("");
+                              setFormPhone("");
+                              setIsNewAppointmentModalOpen(true);
+                            }}
+                            className="text-gold text-xs font-black uppercase tracking-[0.2em] hover:tracking-[0.3em] transition-all"
+                          >
+                            + Agendar Nuevo Turno
+                          </button>
                         </div>
                       )}
-                   </div>
+                    </div>
                 </div>
 
                 {/* Column Right: Operation Center (30%) */}
@@ -810,7 +804,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                 </div>
 
                 <div className="rounded-2xl border border-cream/5 bg-noir-light/20 overflow-hidden shadow-2xl backdrop-blur-md">
-                  <div className="overflow-x-auto">
+                  <div className="hidden md:block overflow-x-auto">
                     <Table>
                       <TableHeader>
                       <TableRow className="border-b border-cream/5 hover:bg-transparent">
@@ -831,12 +825,12 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                         <TableRow>
                           <TableCell colSpan={10} className="h-32 text-center">
                             <div className="flex flex-col items-center justify-center gap-2 text-cream/20">
-                              <Loader2 className="w-6 h-6 animate-spin" />
+                              <RefreshCw className="w-6 h-6 animate-spin" />
                               <span className="text-[10px] uppercase font-bold tracking-widest">Cargando turnos...</span>
                             </div>
                           </TableCell>
                         </TableRow>
-                      ) : (apptsData?.appointments || []).map((a) => (
+                      ) : (apptsData?.appointments || []).filter(a => a.status !== 'canceled').map((a) => (
                          <TableRow key={a.id} className={`border-b border-cream/5 hover:bg-cream/[0.02] transition-colors group ${!(a.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? 'opacity-40 grayscale-[0.5]' : ''}`}>
                            <TableCell className="px-5 py-6">
                              <div className="font-serif font-bold text-lg text-cream tracking-tight whitespace-nowrap">
@@ -1129,6 +1123,133 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                     </TableBody>
                   </Table>
                   </div>
+
+                  {/* Mobile Cards */}
+                  <div className="md:hidden divide-y divide-white/5">
+                    {apptsLoading ? (
+                      Array.from({ length: 3 }).map((_, i) => (
+                        <div key={i} className="p-6 animate-pulse space-y-4">
+                           <div className="flex justify-between items-start">
+                             <div className="space-y-2">
+                               <div className="w-32 h-6 bg-white/5 rounded-lg" />
+                               <div className="w-20 h-3 bg-white/5 rounded" />
+                             </div>
+                             <div className="w-16 h-4 bg-white/5 rounded-full" />
+                           </div>
+                           <div className="w-full h-12 bg-white/5 rounded-2xl" />
+                        </div>
+                      ))
+                    ) : (
+                      filteredAppointments.map((a, i) => (
+                      <div key={a.id} className="p-6 space-y-5 hover:bg-white/[0.02] transition-all relative group animate-in fade-in slide-in-from-bottom-4 duration-500" style={{ animationDelay: `${i * 50}ms` }}>
+                        <div className="absolute top-0 right-0 w-24 h-24 bg-gold/5 blur-3xl -z-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        
+                        <div className="flex justify-between items-start">
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-[1rem] bg-gradient-to-br from-gold/10 to-noir-light border border-gold/20 flex items-center justify-center text-gold font-black text-sm shadow-xl">
+                              {a.client_name ? a.client_name[0] : 'C'}
+                            </div>
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-lg font-serif font-bold text-cream group-hover:text-gold transition-colors">
+                                {(a.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? a.client_name : `Ocupado`}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-cream/40 font-black uppercase tracking-widest whitespace-nowrap">
+                                  {new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'short' }).format(new Date(a.date_time))}
+                                </span>
+                                <span className="text-primary/20 text-[10px]">•</span>
+                                <span className="text-[10px] text-gold font-bold">
+                                  {new Date(a.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Cordoba' })}hs
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <Badge 
+                            variant="outline" 
+                            className={`
+                              text-[8px] font-black tracking-widest px-3 py-1 rounded-full border shadow-sm
+                              ${ (a.status === 'scheduled' || a.status === 'confirmed') ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-400' 
+                               : (a.status === 'completed' || a.status === 'REALIZADA') ? 'border-sky-500/30 bg-sky-500/5 text-sky-400'
+                               : (a.status === 'canceled' || a.status === 'anulado') ? 'border-rose-500/30 bg-rose-500/5 text-rose-400'
+                               : 'border-gold/30 bg-gold/5 text-gold'}
+                            `}
+                          >
+                            { (a.status === 'scheduled' || a.status === 'confirmed') ? 'CONFIRMADA' : 
+                              (a.status === 'completed' || a.status === 'REALIZADA') ? 'REALIZADA' : 
+                              (a.status === 'canceled' || a.status === 'anulado') ? 'ANULADA' : 'PENDIENTE'}
+                          </Badge>
+                        </div>
+
+                        {/* Services & Price */}
+                        <div className="bg-white/5 border border-white/5 p-4 rounded-2xl">
+                          <div className="flex items-center justify-between mb-3 leading-none">
+                            <span className="text-[9px] uppercase tracking-widest font-black text-cream/20">Servicios</span>
+                            <span className="text-xs font-black text-gold">${Number(a.total_price || 0).toLocaleString('es-AR')}</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                             {Array.isArray(a.selected_services) && a.selected_services.length > 0 ? (
+                               a.selected_services.map((s, idx) => (
+                                 <span key={idx} className="text-[10px] px-2.5 py-1 rounded-lg bg-noir/40 text-cream/60 border border-white/5 font-medium">
+                                   {s?.title || 'Servicio'}
+                                 </span>
+                               ))
+                             ) : (
+                               <span className="text-[10px] text-cream/20 italic">{a.service_type || 'General'}</span>
+                             )}
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-2">
+                           {(a.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') && a.phone && (
+                               <button 
+                                 onClick={() => {
+                                   const leadObj = { id: a.lead_id!, client_name: a.client_name!, phone: a.phone, status: a.status, is_bot_enabled: a.is_bot_enabled || false, created_at: a.created_at } as Lead;
+                                   openChat(leadObj);
+                                 }}
+                                 className="h-12 w-12 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/10 flex items-center justify-center active:scale-95 transition-all"
+                               >
+                                 <Phone className="w-5 h-5" />
+                               </button>
+                           )}
+                           
+                           <button 
+                             onClick={() => {
+                               setSelectedAppointmentForEdit(a);
+                               const d = new Date(a.date_time);
+                               setFormDate(d.toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Cordoba' }));
+                               setFormTime(d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Cordoba' }));
+                               setFormClientName(a.client_name || "");
+                               setFormPhone(a.phone || "");
+                               setSelectedServices(a.selected_services || []);
+                               setIsEditAppointmentModalOpen(true);
+                             }}
+                            className="flex-1 h-12 rounded-xl bg-white/5 border border-white/10 text-cream/60 text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all flex items-center justify-center gap-2 active:scale-95"
+                          >
+                             <Edit className="w-3.5 h-3.5" /> Editar Info
+                           </button>
+
+                           <DropdownMenu>
+                             <DropdownMenuTrigger asChild>
+                               <button className="w-12 h-12 rounded-xl bg-gold/10 border border-gold/20 text-gold flex items-center justify-center active:scale-95 transition-all">
+                                 <MoreHorizontal className="w-5 h-5" />
+                               </button>
+                             </DropdownMenuTrigger>
+                             <DropdownMenuContent align="end" className="bg-noir-light border-white/10 text-cream/80 backdrop-blur-xl w-56 p-1">
+                               <DropdownMenuItem className="focus:bg-emerald-500/10 focus:text-emerald-400 py-3 cursor-pointer rounded-lg mb-1" onClick={() => updateAppointment.mutate({ id: a.id, status: 'REALIZADA' })}>
+                                 <CheckCircle2 className="w-4 h-4 mr-3" /> Marcar Realizada
+                               </DropdownMenuItem>
+                               <DropdownMenuItem className="focus:bg-rose/10 focus:text-rose py-3 cursor-pointer rounded-lg" onClick={() => updateAppointment.mutate({ id: a.id, status: 'canceled' })}>
+                                 <XCircle className="w-4 h-4 mr-3" /> Cancelar Cita
+                               </DropdownMenuItem>
+                             </DropdownMenuContent>
+                           </DropdownMenu>
+                        </div>
+                      </div>
+                      ))
+                    )}
+                  </div>
                   
                   {/* Pagination Controls */}
                   <div className="px-8 py-4 bg-white/[0.02] border-t border-white/5 flex items-center justify-between">
@@ -1136,27 +1257,23 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                       Total: {apptsData?.metadata?.total || 0} turnos
                     </p>
                     <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={apptPage === 0 || apptsLoading}
-                        onClick={() => setApptPage(prev => Math.max(0, prev - 1))}
-                        className="bg-noir border-white/5 text-cream/40 hover:text-gold"
-                      >
-                        Anterior
-                      </Button>
-                      <div className="flex items-center px-4 bg-gold/10 rounded-xl border border-gold/20">
-                        <span className="text-xs font-bold text-gold">{apptPage + 1}</span>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={!apptsData?.metadata?.hasMore || apptsLoading}
-                        onClick={() => setApptPage(prev => prev + 1)}
-                        className="bg-noir border-white/5 text-cream/40 hover:text-gold"
-                      >
-                        Siguiente
-                      </Button>
+                       <button
+                         disabled={apptPage === 0 || apptsLoading}
+                         onClick={() => setApptPage(prev => Math.max(0, prev - 1))}
+                         className="bg-noir border border-white/5 text-cream/40 hover:text-gold px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest disabled:opacity-20 transition-all"
+                       >
+                         Anterior
+                       </button>
+                       <div className="flex items-center px-4 bg-gold/10 rounded-xl border border-gold/20">
+                         <span className="text-xs font-bold text-gold">{apptPage + 1}</span>
+                       </div>
+                       <button
+                         disabled={!apptsData?.metadata?.hasMore || apptsLoading}
+                         onClick={() => setApptPage(prev => prev + 1)}
+                         className="bg-noir border border-white/5 text-cream/40 hover:text-gold px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest disabled:opacity-20 transition-all"
+                       >
+                         Siguiente
+                       </button>
                     </div>
                   </div>
                 </div>
@@ -1168,8 +1285,10 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                   <div className="w-1.5 h-6 bg-gold rounded-full" />
                   <h3 className="text-xl font-serif font-bold">Clientes Potenciales</h3>
                 </div>
+                
                 <div className="rounded-2xl border border-cream/5 bg-noir-light/20 overflow-hidden shadow-2xl backdrop-blur-md">
-                  <div className="overflow-x-auto">
+                  {/* Desktop View */}
+                  <div className="hidden lg:block overflow-x-auto">
                     <Table>
                     <TableHeader>
                       <TableRow className="border-b border-white/5 hover:bg-transparent">
@@ -1269,7 +1388,6 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                       } as Lead;
                                       openChat(leadObj);
                                     }}
-                                    disabled={!l.canManage}
                                     className={`px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs font-bold font-mono uppercase transition-all flex items-center gap-2 group/btn ${
                                       l.canManage ? 'text-cream/40 hover:text-gold hover:border-gold/30' : 'opacity-20 cursor-not-allowed'
                                     }`}
@@ -1300,8 +1418,79 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                         </TableRow>
                       ))}
                     </TableBody>
-                  </Table>
+                   </Table>
                   </div>
+
+                  {/* Mobile View */}
+                  <div className="lg:hidden divide-y divide-white/5 bg-noir/20">
+                    {filteredLeads.map((l) => (
+                      <div key={l.id} className={`p-6 space-y-5 hover:bg-white/[0.02] transition-all relative overflow-hidden ${!(l.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? 'opacity-40' : ''}`}>
+                        <div className="flex justify-between items-start">
+                          <div className="space-y-1">
+                            <div className="font-serif font-bold text-xl text-cream tracking-tight truncate max-w-[200px]">
+                              {(l.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? l.client_name : `Interesado`}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className={`text-[8px] font-black border uppercase tracking-widest ${l.intent_score > 70 ? 'border-emerald-500/30 text-emerald-400 bg-emerald-500/5' : l.intent_score > 40 ? 'border-amber-500/30 text-amber-500 bg-amber-500/5' : 'border-rose-500/30 text-rose-500 bg-rose-500/5'}`}>
+                                Interés {l.intent_score}%
+                              </Badge>
+                              {l.updated_at && (
+                                <span className="text-[10px] text-cream/20 font-sans italic">
+                                  {new Date(l.updated_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end gap-1.5">
+                            <Switch 
+                               checked={l.is_bot_enabled} 
+                               onCheckedChange={(val) => toggleBotMutation.mutate({ leadId: l.id, isBotEnabled: val })}
+                               className="data-[state=checked]:bg-gold scale-75"
+                               disabled={authUser?.role === 'staff'}
+                            />
+                            <span className={`text-[8px] font-black tracking-widest uppercase ${l.is_bot_enabled ? 'text-emerald-400' : 'text-cream/20'}`}>
+                              BOT {l.is_bot_enabled ? 'ON' : 'OFF'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                           {l.phone && (
+                             <button 
+                               onClick={() => {
+                                 const leadObj = { id: l.id, client_name: l.client_name, phone: l.phone, status: l.status, is_bot_enabled: l.is_bot_enabled, created_at: l.created_at, canManage: l.canManage } as Lead;
+                                 openChat(leadObj);
+                               }}
+                               className="flex-1 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center gap-2 active:scale-95 transition-all transition-colors"
+                             >
+                               <Phone className="w-4 h-4" />
+                               <span className="text-[10px] font-black uppercase tracking-widest">WhatsApp</span>
+                             </button>
+                           )}
+                           <button 
+                             onClick={() => { 
+                               setSelectedLeadForAppt(l); 
+                               setSelectedServices([]);
+                               setCartCategory("");
+                               setCartService("");
+                               setIsNewAppointmentModalOpen(true); 
+                             }}
+                             className="flex-1 h-12 rounded-xl bg-gold/10 border border-gold/20 text-gold flex items-center justify-center gap-2 active:scale-95 transition-all"
+                           >
+                             <CalendarCheck className="w-4 h-4" />
+                             <span className="text-[10px] font-black uppercase tracking-widest">Agendar</span>
+                           </button>
+                           <button 
+                             onClick={() => { setItemToDelete({ id: l.id, type: 'lead' }); setDeleteConfirmOpen(true); }} 
+                             className="w-12 h-12 rounded-xl bg-rose/10 border border-rose/20 text-rose flex items-center justify-center active:scale-95 transition-all text-rose-400"
+                           >
+                              <Trash2 className="w-4 h-4" />
+                           </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
                 </div>
               </section>
              </div>

@@ -11,7 +11,8 @@ async function run_query() {
         return;
     }
     try {
-        const result = await sql(query);
+        // @ts-expect-error - sql.query is available in neon-serverless runtime but not in types
+        const result = await sql.query(query);
         console.log(JSON.stringify(result, null, 2));
     } catch (e) {
         console.error("Error:", e);

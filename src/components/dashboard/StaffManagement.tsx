@@ -168,6 +168,8 @@ export function StaffManagement() {
       </div>
 
       <div className="rounded-2xl border border-cream/5 bg-noir-light/20 overflow-hidden shadow-2xl backdrop-blur-md">
+        {/* Desktop Table */}
+        <div className="hidden md:block">
         <Table>
           <TableHeader>
             <TableRow className="border-b border-white/5 hover:bg-transparent bg-white/[0.02]">
@@ -241,6 +243,83 @@ export function StaffManagement() {
             ))}
           </TableBody>
         </Table>
+        </div>
+
+        {/* Mobile View */}
+        <div className="md:hidden divide-y divide-white/5">
+          {staffList.map((s) => (
+            <div key={s.id} className="p-6 space-y-5">
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-4">
+                  <div className={`w-12 h-12 rounded-2xl border border-cream/10 bg-noir flex items-center justify-center font-serif text-lg font-bold ${s.is_active ? 'text-gold' : 'text-cream/20'}`}>
+                    {s.name.charAt(0)}
+                  </div>
+                  <div>
+                    <h4 className={`font-serif font-bold text-lg ${s.is_active ? 'text-cream' : 'text-cream/20 line-through'}`}>{s.name}</h4>
+                    <span className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/40">
+                      {s.role === 'admin' ? 'Coordinación' : 'Profesional'}
+                    </span>
+                  </div>
+                </div>
+                <div className={`px-3 py-1 rounded-full text-[8px] font-black tracking-widest border ${s.is_active ? 'border-emerald-500/20 bg-emerald-500/5 text-emerald-400' : 'border-white/5 bg-white/5 text-cream/20'}`}>
+                  {s.is_active ? 'ACTIVO' : 'SISTEMA PAUSADO'}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white/5 p-3 rounded-2xl border border-white/5">
+                   <div className="text-[8px] uppercase tracking-widest text-cream/30 font-bold mb-1">Contacto</div>
+                   <div className="text-xs font-bold text-cream flex items-center gap-2">
+                     <Phone className="w-3 h-3 text-gold" />
+                     {s.phone || 'S/D'}
+                   </div>
+                </div>
+                <div className="bg-white/5 p-3 rounded-2xl border border-white/5">
+                   <div className="text-[8px] uppercase tracking-widest text-cream/30 font-bold mb-1">Horario</div>
+                   <div className="text-xs font-bold text-cream flex items-center gap-2">
+                     <Clock className="w-3 h-3 text-gold" />
+                     {s.work_start} - {s.work_end}
+                   </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-[8px] uppercase tracking-widest text-cream/30 font-bold ml-1">Especialidades</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {s.specialties.length > 0 ? (
+                    s.specialties.map(catId => {
+                      const cat = categories.find(c => c.id === catId);
+                      return (
+                        <span key={catId} className="px-3 py-1 bg-gold/5 border border-gold/10 text-[10px] text-gold/80 rounded-lg whitespace-nowrap font-bold">
+                          {cat?.name || 'Servicio'}
+                        </span>
+                      );
+                    })
+                  ) : (
+                    <span className="text-[10px] text-cream/10 italic">Sin especialidad asignada</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button 
+                   onClick={() => openEdit(s)}
+                   className="flex-1 flex items-center justify-center gap-3 h-12 bg-gold/10 border border-gold/20 text-gold rounded-2xl text-[10px] font-black uppercase tracking-widest"
+                >
+                  <Settings2 className="w-4 h-4" /> Gestionar Perfil
+                </button>
+                <button 
+                  onClick={() => {
+                    if(confirm("¿Eliminar profesional?")) deleteMutation.mutate(s.id);
+                  }}
+                  className="w-12 h-12 flex items-center justify-center rounded-2xl bg-rose-500/5 text-rose-500 border border-rose-500/10"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
         
         {staffList.length === 0 && (
           <div className="py-24 text-center space-y-4">

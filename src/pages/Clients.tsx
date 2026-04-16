@@ -32,7 +32,7 @@ import { useChat } from "@/context/ChatContext";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+// import { Button } from "@/components/ui/button"; // Removed to avoid ReferenceError in production
 import { Input } from "@/components/ui/input";
 import { 
   Table, 
@@ -180,6 +180,184 @@ export default function Clients() {
 
   const hasActiveFilters = filterType !== 'all' || filterStatus !== 'all' || searchTerm !== "";
 
+  const renderClientDetail = (client: Client) => (
+    <div className="h-full flex flex-col pt-8">
+      <SheetHeader className="mb-8">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-2xl bg-gold/5 border border-gold/10 flex items-center justify-center text-gold font-bold text-2xl shadow-xl">
+              {(isEditing ? editName : client.client_name).split(' ').map(n => n[0]).join('').slice(0, 2)}
+            </div>
+            <div className="text-left">
+              {isEditing ? (
+                <SheetTitle className="text-2xl font-serif text-cream">Editando Perfil</SheetTitle>
+              ) : (
+                <SheetTitle className="text-2xl font-serif text-cream">{client.client_name || 'Cliente Sin Nombre'}</SheetTitle>
+              )}
+              <div className="flex items-center gap-2 mt-1">
+                <Badge className="bg-gold/10 text-gold border-gold/20 text-[10px]">
+                  {(client.total_appointments ?? 0) > 5 ? 'CLIENTE VIP' : 'CLIENTE REGULAR'}
+                </Badge>
+                <span className="text-[10px] text-cream/20 uppercase tracking-widest font-black">ID: {client.id?.slice(0,8) ?? 'N/A'}</span>
+              </div>
+            </div>
+          </div>
+          {authUser?.role === 'admin' && (
+            <button
+              onClick={() => setIsEditing(!isEditing)}
+              className={`p-3 rounded-2xl border transition-all ${isEditing ? 'border-rose-500/20 text-rose-400 bg-rose-500/5' : 'border-white/5 text-cream/40 hover:text-gold hover:bg-gold/10 hover:border-gold/20'}`}
+            >
+              {isEditing ? <X className="w-5 h-5" /> : <Edit className="w-5 h-5" />}
+            </button>
+          )}
+        </div>
+      </SheetHeader>
+
+      {isEditing ? (
+        <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+          <div className="space-y-4 bg-white/[0.02] border border-white/5 p-6 rounded-2xl shadow-inner">
+            <div className="space-y-2">
+              <Label className="text-[10px] uppercase tracking-widest text-cream/30 font-black">Nombre Completo</Label>
+              <Input
+                value={editName}
+                onChange={e => setEditName(e.target.value)}
+                className="bg-noir border-white/5 focus:border-gold/30 h-14 rounded-xl"
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-[10px] uppercase tracking-widest text-cream/30 font-black">WhatsApp / Tel</Label>
+                <Input
+                  value={editPhone}
+                  onChange={e => setEditPhone(e.target.value)}
+                  className="bg-noir border-white/5 focus:border-gold/30 h-14 rounded-xl"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] uppercase tracking-widest text-cream/30 font-black">Email</Label>
+                <Input
+                  value={editEmail}
+                  onChange={e => setEditEmail(e.target.value)}
+                  className="bg-noir border-white/5 focus:border-gold/30 h-14 rounded-xl"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[10px] uppercase tracking-widest text-cream/30 font-black">Notas Internas</Label>
+              <Textarea
+                value={editNote}
+                onChange={e => setEditNote(e.target.value)}
+                className="bg-noir border-white/5 focus:border-gold/30 min-h-[120px] resize-none rounded-xl p-4"
+                placeholder="Ej: Prefiere turnos por la tarde, alergia a ciertos productos..."
+              />
+            </div>
+          </div>
+
+          <button
+            className="w-full bg-gold text-noir font-black h-16 rounded-[1.5rem] tracking-[0.2em] shadow-xl shadow-gold/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-3"
+            onClick={() => updateClient.mutate({ client_name: editName, phone: editPhone, email: editEmail, note: editNote })}
+            disabled={updateClient.isPending || !editName || !editPhone}
+          >
+            {updateClient.isPending ? (
+              <History className="w-5 h-5 animate-spin" />
+            ) : (
+              <>
+                <Save className="w-5 h-5" />
+                CONFIRMAR CAMBIOS
+              </>
+            )}
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-col h-full animate-in fade-in slide-in-from-left-4 duration-500">
+          <div className="grid grid-cols-2 gap-4 mb-10">
+            <div className="p-6 rounded-[1.5rem] bg-gradient-to-br from-gold/10 to-transparent border border-gold/10 group">
+              <p className="text-[10px] text-gold font-black uppercase tracking-[0.2em] mb-2 px-1">Total Visitas</p>
+              <p className="text-4xl font-serif font-black text-cream tracking-tighter">{client.total_appointments ?? 0}</p>
+            </div>
+            <div className="p-6 rounded-[1.5rem] bg-white/[0.03] border border-white/5">
+              <p className="text-[10px] text-cream/30 font-black uppercase tracking-[0.2em] mb-2">Última Visita</p>
+              <p className="text-xl font-serif font-bold text-cream">
+                {client.last_appointment ? Math.floor((new Date().getTime() - new Date(client.last_appointment).getTime()) / (1000 * 60 * 60 * 24)) : '-'} días ago
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-8 flex-1">
+            <div>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-sm font-black text-cream/60 uppercase tracking-widest flex items-center gap-3 italic">
+                  <History className="w-4 h-4 text-gold/60" />
+                  Línea de Tiempo del Cliente
+                </h3>
+                <div className="h-[2px] flex-1 bg-white/5 ml-4" />
+              </div>
+              <ScrollArea className="h-[450px] pr-6">
+                <div className="space-y-4">
+                  {client.appointment_history?.map((appt, idx) => (
+                    <div key={appt.id || idx} className="relative pl-8 pb-8 border-l border-white/10 last:pb-0 group/time">
+                      <div className="absolute left-[-5px] top-2 w-2.5 h-2.5 rounded-full bg-gold/40 shadow-gold/20 shadow-lg group-hover/time:scale-150 group-hover/time:bg-gold transition-all" />
+                      <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/5 group-hover/time:bg-white/[0.04] group-hover/time:border-gold/20 transition-all shadow-sm">
+                        <div className="flex justify-between items-start mb-3">
+                          <p className="font-serif font-bold text-cream text-xl tracking-tight">{appt.service_type || 'Servicio General'}</p>
+                          <Badge variant="outline" className={`text-[9px] font-black tracking-widest px-3 h-6 rounded-full border-none shadow-inner ${
+                            appt.status?.toLowerCase() === 'completed' ? 'bg-emerald-500/10 text-emerald-400' :
+                            appt.status?.toLowerCase() === 'canceled' ? 'bg-rose-500/10 text-rose-400' :
+                            'bg-gold/10 text-gold shadow-gold/20'
+                          }`}>
+                            {(appt.status || 'PENDIENTE').toUpperCase()}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-4 text-xs font-medium text-cream/40">
+                          <div className="flex items-center gap-1.5 bg-white/5 py-1 px-2.5 rounded-lg border border-white/5">
+                            <Calendar className="w-3.5 h-3.5 text-gold/60" />
+                            {appt.date_time ? new Date(appt.date_time).toLocaleDateString('es-AR', { day: '2-digit', month: 'long' }) : 'N/A'}
+                          </div>
+                          <div className="flex items-center gap-1.5 bg-white/5 py-1 px-2.5 rounded-lg border border-white/5">
+                            <Clock className="w-3.5 h-3.5" />
+                            {appt.date_time ? new Date(appt.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : 'N/A'}hs
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )) || (
+                    <div className="flex flex-col items-center justify-center py-20 opacity-20 text-center">
+                      <CalendarDays className="w-12 h-12 mb-4" />
+                      <p className="font-serif italic text-lg">Sin historial de turnos</p>
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+            </div>
+          </div>
+
+          <div className="mt-auto pt-8 border-t border-white/5 flex gap-3">
+            <button
+              onClick={() => {
+                const leadObj: Lead = {
+                  id: client.id as string,
+                  client_name: client.client_name,
+                  phone: client.phone ?? undefined
+                };
+                openChat(leadObj);
+              }}
+              className="flex-1 bg-[#25D366] hover:bg-[#128C7E] text-white font-black text-[10px] tracking-[0.2em] h-16 rounded-[1.25rem] shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-3 transition-all active:scale-95"
+            >
+              <Phone className="w-5 h-5" />
+              ENVIAR WHATSAPP
+            </button>
+            <button
+              className="w-16 h-16 rounded-[1.25rem] border border-white/5 bg-white/5 text-cream/40 flex items-center justify-center hover:text-white transition-all active:scale-95"
+              onClick={() => toast.info("Funcionalidad próximamente")}
+            >
+              <Paperclip className="w-6 h-6" />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
       {/* Header */}
@@ -205,9 +383,12 @@ export default function Clients() {
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                className={`border-cream/5 bg-noir hover:bg-white/5 text-cream/60 ${(filterType !== 'all' || filterStatus !== 'all') ? 'border-gold/30 text-gold' : ''}`}
+              <button
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-sm transition-all ${
+                  (filterType !== 'all' || filterStatus !== 'all') 
+                    ? 'border-gold bg-gold/5 text-gold' 
+                    : 'border-white/5 bg-noir text-cream/60 hover:bg-white/5'
+                }`}
               >
                 <Filter className="w-4 h-4 mr-2" />
                 Filtros
@@ -216,7 +397,7 @@ export default function Clients() {
                     !
                   </Badge>
                 )}
-              </Button>
+              </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="bg-noir-light border-white/5 text-cream w-56">
               <DropdownMenuLabel className="text-[10px] uppercase tracking-widest text-cream/30">Nivel de Cliente</DropdownMenuLabel>
@@ -249,13 +430,12 @@ export default function Clients() {
               {hasActiveFilters && (
                 <>
                   <DropdownMenuSeparator className="bg-white/5" />
-                  <Button
-                    variant="ghost"
-                    className="w-full text-[10px] h-8 text-rose hover:bg-rose/10 hover:text-rose uppercase tracking-tighter"
+                  <button
+                    className="w-full text-[10px] h-10 text-rose-400 hover:bg-rose-500/10 transition-colors uppercase font-black flex items-center justify-center gap-2"
                     onClick={clearFilters}
                   >
-                    <X className="w-3 h-3 mr-1" /> Limpiar Filtros
-                  </Button>
+                    <X className="w-3 h-3" /> Limpiar Filtros
+                  </button>
                 </>
               )}
             </DropdownMenuContent>
@@ -264,8 +444,89 @@ export default function Clients() {
       </div>
 
       {/* Main Table Container */}
-      <div className="bg-noir/40 backdrop-blur-md border border-white/5 rounded-3xl overflow-hidden shadow-2xl">
-        <div className="overflow-x-auto">
+        {/* Mobile View: High Fidelity Cards */}
+        <div className="md:hidden divide-y divide-white/5">
+          {isLoading ? (
+            Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="p-6 animate-pulse space-y-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-white/5" />
+                  <div className="space-y-2 flex-1">
+                    <div className="w-32 h-4 bg-white/5 rounded" />
+                    <div className="w-20 h-3 bg-white/5 rounded" />
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : filteredClients.map((client) => (
+            <div key={client.id} className="p-6 space-y-5 bg-noir/20">
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-gold/5 border border-gold/10 flex items-center justify-center text-gold font-bold text-sm shadow-inner">
+                    {client.client_name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                  </div>
+                  <div>
+                    <h4 className="font-serif font-bold text-cream text-lg">{client.client_name}</h4>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge className="bg-gold/10 text-gold border-gold/20 text-[9px] h-5 px-2">
+                        {client.total_appointments} {client.total_appointments === 1 ? 'VISITA' : 'VISITAS'}
+                      </Badge>
+                      <span className="text-[10px] text-cream/20 font-black">•</span>
+                      <span className="text-[10px] text-cream/40 font-mono tracking-tighter uppercase">ACTIVO</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex flex-col items-center justify-center gap-1.5 bg-white/5 p-2 rounded-xl border border-white/5">
+                  <Switch 
+                    disabled={authUser?.role === 'staff'}
+                    checked={client.is_bot_enabled} 
+                    onCheckedChange={(val) => toggleBotMutation.mutate({ leadId: client.id, isBotEnabled: val })}
+                    className="data-[state=checked]:bg-gold scale-75"
+                  />
+                  <span className={`text-[8px] font-black tracking-widest ${client.is_bot_enabled ? 'text-emerald-400' : 'text-cream/20'}`}>
+                    BOT
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => {
+                    const leadObj: Lead = {
+                      id: client.id as string,
+                      client_name: client.client_name,
+                      phone: client.phone ?? undefined
+                    };
+                    openChat(leadObj);
+                  }}
+                  className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-emerald-500/20 transition-all group"
+                >
+                  <Phone className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
+                  <span className="text-[10px] font-black uppercase text-cream/40 group-hover:text-cream transition-colors tracking-widest">WhatsApp</span>
+                </button>
+
+                <Sheet>
+                  <SheetTrigger asChild>
+                    <button
+                      onClick={() => handleEditInit(client)}
+                      className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-gold/20 transition-all group"
+                    >
+                      <History className="w-5 h-5 text-gold group-hover:scale-110 transition-transform" />
+                      <span className="text-[10px] font-black uppercase text-cream/40 group-hover:text-cream transition-colors tracking-widest">Historial</span>
+                    </button>
+                  </SheetTrigger>
+                  <SheetContent side="right" className="bg-noir-light border-l border-white/5 text-cream w-full sm:w-[540px] p-0 overflow-y-auto">
+                     {selectedClient && renderClientDetail(selectedClient)}
+                  </SheetContent>
+                </Sheet>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto">
           <Table>
             <TableHeader className="bg-white/5">
             <TableRow className="border-cream/5 hover:bg-transparent">
@@ -281,12 +542,12 @@ export default function Clients() {
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i} className="animate-pulse border-cream/5">
-                  <TableCell colSpan={5} className="py-12 bg-white/[0.02]" />
+                  <TableCell colSpan={6} className="py-12 bg-white/[0.02]" />
                 </TableRow>
               ))
             ) : filteredClients.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="py-24 text-center">
+                <TableCell colSpan={6} className="py-24 text-center">
                   <div className="flex flex-col items-center gap-3 opacity-20">
                     <Users className="w-12 h-12" />
                     <p className="font-serif italic">No se encontraron clientes</p>
@@ -296,9 +557,9 @@ export default function Clients() {
             ) : (
               filteredClients.map((client) => (
                 <TableRow key={client.id} className="group border-cream/5 hover:bg-white/[0.02] transition-colors">
-                  <TableCell className="py-5 pl-8">
+                  <TableCell className="py-8 pl-8">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-gold/5 border border-gold/10 flex items-center justify-center text-gold font-bold text-sm">
+                      <div className="w-10 h-10 rounded-xl bg-gold/5 border border-gold/10 flex items-center justify-center text-gold font-bold text-sm shadow-inner group-hover:scale-110 transition-transform">
                         {client.client_name.split(' ').map(n => n[0]).join('').slice(0, 2)}
                       </div>
                       <div>
@@ -307,7 +568,7 @@ export default function Clients() {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="py-5 hidden md:table-cell">
+                  <TableCell className="py-8 hidden md:table-cell">
                     <div className="space-y-1">
                       <button
                         onClick={() => {
@@ -333,7 +594,7 @@ export default function Clients() {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="py-5 text-center hidden lg:table-cell">
+                  <TableCell className="py-8 text-center hidden lg:table-cell">
                     <div className="flex flex-col items-center justify-center gap-1.5">
                       <Switch 
                         disabled={authUser?.role === 'staff'}
@@ -346,200 +607,30 @@ export default function Clients() {
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell className="py-5 hidden sm:table-cell">
-                    <Badge variant="outline" className="bg-gold/5 border-gold/20 text-gold text-[10px] font-bold px-2 py-0.5">
+                  <TableCell className="py-8 hidden sm:table-cell">
+                    <Badge variant="outline" className="bg-gold/5 border-gold/20 text-gold text-[10px] font-bold px-2 py-0.5 shadow-sm">
                       {client.total_appointments} {client.total_appointments === 1 ? 'VISITA' : 'VISITAS'}
                     </Badge>
                   </TableCell>
-                  <TableCell className="py-5 hidden md:table-cell">
-                    <div className="flex items-center gap-2 text-sm text-cream/60">
+                  <TableCell className="py-8 hidden md:table-cell">
+                    <div className="flex items-center gap-2 text-sm text-cream/60 font-mono">
                       <Calendar className="w-3.5 h-3.5 text-gold/40" />
                       {new Date(client.last_appointment).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
                     </div>
                   </TableCell>
-                  <TableCell className="py-5 text-right pr-8">
+                  <TableCell className="py-8 text-right pr-8">
                     <Sheet>
                       <SheetTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-gold hover:bg-gold/10 hover:text-gold-light font-bold text-xs"
+                        <button
+                          className="bg-transparent text-gold hover:text-gold-light font-black text-[10px] tracking-widest uppercase flex items-center gap-2 ml-auto group/btn transition-all"
                           onClick={() => handleEditInit(client)}
                         >
-                          VER DETALLES
-                          <ChevronRight className="w-4 h-4 ml-1" />
-                        </Button>
+                          DETALLES
+                          <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                        </button>
                       </SheetTrigger>
-                      <SheetContent className="bg-noir-light border-l border-white/5 text-cream w-[400px] sm:w-[540px]">
-                        {selectedClient && (
-                          <div className="h-full flex flex-col pt-8">
-                            <SheetHeader className="mb-6">
-                              <div className="flex items-center justify-between mb-4">
-                                <div className="flex items-center gap-4">
-                                  <div className="w-16 h-16 rounded-2xl bg-gold/5 border border-gold/10 flex items-center justify-center text-gold font-bold text-2xl shadow-xl">
-                                    {(isEditing ? editName : selectedClient.client_name).split(' ').map(n => n[0]).join('').slice(0, 2)}
-                                  </div>
-                                  <div className="text-left">
-                                    {isEditing ? (
-                                      <SheetTitle className="text-2xl font-serif text-cream">Editando Perfil</SheetTitle>
-                                    ) : (
-                                      <SheetTitle className="text-2xl font-serif text-cream">{selectedClient.client_name || 'Cliente Sin Nombre'}</SheetTitle>
-                                    )}
-                                    <div className="flex items-center gap-2 mt-1">
-                                      <Badge className="bg-gold/10 text-gold border-gold/20 text-[10px]">
-                                        {(selectedClient.total_appointments ?? 0) > 5 ? 'CLIENTE VIP' : 'CLIENTE REGULAR'}
-                                      </Badge>
-                                      <span className="text-[10px] text-cream/20 uppercase tracking-widest font-black">ID: {selectedClient.id?.slice(0,8) ?? 'N/A'}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                                {authUser?.role === 'admin' && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => setIsEditing(!isEditing)}
-                                    className={`rounded-xl border ${isEditing ? 'border-rose/20 text-rose bg-rose/5' : 'border-white/5 text-cream/40 hover:text-gold hover:bg-gold/10 hover:border-gold/20'}`}
-                                  >
-                                    {isEditing ? <X className="w-4 h-4" /> : <Edit className="w-4 h-4" />}
-                                  </Button>
-                                )}
-                              </div>
-                            </SheetHeader>
-
-                            {isEditing ? (
-                              <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
-                                <div className="space-y-4 bg-white/[0.02] border border-white/5 p-6 rounded-2xl">
-                                  <div className="space-y-2">
-                                    <Label className="text-[10px] uppercase tracking-widest text-cream/30">Nombre Completo</Label>
-                                    <Input
-                                      value={editName}
-                                      onChange={e => setEditName(e.target.value)}
-                                      className="bg-noir-light border-white/10 focus:border-gold/30 h-11"
-                                    />
-                                  </div>
-                                  <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                      <Label className="text-[10px] uppercase tracking-widest text-cream/30">WhatsApp / Tel</Label>
-                                      <Input
-                                        value={editPhone}
-                                        onChange={e => setEditPhone(e.target.value)}
-                                        className="bg-noir-light border-white/10 focus:border-gold/30 h-11"
-                                      />
-                                    </div>
-                                    <div className="space-y-2">
-                                      <Label className="text-[10px] uppercase tracking-widest text-cream/30">Email</Label>
-                                      <Input
-                                        value={editEmail}
-                                        onChange={e => setEditEmail(e.target.value)}
-                                        className="bg-noir-light border-white/10 focus:border-gold/30 h-11"
-                                      />
-                                    </div>
-                                  </div>
-                                  <div className="space-y-2">
-                                    <Label className="text-[10px] uppercase tracking-widest text-cream/30">Notas Internas / Preferencias</Label>
-                                    <Textarea
-                                      value={editNote}
-                                      onChange={e => setEditNote(e.target.value)}
-                                      className="bg-noir-light border-white/10 focus:border-gold/30 min-h-[100px] resize-none"
-                                      placeholder="Ej: Prefiere turnos por la tarde, alergia a ciertos productos..."
-                                    />
-                                  </div>
-                                </div>
-
-                                <Button
-                                  className="w-full bg-gold hover:bg-gold-light text-noir font-black h-14 rounded-2xl shadow-xl shadow-gold/20 transition-all active:scale-[0.98] disabled:opacity-50"
-                                  onClick={() => updateClient.mutate({ client_name: editName, phone: editPhone, email: editEmail, note: editNote })}
-                                  disabled={updateClient.isPending || !editName || !editPhone}
-                                >
-                                  {updateClient.isPending ? (
-                                    <Activity className="w-5 h-5 animate-spin" />
-                                  ) : (
-                                    <>
-                                      <Save className="w-5 h-5 mr-2" />
-                                      GUARDAR CAMBIOS
-                                    </>
-                                  )}
-                                </Button>
-                              </div>
-                            ) : (
-                              <div className="flex flex-col h-full animate-in fade-in slide-in-from-left-4 duration-500">
-                                <div className="grid grid-cols-2 gap-4 mb-8">
-                                  <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/5 group hover:border-gold/20 transition-colors">
-                                    <p className="text-[10px] text-cream/40 uppercase tracking-widest mb-1">Total Visitas</p>
-                                    <p className="text-2xl font-serif text-gold">{selectedClient.total_appointments ?? 0}</p>
-                                  </div>
-                                  <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/5 group hover:border-gold/20 transition-colors">
-                                    <p className="text-[10px] text-cream/40 uppercase tracking-widest mb-1">Última vez</p>
-                                    <p className="text-lg font-serif text-cream">
-                                      {selectedClient.last_appointment ? Math.floor((new Date().getTime() - new Date(selectedClient.last_appointment).getTime()) / (1000 * 60 * 60 * 24)) : '-'} días
-                                    </p>
-                                  </div>
-                                </div>
-
-                                <div className="space-y-6 flex-1">
-                                  <div>
-                                    <h3 className="text-sm font-bold text-cream/60 flex items-center gap-2 mb-4">
-                                      <History className="w-4 h-4 text-gold/60" />
-                                      Historial de Turnos
-                                    </h3>
-                                    <ScrollArea className="h-[400px] pr-4">
-                                      <div className="space-y-3">
-                                        {selectedClient.appointment_history?.map((appt, idx) => (
-                                          <div key={appt.id} className="relative pl-6 pb-6 border-l border-white/5 last:pb-0">
-                                            <div className="absolute left-[-5px] top-1 w-2 h-2 rounded-full bg-gold/40 shadow-[0_0_8px_rgba(212,175,55,0.4)]" />
-                                            <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-all">
-                                              <div className="flex justify-between items-start mb-2">
-                                                <p className="font-bold text-cream text-lg">{appt.service_type || 'Servicio'}</p>
-                                                <Badge variant="outline" className={`text-[9px] ${
-                                                  appt.status === 'completed' ? 'border-emerald-500/30 text-emerald-400' :
-                                                  appt.status === 'canceled' ? 'border-rose-500/30 text-rose-400' :
-                                                  'border-gold/30 text-gold'
-                                                }`}>
-                                                  {(appt.status || 'PENDING').toUpperCase()}
-                                                </Badge>
-                                              </div>
-                                              <div className="flex items-center gap-3 text-xs text-cream/40">
-                                                <div className="flex items-center gap-1">
-                                                  <Calendar className="w-3 h-3" />
-                                                  {appt.date_time ? new Date(appt.date_time).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' }) : 'N/A'}
-                                                </div>
-                                                <div className="flex items-center gap-1">
-                                                  <Activity className="w-3 h-3" />
-                                                  {appt.date_time ? new Date(appt.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : 'N/A'}hs
-                                                </div>
-                                              </div>
-                                            </div>
-                                          </div>
-                                        )) || (
-                                          <p className="text-center text-cream/20 py-10 italic">Sin historial registrado</p>
-                                        )}
-                                      </div>
-                                    </ScrollArea>
-                                  </div>
-                                </div>
-
-                                <div className="mt-auto pt-6 border-t border-white/5">
-                                  <Button
-                                    className="w-full bg-[#25D366] hover:bg-[#128C7E] text-white font-black text-xs tracking-widest h-14 rounded-2xl uppercase shadow-xl shadow-emerald-500/10"
-                                    onClick={() => {
-                                      const leadObj: Lead = {
-                                        id: selectedClient.id as string,
-                                        client_name: selectedClient.client_name,
-                                        phone: selectedClient.phone ?? undefined
-                                      };
-                                      openChat(leadObj);
-                                    }}
-                                  >
-                                    <Phone className="w-4 h-4 mr-2" />
-                                    <span className={authUser?.role !== 'admin' ? 'select-none' : ''}>
-                                      WhatsApp: {maskPhone(selectedClient.phone, authUser?.role)}
-                                    </span>
-                                  </Button>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
+                      <SheetContent side="right" className="bg-noir-light border-l border-white/5 text-cream w-full sm:w-[540px] p-0 overflow-y-auto">
+                        {selectedClient && renderClientDetail(selectedClient)}
                       </SheetContent>
                     </Sheet>
                   </TableCell>
@@ -551,36 +642,33 @@ export default function Clients() {
         </div>
         
         {/* Pagination Controls */}
-        <div className="px-8 py-4 bg-white/[0.02] border-t border-white/5 flex items-center justify-between">
-          <p className="text-[10px] text-cream/30 uppercase tracking-widest font-black">
-            Total: {data?.metadata?.total || 0} clientes
+        <div className="px-8 py-6 bg-white/[0.02] border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <p className="text-[10px] text-cream/30 uppercase tracking-[0.25em] font-black">
+            Total Registros: <span className="text-gold">{data?.metadata?.total || 0}</span> Clientes
           </p>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
+          <div className="flex items-center gap-3">
+            <button
               disabled={currentPage === 0 || isLoading}
               onClick={() => setCurrentPage(prev => Math.max(0, prev - 1))}
-              className="bg-noir border-white/5 text-cream/40 hover:text-gold"
+              className="h-12 px-6 rounded-xl bg-noir border border-white/5 text-[10px] font-black uppercase tracking-widest text-cream/40 hover:text-gold hover:border-gold/30 disabled:opacity-30 transition-all flex items-center gap-2"
             >
+              <ChevronRight className="w-4 h-4 rotate-180" />
               Anterior
-            </Button>
-            <div className="flex items-center px-4 bg-gold/10 rounded-xl border border-gold/20">
-              <span className="text-xs font-bold text-gold">{currentPage + 1}</span>
+            </button>
+            <div className="h-12 w-12 flex items-center justify-center bg-gold/5 rounded-xl border border-gold/10">
+              <span className="text-xs font-black text-gold">{currentPage + 1}</span>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
+            <button
               disabled={!data?.metadata?.hasMore || isLoading}
               onClick={() => setCurrentPage(prev => prev + 1)}
-              className="bg-noir border-white/5 text-cream/40 hover:text-gold"
+              className="h-12 px-6 rounded-xl bg-noir border border-white/5 text-[10px] font-black uppercase tracking-widest text-cream/40 hover:text-gold hover:border-gold/30 disabled:opacity-30 transition-all flex items-center gap-2"
             >
               Siguiente
-            </Button>
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </div>
-
 
       {/* Footer Info */}
       <div className="bg-gold/5 border border-gold/10 p-6 rounded-3xl flex items-center gap-4">
@@ -592,7 +680,6 @@ export default function Clients() {
           <p className="text-xs text-cream/40">Los clientes se sincronizan automáticamente cada vez que se agenda o completa un turno en el sistema.</p>
         </div>
       </div>
-
     </div>
   );
 }

@@ -99,7 +99,9 @@ export const services = pgTable('services', {
   active: boolean('active').default(true),
   sort_order: integer('sort_order').default(0),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
-});
+}, (table) => ({
+  services_cat_idx: index('services_category_id_idx').on(table.category_id),
+}));
 
 export const leads = pgTable('leads', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -118,6 +120,8 @@ export const leads = pgTable('leads', {
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({
   leads_created_idx: index('leads_created_at_idx').on(table.created_at),
+  leads_phone_idx: index('leads_phone_idx').on(table.phone),
+  leads_last_int_idx: index('leads_last_interaction_idx').on(table.last_interaction),
 }));
 
 export const staff = pgTable('staff', {
@@ -129,7 +133,9 @@ export const staff = pgTable('staff', {
   work_start: text('work_start').default('09:00'),
   work_end: text('work_end').default('18:00'),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
-});
+}, (table) => ({
+  staff_active_idx: index('staff_active_idx').on(table.is_active),
+}));
 
 export const staff_specialties = pgTable('staff_specialties', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -155,6 +161,8 @@ export const appointments = pgTable('appointments', {
 }, (table) => ({
   appt_date_idx: index('appt_date_time_idx').on(table.date_time),
   appt_created_idx: index('appt_created_at_idx').on(table.created_at),
+  appt_lead_idx: index('appt_lead_id_idx').on(table.lead_id),
+  appt_staff_idx: index('appt_staff_id_idx').on(table.staff_id),
 }));
 
 export const chat_logs = pgTable('chat_logs', {

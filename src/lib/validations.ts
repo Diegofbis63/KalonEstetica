@@ -106,6 +106,7 @@ export const LeadSchema = z.object({
 
 export const LeadsResponseSchema = z.object({
   leads: z.array(LeadSchema).default([]),
+  metadata: PaginationSchema.optional(),
 });
 
 export const UserAccountSchema = z.object({

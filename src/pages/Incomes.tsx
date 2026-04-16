@@ -56,13 +56,24 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
+// import { Button } from "@/components/ui/button"; // Removed to avoid ReferenceError in production
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
 import { DateRange } from "react-day-picker";
 import { useIsMobile } from "@/hooks/use-mobile";
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@/components/ui/drawer";
+
 
 
 const formatCurrency = (val: number) => {
@@ -106,6 +117,8 @@ export default function Incomes() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isVoidConfirmOpen, setIsVoidConfirmOpen] = useState(false);
+  const [isMobileActionOpen, setIsMobileActionOpen] = useState(false);
+
 
   // Edit Form States
   const [editAmount, setEditAmount] = useState<string>("");
@@ -552,8 +565,9 @@ export default function Incomes() {
             </div>
           </div>
 
-          <div className="rounded-[2rem] border border-white/[0.05] bg-noir-light/5 overflow-hidden shadow-2xl">
-            <div className="overflow-x-auto">
+           <div className="rounded-[2rem] border border-white/[0.05] bg-noir-light/5 overflow-hidden shadow-2xl">
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
               <Table>
               <TableHeader className="bg-white/[0.03]">
                 <TableRow className="hover:bg-transparent border-white/5 h-16">
@@ -713,10 +727,202 @@ export default function Incomes() {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+             </Table>
+            </div>
+
+            {/* Mobile Card View - Refactored for Premium Experience */}
+            <div className="md:hidden divide-y divide-white/5 bg-noir/20">
+              {isLoading ? (
+                Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="p-6 animate-pulse space-y-4">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-white/5" />
+                        <div className="space-y-2">
+                          <div className="w-24 h-4 bg-white/5 rounded" />
+                          <div className="w-16 h-3 bg-white/5 rounded" />
+                        </div>
+                      </div>
+                      <div className="w-16 h-4 bg-white/5 rounded" />
+                    </div>
+                    <div className="w-full h-12 bg-white/5 rounded-2xl" />
+                  </div>
+                ))
+              ) : payments.map((payment) => (
+                <div key={payment.id} className="p-6 space-y-5 hover:bg-white/[0.02] transition-all group relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-gold/5 blur-3xl -z-1" />
+                  
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-[1rem] bg-gradient-to-br from-gold/10 to-noir-light border border-gold/20 flex items-center justify-center text-gold font-black text-sm shadow-lg">
+                        {payment.client_name[0]}
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-base font-serif font-bold text-cream group-hover:text-gold transition-colors">{payment.client_name}</span>
+                        <div className="flex items-center gap-2">
+                           <span className="text-[10px] text-cream/40 font-black uppercase tracking-widest whitespace-nowrap">
+                             {new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'short' }).format(new Date(payment.date))}
+                           </span>
+                           <span className="text-primary/20 text-[10px]">•</span>
+                           <span className="text-[10px] text-gold font-bold">
+                             {new Date(payment.date).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Cordoba' })}hs
+                           </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                       <div className="text-xl font-serif font-black text-cream tracking-tighter shadow-sm">
+                         {formatCurrency(payment.amount)}
+                       </div>
+                       <Badge variant="outline" className="mt-1 h-5 text-[8px] font-black tracking-widest bg-emerald-500/5 text-emerald-400 border-emerald-500/20 px-2 uppercase shadow-sm">
+                         {payment.status}
+                       </Badge>
+                    </div>
+                  </div>
+
+                  <div className="bg-noir-light/30 border border-white/5 p-4 rounded-2xl backdrop-blur-md shadow-inner flex items-center justify-between group/box hover:border-gold/20 transition-all" onClick={() => { setSelectedPayment(payment); setIsMobileActionOpen(true); }}>
+                    <div className="flex items-center gap-3 overflow-hidden">
+                       <div className="w-1.5 h-1.5 rounded-full bg-gold animate-pulse" />
+                       <span className="text-xs font-serif font-medium text-cream/70 truncate tracking-tight">
+                         {payment.parent_service || 'Diverso'}
+                       </span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-4">
+                      {payment.payment_method === 'Efectivo' ? (
+                        <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1 rounded-lg border border-emerald-500/20">
+                          <Wallet className="w-3 h-3 text-emerald-500" />
+                          <span className="text-[8px] font-black text-emerald-400 uppercase tracking-tighter">EFECTIVO</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 bg-indigo-500/10 px-2 py-1 rounded-lg border border-indigo-500/20">
+                          <CreditCard className="w-3 h-3 text-indigo-400" />
+                          <span className="text-[8px] font-black text-indigo-400 uppercase tracking-tighter">{payment.payment_method.toUpperCase()}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => handleShareWhatsApp(payment)}
+                      className="flex-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 rounded-xl px-4 h-12 transition-all flex items-center justify-center gap-2 shadow-lg active:scale-95"
+                    >
+                       <Share2 className="w-4 h-4" />
+                       <span className="text-[10px] font-black tracking-widest uppercase">WhatsApp</span>
+                    </button>
+                    <button 
+                      onClick={() => { setSelectedPayment(payment); setIsMobileActionOpen(true); }}
+                      className="w-12 h-12 bg-white/5 border border-white/10 text-cream/40 rounded-xl flex items-center justify-center active:scale-95 transition-all"
+                    >
+                       <MoreHorizontal className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      </div>
+
+        {/* Mobile Action Drawer */}
+        <Drawer open={isMobileActionOpen} onOpenChange={setIsMobileActionOpen}>
+          <DrawerContent className="bg-noir-light/95 border-none outline-none text-cream rounded-t-[2.5rem] p-0 overflow-hidden">
+            <div className="mx-auto w-12 h-1.5 flex-shrink-0 rounded-full bg-white/10 mt-4 mb-2" />
+            
+            <DrawerHeader className="px-8 pt-4 pb-2">
+              <div className="flex items-center gap-4 mb-2">
+                <div className="w-12 h-12 rounded-2xl bg-gold/10 flex items-center justify-center text-gold font-serif text-xl font-bold">
+                  {selectedPayment?.client_name[0]}
+                </div>
+                <div className="text-left">
+                  <DrawerTitle className="text-2xl font-serif font-bold text-cream leading-tight">{selectedPayment?.client_name}</DrawerTitle>
+                  <DrawerDescription className="text-xs text-cream/40 uppercase tracking-widest font-black mt-1">
+                    {selectedPayment && formatCurrency(selectedPayment.amount)} • {selectedPayment?.payment_method}
+                  </DrawerDescription>
+                </div>
+              </div>
+            </DrawerHeader>
+
+            <div className="px-4 py-6 space-y-2">
+              <p className="px-4 py-2 text-[10px] uppercase font-black tracking-[0.2em] text-gold/50">Gestión de Transacción</p>
+              
+              <button 
+                onClick={() => { setIsMobileActionOpen(false); setIsDetailModalOpen(true); }}
+                className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-white/5 active:bg-white/10 transition-all text-left group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center group-hover:bg-gold/10 group-hover:text-gold transition-all">
+                  <Eye className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-cream">Ver Detalles</div>
+                  <div className="text-[10px] text-cream/30 uppercase tracking-wide">Desglose completo de servicios</div>
+                </div>
+              </button>
+
+              <button 
+                onClick={() => { setIsMobileActionOpen(false); if(selectedPayment) handleOpenEdit(selectedPayment); }}
+                className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-white/5 active:bg-white/10 transition-all text-left group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center group-hover:bg-gold/10 group-hover:text-gold transition-all">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-cream">Editar Pago</div>
+                  <div className="text-[10px] text-cream/30 uppercase tracking-wide">Corregir monto o método</div>
+                </div>
+              </button>
+
+              <button 
+                onClick={() => { setIsMobileActionOpen(false); setIsVoidConfirmOpen(true); }}
+                className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-white/5 active:bg-white/10 transition-all text-left group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-rose-500/5 flex items-center justify-center text-rose-500/60 group-hover:bg-rose-500/10 group-hover:text-rose-500 transition-all">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-cream">Anular Pago</div>
+                  <div className="text-[10px] text-cream/30 uppercase tracking-wide text-rose-500/40">Esta acción no se puede deshacer</div>
+                </div>
+              </button>
+
+              <div className="h-px bg-white/5 my-4 mx-4" />
+              
+              <p className="px-4 py-2 text-[10px] uppercase font-black tracking-[0.2em] text-gold/50">Comprobante</p>
+
+              <button 
+                onClick={() => { setIsMobileActionOpen(false); if(selectedPayment) handleCopyReceipt(selectedPayment); }}
+                className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-white/5 active:bg-white/10 transition-all text-left group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center group-hover:bg-gold/10 group-hover:text-gold transition-all">
+                  <Copy className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-cream">Copiar Resumen</div>
+                  <div className="text-[10px] text-cream/30 uppercase tracking-wide">Texto para pegar en chat</div>
+                </div>
+              </button>
+
+              <button 
+                onClick={() => { setIsMobileActionOpen(false); if(selectedPayment) handleShareWhatsApp(selectedPayment); }}
+                className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-white/5 active:bg-white/10 transition-all text-left group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/5 flex items-center justify-center text-emerald-500/60 group-hover:bg-emerald-500/10 group-hover:text-emerald-500 transition-all">
+                  <Share2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-cream">Compartir Visual</div>
+                  <div className="text-[10px] text-cream/30 uppercase tracking-wide">Generar imagen premium</div>
+                </div>
+              </button>
+            </div>
+
+            <DrawerFooter className="pb-8 px-8">
+              <DrawerClose asChild>
+                <button className="w-full h-14 rounded-2xl bg-white/5 border border-white/10 text-cream font-bold uppercase tracking-widest text-[11px] active:scale-95 transition-all">
+                  Cerrar
+                </button>
+              </DrawerClose>
+            </DrawerFooter>
+          </DrawerContent>
+        </Drawer>
 
       {/* Detail Modal */}
       <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
@@ -766,16 +972,19 @@ export default function Incomes() {
             </div>
           </div>
           <DialogFooter className="p-6 bg-white/5 flex gap-3">
-            <Button variant="outline" className="flex-1 bg-transparent border-white/10 hover:bg-white/5 rounded-xl h-12" onClick={() => setIsDetailModalOpen(false)}>
+            <button 
+              className="flex-1 bg-transparent border border-white/10 hover:bg-white/5 text-cream rounded-xl h-12 text-sm font-medium transition-colors" 
+              onClick={() => setIsDetailModalOpen(false)}
+            >
               Cerrar
-            </Button>
-              <Button 
-                className="flex-1 bg-gold text-noir hover:bg-gold/80 rounded-xl h-12"
+            </button>
+              <button 
+                className="flex-1 bg-gold text-noir hover:bg-gold/80 rounded-xl h-12 text-sm font-bold flex items-center justify-center gap-2 transition-all"
                 onClick={() => selectedPayment && handleShareWhatsApp(selectedPayment)}
               >
-                <Share2 className="w-4 h-4 mr-2" />
+                <Share2 className="w-4 h-4" />
                 Compartir Wsp
-              </Button>
+              </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -823,21 +1032,27 @@ export default function Incomes() {
               * El cambio afectará el total facturado y el flujo de caja del periodo seleccionado.
             </p>
           </div>
-          <DialogFooter className="p-8 flex gap-3">
-            <Button variant="outline" className="flex-1 bg-transparent border-white/10 hover:bg-white/5 rounded-xl h-14" onClick={() => setIsEditModalOpen(false)}>
-              Cancelar
-            </Button>
-            <Button 
-              className="flex-1 bg-gold text-noir hover:bg-gold/80 rounded-xl h-14 font-bold shadow-[0_8px_25px_rgba(194,154,91,0.4)]"
-              disabled={updatePaymentMutation.isPending}
-              onClick={() => selectedPayment && updatePaymentMutation.mutate({ 
-                id: selectedPayment.id, 
-                amount: parseFloat(editAmount), 
-                method: editMethod 
-              })}
-            >
-              {updatePaymentMutation.isPending ? "Guardando..." : "Guardar Cambios"}
-            </Button>
+          <DialogFooter className="p-8 pt-0">
+            <div className="flex justify-end gap-3 pt-6 border-t border-white/5 w-full">
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(false)}
+                className="px-6 py-2.5 text-xs font-bold uppercase tracking-widest text-cream/30 hover:text-cream transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => selectedPayment && updatePaymentMutation.mutate({ 
+                  id: selectedPayment.id, 
+                  amount: Number(editAmount), 
+                  method: editMethod 
+                })}
+                disabled={updatePaymentMutation.isPending || !editAmount}
+                className="bg-gold text-noir px-8 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest shadow-lg shadow-gold/20 hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
+              >
+                {updatePaymentMutation.isPending ? "Guardando..." : "Guardar Cambios"}
+              </button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -861,17 +1076,22 @@ export default function Incomes() {
               <p className="text-sm font-bold">{selectedPayment?.client_name}</p>
             </div>
           </div>
-          <DialogFooter className="p-8 pt-0 flex gap-3">
-            <Button variant="outline" className="flex-1 bg-transparent border-white/10 hover:bg-white/5 rounded-xl h-14" onClick={() => setIsVoidConfirmOpen(false)}>
-              No, Volver
-            </Button>
-            <Button 
-              className="flex-1 bg-rose-500 text-white hover:bg-rose-600 rounded-xl h-14 font-bold"
-              disabled={voidPaymentMutation.isPending}
-              onClick={() => selectedPayment && voidPaymentMutation.mutate(selectedPayment.id)}
-            >
-              {voidPaymentMutation.isPending ? "Anulando..." : "Sí, Anular Pago"}
-            </Button>
+          <DialogFooter className="p-8 pt-0">
+            <div className="flex justify-end gap-3 pt-4 border-t border-white/5 w-full">
+              <button
+                onClick={() => setIsVoidConfirmOpen(false)}
+                className="px-6 py-2.5 text-xs font-bold uppercase tracking-widest text-cream/30 hover:text-cream transition-colors"
+              >
+                No, volver
+              </button>
+              <button
+                onClick={() => selectedPayment && voidPaymentMutation.mutate(selectedPayment.id)}
+                disabled={voidPaymentMutation.isPending}
+                className="bg-rose-500 text-white px-8 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest shadow-lg shadow-rose-500/20 hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
+              >
+                {voidPaymentMutation.isPending ? "Anulando..." : "Confirmar Anulación"}
+              </button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

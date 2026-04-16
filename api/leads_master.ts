@@ -52,7 +52,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
                 const count = Number(totalCount?.count || 0);
                 // Safe date formatter for client data
-                const safeISO = (dateStr: string | Date | null | undefined) => {
+                const safeISO = (dateStr: any) => {
                     if (!dateStr) return null;
                     try {
                         const date = new Date(dateStr);
@@ -62,21 +62,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         return null;
                     }
                 };
+                
+                interface ClientResult {
+                    id: string;
+                    client_name?: string;
+                    name?: string;
+                    phone?: string;
+                    status?: string;
+                    created_at?: any;
+                    last_interaction?: any;
+                    total_appointments?: number;
+                    total_spent?: number;
+                }
 
                 // Formatear para satisfacer ClientSchema (validations.ts)
-                const clients = results.map((c: Record<string, unknown>) => ({
-                    id: c.id,
-                    client_name: c.name || 'Cliente',
-                    phone: c.phone || '',
-                    email: null, 
-                    status: c.status || 'active',
-                    created_at: safeISO(c.created_at) || new Date().toISOString(),
-                    last_interaction: safeISO(c.last_interaction),
-                    last_appointment: safeISO(c.last_interaction) || new Date().toISOString(),
-                    total_appointments: c.total_appointments || 0,
-                    total_spent: c.total_spent || 0,
-                    note: ''
-                }));
+                const clients = results.map((c_raw) => {
+                    const c = c_raw as ClientResult;
+                    return {
+                        id: c.id,
+                        client_name: c.client_name || c.name || 'Cliente',
+                        phone: c.phone || '',
+                        email: null, 
+                        status: c.status || 'active',
+                        created_at: safeISO(c.created_at) || new Date().toISOString(),
+                        last_interaction: safeISO(c.last_interaction),
+                        last_appointment: safeISO(c.last_interaction) || new Date().toISOString(),
+                        total_appointments: Number(c.total_appointments || 0),
+                        total_spent: Number(c.total_spent || 0),
+                        note: ''
+                    };
+                });
 
                 return res.status(200).json({ 
                     clients,
@@ -109,6 +124,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // --- LEADS TRACKING / IDENTIFY ---
         if (sec === 'tracking' || sec === 'identify' || sec === 'leads') {
             if (req.method === 'GET') {
+                const [totalCount] = await db.select({ count: sql`count(*)` }).from(schema.leads);
+                
                 const results = await db.select({
                     id: schema.leads.id,
                     client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente')`,
@@ -123,28 +140,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 })
                 .from(schema.leads)
                 .leftJoin(schema.categories, eq(schema.leads.category_id, schema.categories.id))
-                .orderBy(desc(schema.leads.last_interaction));
+                .orderBy(desc(schema.leads.last_interaction))
+                .limit(limit)
+                .offset(offset);
 
-                const leads = results.map((l: {
-                    id: string,
-                    client_name: string,
-                    phone: string,
-                    status: string,
-                    intent_score: number,
-                    category_id: string | null,
-                    category_name: string | null,
-                    created_at: string | Date | null,
-                    updated_at: string | Date | null,
-                    is_bot_enabled: boolean | null
-                }) => ({
-                    ...l,
-                    email: null, // Lead table doesn't have email column
-                    created_at: l.created_at ? new Date(l.created_at).toISOString() : new Date().toISOString(),
-                    updated_at: l.updated_at ? new Date(l.updated_at).toISOString() : null,
-                    canManage: true
-                }));
+                const count = Number(totalCount?.count || 0);
+                const leads = results.map((l_raw) => {
+                    const l = l_raw as any;
+                    return {
+                        ...l,
+                        email: null, 
+                        created_at: l.created_at ? new Date(l.created_at).toISOString() : new Date().toISOString(),
+                        updated_at: l.updated_at ? new Date(l.updated_at).toISOString() : null,
+                        canManage: true
+                    };
+                });
 
-                return res.status(200).json({ leads });
+                return res.status(200).json({ 
+                    leads,
+                    metadata: {
+                        total: count,
+                        limit,
+                        offset,
+                        hasMore: offset + limit < count
+                    }
+                });
             }
             if (req.method === 'POST') {
                 const { phone, name, status } = req.body;

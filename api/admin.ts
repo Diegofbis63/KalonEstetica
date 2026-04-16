@@ -103,7 +103,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             })
             .from(schema.appointments)
             .where(and(
-                sql`LOWER(${schema.appointments.status}) IN ('realizada', 'concluida', 'pagada', 'confirmed', 'completada', 'completado', 'finalizada', 'servido')`,
+                sql`LOWER(${schema.appointments.status}) IN ('realizada', 'concluida', 'pagada', 'confirmed', 'completada', 'completado', 'finalizada', 'servido', 'completed')`,
                 dateFilter
             ));
 
@@ -129,7 +129,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .limit(15);
 
             const conds = [];
-            conds.push(sql`${schema.appointments.status} != 'cancelled'`);
+            conds.push(sql`LOWER(${schema.appointments.status}) NOT IN ('cancelled', 'canceled', 'anulado', 'anulada')`);
             if (reqDateGeneral && reqDateGeneral !== 'all') {
                 conds.push(sql`DATE(${schema.appointments.date_time}) = ${reqDateGeneral}`);
             }
@@ -184,8 +184,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
                 const conditions = [];
                 if (reqStatus === 'completed') {
-                    conditions.push(eq(schema.appointments.status, 'completed'));
+                    conditions.push(sql`LOWER(${schema.appointments.status}) IN ('completed', 'realizada', 'finalizada')`);
+                } else if (reqStatus === 'all') {
+                    // Por defecto en 'all' ocultamos las canceladas para no ensuciar la agenda
+                    conditions.push(sql`LOWER(${schema.appointments.status}) NOT IN ('cancelled', 'canceled', 'anulado', 'anulada')`);
                 }
+                
                 if (reqDate === 'hoy') {
                     const todayStr = new Date().toLocaleDateString('sv-SE');
                     conditions.push(sql`DATE(${schema.appointments.date_time}) = ${todayStr}`);

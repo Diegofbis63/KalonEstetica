@@ -123,14 +123,14 @@ export default function Settings() {
       </header>
 
       <Tabs defaultValue="team" className="w-full space-y-8">
-        <TabsList className="bg-noir-light/30 border border-white/5 p-1 rounded-2xl">
-          <TabsTrigger value="team" className="flex items-center gap-2 rounded-xl text-[10px] uppercase tracking-widest font-bold data-[state=active]:bg-gold data-[state=active]:text-noir transition-all py-2.5 px-6">
+        <TabsList className="bg-noir-light/30 border border-white/5 p-1 rounded-2xl w-full grid grid-cols-2 h-auto">
+          <TabsTrigger value="team" className="flex flex-col sm:flex-row items-center gap-2 rounded-xl text-[9px] sm:text-[10px] uppercase tracking-widest font-black data-[state=active]:bg-gold data-[state=active]:text-noir transition-all py-3 px-2 sm:px-6">
             <Contact2 className="w-4 h-4" />
-            Control Center de Staff
+            <span className="text-center">Staff Control</span>
           </TabsTrigger>
-          <TabsTrigger value="access" className="flex items-center gap-2 rounded-xl text-[10px] uppercase tracking-widest font-bold data-[state=active]:bg-gold data-[state=active]:text-noir transition-all py-2.5 px-6">
+          <TabsTrigger value="access" className="flex flex-col sm:flex-row items-center gap-2 rounded-xl text-[9px] sm:text-[10px] uppercase tracking-widest font-black data-[state=active]:bg-gold data-[state=active]:text-noir transition-all py-3 px-2 sm:px-6">
             <UserCog className="w-4 h-4" />
-            Acceso al Sistema (Admin)
+            <span className="text-center">Sistema Admin</span>
           </TabsTrigger>
         </TabsList>
 
@@ -147,6 +147,8 @@ export default function Settings() {
           </div>
 
           <div className="rounded-2xl border border-cream/5 bg-noir-light/20 overflow-hidden shadow-2xl backdrop-blur-md">
+            {/* Desktop Table View */}
+            <div className="hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow className="border-b border-cream/5 hover:bg-transparent">
@@ -201,6 +203,56 @@ export default function Settings() {
                 ))}
               </TableBody>
             </Table>
+            </div>
+
+            {/* Mobile Cards View */}
+            <div className="md:hidden divide-y divide-white/5">
+              {userData?.users?.map((u: UserAccount) => (
+                <div key={u.id} className="p-6 space-y-5">
+                   <div className="flex justify-between items-start">
+                     <div className="space-y-1">
+                        <div className="font-serif font-bold text-xl text-cream tracking-tight">{u.username}</div>
+                        <div className="text-[10px] text-cream/30 font-sans tracking-wide">{u.email}</div>
+                     </div>
+                     <Badge variant="outline" className={`
+                        uppercase text-[8px] tracking-[0.2em] font-black px-3 py-1 rounded-full
+                        ${u.role === 'admin' ? 'border-gold/30 text-gold bg-gold/5 shadow-[0_0_10px_rgba(194,154,91,0.1)]' : 'border-cream/10 text-cream/40'}
+                      `}>
+                        {u.role === 'admin' ? 'ADMIN' : 'STAFF'}
+                      </Badge>
+                   </div>
+
+                   <div className="bg-white/5 border border-white/5 p-4 rounded-2xl space-y-3">
+                      <div className="text-[8px] uppercase tracking-widest text-cream/30 font-bold">Permisos de Visualización</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {u.role === 'admin' ? (
+                          <div className="flex items-center gap-2 text-gold font-serif italic text-xs">
+                             <Shield className="w-3.5 h-3.5" /> Acceso Total al Sistema
+                          </div>
+                        ) : (
+                          u.category_ids?.length > 0 ? (
+                             categories
+                              .filter(c => u.category_ids.includes(c.id))
+                              .map(c => (
+                                <span key={c.id} className="text-[10px] px-3 py-1 rounded-lg bg-noir/50 text-cream/50 border border-white/5 font-medium">
+                                  {c.name}
+                                </span>
+                              ))
+                          ) : <span className="text-[10px] text-cream/10 italic">Sin categorías asignadas</span>
+                        )}
+                      </div>
+                   </div>
+
+                   <button 
+                    onClick={() => handleEdit(u)}
+                    className="w-full h-14 rounded-2xl bg-cream/5 border border-cream/10 text-cream/70 font-bold uppercase tracking-widest text-[10px] flex items-center justify-center gap-3 active:scale-95 transition-all group"
+                  >
+                    <Save className="w-4 h-4 text-gold group-hover:scale-110 transition-transform" />
+                    Gestionar Acceso
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         </TabsContent>
       </Tabs>
