@@ -151,8 +151,8 @@ export default function Settings() {
               <TableHeader>
                 <TableRow className="border-b border-cream/5 hover:bg-transparent">
                   <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Usuario</TableHead>
-                  <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Rol</TableHead>
-                  <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12">Permisos de Visualización</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12 hidden sm:table-cell">Rol</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12 hidden md:table-cell">Permisos de Visualización</TableHead>
                   <TableHead className="text-[10px] uppercase tracking-widest text-cream/30 px-6 h-12 text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
@@ -163,7 +163,7 @@ export default function Settings() {
                       <div className="font-serif font-bold text-cream">{u.username}</div>
                       <div className="text-[10px] text-cream/20 font-sans">{u.email}</div>
                     </TableCell>
-                    <TableCell className="px-6 py-4">
+                    <TableCell className="px-6 py-4 hidden sm:table-cell">
                       <Badge variant="outline" className={`
                         uppercase text-[9px] tracking-widest font-bold
                         ${u.role === 'admin' ? 'border-gold/30 text-gold bg-gold/5' : 'border-cream/10 text-cream/40'}
@@ -171,7 +171,7 @@ export default function Settings() {
                         {u.role}
                       </Badge>
                     </TableCell>
-                    <TableCell className="px-6 py-4">
+                    <TableCell className="px-6 py-4 hidden md:table-cell">
                       <div className="flex flex-wrap gap-1">
                         {u.role === 'admin' ? (
                           <span className="text-[10px] text-gold italic font-serif">Acceso Total</span>

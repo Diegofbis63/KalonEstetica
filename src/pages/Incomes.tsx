@@ -558,11 +558,11 @@ export default function Incomes() {
               <TableHeader className="bg-white/[0.03]">
                 <TableRow className="hover:bg-transparent border-white/5 h-16">
                   <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4">Cliente</TableHead>
-                  <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4">Servicio</TableHead>
-                  <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4 text-center">BOT</TableHead>
+                  <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4 hidden sm:table-cell">Servicio</TableHead>
+                  <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4 text-center hidden md:table-cell">BOT</TableHead>
                   <TableHead className="text-cream/40 font-black tracking-widest text-[10px] uppercase py-4">Fecha</TableHead>
                   <TableHead className="text-[11px] text-cream/30 px-8 py-5 uppercase tracking-[0.25em] font-black">Monto</TableHead>
-                  <TableHead className="text-[11px] text-cream/30 px-8 py-5 uppercase tracking-[0.25em] font-black">Estado</TableHead>
+                  <TableHead className="text-[11px] text-cream/30 px-8 py-5 uppercase tracking-[0.25em] font-black hidden lg:table-cell">Estado</TableHead>
                   <TableHead className="text-[11px] text-cream/30 px-8 py-5 uppercase tracking-[0.25em] font-black text-right">Acción</TableHead>
                 </TableRow>
               </TableHeader>
@@ -583,7 +583,7 @@ export default function Incomes() {
                         <span className="text-base font-bold text-cream/80 group-hover:text-cream transition-colors">{payment.client_name}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="px-8 py-8">
+                    <TableCell className="px-8 py-8 hidden sm:table-cell">
                       <Popover>
                         <PopoverTrigger asChild>
                           <button className="text-sm font-semibold text-cream/50 hover:text-gold transition-all flex items-center gap-2 group/btn bg-white/5 px-4 py-2 rounded-xl border border-transparent hover:border-gold/20 shadow-sm text-left">
@@ -597,8 +597,8 @@ export default function Incomes() {
                             <div className="space-y-2.5">
                               {payment.selected_services?.map((s, idx) => (
                                 <div key={idx} className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5 group/service hover:bg-white/10 transition-colors">
-                                  <span className="text-sm font-medium text-cream/80">{s.title}</span>
-                                  <span className="text-sm font-black text-gold font-mono">{formatCurrency(Number(s.price))}</span>
+                                  <span className="text-sm font-medium text-cream/80">{s?.title || 'Servicio'}</span>
+                                  <span className="text-sm font-black text-gold font-mono">{formatCurrency(Number(s?.price || 0))}</span>
                                 </div>
                               ))}
                               {(!payment.selected_services || payment.selected_services.length === 0) && (
@@ -609,7 +609,7 @@ export default function Incomes() {
                         </PopoverContent>
                       </Popover>
                     </TableCell>
-                    <TableCell className="py-5 text-center">
+                    <TableCell className="py-5 text-center hidden md:table-cell">
                       <div className="flex flex-col items-center justify-center gap-1.5">
                         <Switch 
                           checked={payment.is_bot_enabled} 
@@ -650,7 +650,7 @@ export default function Incomes() {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="px-8 py-8">
+                    <TableCell className="px-8 py-8 hidden lg:table-cell">
                       <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-black uppercase tracking-[0.2em] px-4 py-1 rounded-full shadow-sm">
                         {payment.status}
                       </Badge>
@@ -748,8 +748,8 @@ export default function Incomes() {
               <div className="space-y-2 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
                 {selectedPayment?.selected_services?.map((service, idx) => (
                   <div key={idx} className="flex justify-between items-center p-4 rounded-2xl bg-white/5 border border-white/5">
-                    <span className="text-sm font-medium text-cream/80">{service.title}</span>
-                    <span className="text-sm font-black text-gold font-mono">{formatCurrency(service.price)}</span>
+                    <span className="text-sm font-medium text-cream/80">{service?.title || 'Servicio'}</span>
+                    <span className="text-sm font-black text-gold font-mono">{formatCurrency(Number(service?.price || 0))}</span>
                   </div>
                 ))}
               </div>

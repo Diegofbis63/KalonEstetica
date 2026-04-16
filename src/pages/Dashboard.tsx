@@ -874,7 +874,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                 <Popover>
                                   <PopoverTrigger asChild>
                                     <button className="flex items-center gap-1.5 hover:text-gold transition-colors text-left">
-                                      {Array.from(new Set((a.selected_services || []).map(s => s.category_name || "Servicio"))).join(" + ") || "Varios Servicios"}
+                                      {Array.from(new Set((Array.isArray(a.selected_services) ? a.selected_services : []).map(s => s?.category_name || "Servicio"))).join(" + ") || "Varios Servicios"}
                                       <Info className="w-3.5 h-3.5" />
                                     </button>
                                   </PopoverTrigger>
@@ -885,16 +885,16 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                     </div>
                                     <ScrollArea className="h-48 md:h-64">
                                       <div className="p-3 space-y-3">
-                                        {a.selected_services && a.selected_services.length > 0 ? (
+                                        {Array.isArray(a.selected_services) && a.selected_services.length > 0 ? (
                                           a.selected_services.map((s, idx) => (
                                             <div key={idx} className="flex justify-between items-start gap-2 group/item">
                                               <div className="space-y-0.5">
-                                                <p className="text-xs font-bold text-cream group-hover/item:text-gold transition-colors">{s.title}</p>
+                                                <p className="text-xs font-bold text-cream group-hover/item:text-gold transition-colors">{s?.title || 'Servicio'}</p>
                                                 <p className="text-[10px] text-cream/40 flex items-center gap-1">
-                                                  <Clock className="w-2.5 h-2.5" /> {s.duration}
+                                                  <Clock className="w-2.5 h-2.5" /> {s?.duration || '30 min'}
                                                 </p>
                                               </div>
-                                                <p className="text-xs font-sans font-bold text-cream/80 whitespace-nowrap">${Number(s.price).toLocaleString('es-AR')}</p>
+                                                <p className="text-xs font-sans font-bold text-cream/80 whitespace-nowrap">${Number(s?.price || 0).toLocaleString('es-AR')}</p>
                                             </div>
                                           ))
                                         ) : (
@@ -927,8 +927,8 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                   </PopoverContent>
                                 </Popover>
                               ) : (
-                                (a.service_type === 'Servicio' && a.selected_services && a.selected_services.length > 0)
-                                   ? Array.from(new Set(a.selected_services.map(s => s.category_name || s.category || "Servicio"))).join(' + ')
+                                (a.service_type === 'Servicio' && Array.isArray(a.selected_services) && a.selected_services.length > 0)
+                                   ? Array.from(new Set(a.selected_services.map(s => s?.category_name || s?.category || "Servicio"))).join(' + ')
                                    : a.service_type
                               )}
                             </div>
@@ -937,10 +937,10 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                             <div className="text-sm font-bold text-cream/70 flex items-center justify-center gap-2 whitespace-nowrap">
                               <Clock className="w-3.5 h-3.5 text-gold/60" />
                               {(() => {
-                                  const dur = (a.selected_services && a.selected_services.length > 0)
+                                  const dur = (Array.isArray(a.selected_services) && a.selected_services.length > 0)
                                     ? a.selected_services.reduce((total, s) => {
-                                        if (typeof s.duration === 'number') return total + s.duration;
-                                        if (typeof s.duration === 'string') {
+                                        if (typeof s?.duration === 'number') return total + s.duration;
+                                        if (typeof s?.duration === 'string') {
                                           const match = s.duration.match(/(\d+)/);
                                           return total + (match ? parseInt(match[1]) : 0);
                                         }
