@@ -89,7 +89,7 @@ export async function getActiveServices(): Promise<Service[]> {
     })) as unknown as Service[];
 }
 
-export async function getServicesByCategory(categoryNameOrId: string): Promise<Service[]> {
+export async function getServicesByCategory(categoryNameOrId: string): Promise<{ services: Service[], category: any }> {
     console.log(`[DB CRITICAL] Fetching services for category input: "${categoryNameOrId}"`);
     
     // Primero buscamos la categoría (exacta o por nombre similar o numérica)
@@ -111,7 +111,7 @@ export async function getServicesByCategory(categoryNameOrId: string): Promise<S
 
     if (!match) {
         console.warn(`[DB CRITICAL] NO MATCH FOUND for input: "${categoryNameOrId}"`);
-        return [];
+        return { services: [], category: null };
     }
 
     console.log(`[DB CRITICAL] MATCH FOUND: ${match.name} (ID: ${match.id})`);

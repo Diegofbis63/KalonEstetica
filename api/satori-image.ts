@@ -1,5 +1,5 @@
 import { generateMenuImage } from './_services/imageGenerator.js';
-import type { VercelRequest, VercelResponse } from '@vercel node';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export const config = {
     maxDuration: 60,
