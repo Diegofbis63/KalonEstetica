@@ -6,7 +6,7 @@ import {
   Trash2, CheckCircle2, XCircle, AlertTriangle, Clock, 
   ArrowRight, ShieldAlert, Zap, Bell, CalendarDays, ChevronRight, 
   Phone, MoreHorizontal, Info, X, Plus, Search, ClipboardList,
-  Send, Paperclip, Image as LucideImage
+  Send, Paperclip, Image as LucideImage, Loader2
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/AuthContext";
