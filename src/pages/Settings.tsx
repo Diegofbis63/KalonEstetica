@@ -113,7 +113,7 @@ export default function Settings() {
   const categories: Category[] = catData?.categories || [];
 
   return (
-    <div className="p-4 sm:p-6 md:p-8 space-y-8 animate-in fade-in duration-700">
+    <div className="px-4 md:px-8 py-6 md:py-10 max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-700">
       <header className="space-y-2">
         <div className="flex items-center gap-3">
           <Shield className="w-5 h-5 text-gold" />
