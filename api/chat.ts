@@ -20,7 +20,10 @@ export default async function handler(req: Request) {
   }
 
   try {
-    const { messages, leadId, initId } = await req.json();
+    const body = await req.json();
+    const { messages } = body;
+    const leadId = body.leadId || body.identificationId;
+    const initId = body.initId || (body.identificationId?.includes('-') ? body.identificationId : null);
 
     if (!messages || !Array.isArray(messages)) {
       return new Response(JSON.stringify({ error: 'Messages are required' }), { status: 400 });
@@ -79,45 +82,47 @@ export default async function handler(req: Request) {
                 send({ leadId: (toolResults as any).leadId });
               }
 
-              // 2. INYECCIÓN DE IMÁGENES SATORI: Para Categorías y Servicios
+              // 2. INYECCIÓN DE IMÁGENES: Para Categorías y Servicios
               if (toolName === 'listar_categorias_principales' || toolName === 'consultar_servicios') {
                 const results = toolResults as any;
                 
-                // Si ya tenemos una imagen pre-generada de la lista de precios, la usamos directamente
-                if (toolName === 'consultar_servicios' && results.price_list_url) {
-                    console.log(`[CHAT LOG] Using PRE-GENERATED Price List URL for ${toolName}`);
+                // Prioridad 1: Imagen pre-generada de la base de datos (price_list_url)
+                const savedUrl = results.price_list_url;
+                
+                if (savedUrl) {
+                    console.log(`[CHAT LOG] Usando imagen GUARDADA para ${toolName}: ${savedUrl}`);
                     send({
-                        media_url: results.price_list_url,
-                        choices: [{
-                            delta: { content: "" }
-                        }]
+                        media_url: savedUrl,
+                        choices: [{ delta: { content: "" } }]
                     });
                 } else {
-                    // Si no hay imagen guardada, recurrimos a generarla al vuelo (fallback)
+                    // Prioridad 2: Generación on-the-fly via Satori
                     const isCategory = toolName === 'listar_categorias_principales';
-                    const title = isCategory ? 'Categorías de Especialidad' : 'Nuestros Servicios';
+                    const title = isCategory ? 'Especialidades KÂLON' : 'Nuestros Servicios';
                     
-                    const items = Array.isArray(results) ? results : results.servicios || [];
+                    const items = Array.isArray(results) ? results : (results.servicios || []);
                     
                     const menuData = items.map((item: any) => ({
-                        label: item.nombre || item.label || 'Servicio',
-                        price: item.price ? `$${item.price}` : undefined
+                        label: item.nombre || item.label || item.title || 'Servicio',
+                        price: item.price ? (String(item.price).startsWith('$') ? item.price : `$${item.price}`) : undefined
                     }));
 
                     if (menuData.length > 0) {
                         const encodedData = Buffer.from(JSON.stringify(menuData)).toString('base64');
                         const host = req.headers.get('host') || 'kalon-estetica.vercel.app';
                         const protocol = host.includes('localhost') ? 'http' : 'https';
+                        
+                        // Usamos una URL absoluta para asegurar que el componente Img la encuentre
                         const satoriUrl = `${protocol}://${host}/api/satori-image?title=${encodeURIComponent(title)}&data=${encodedData}`;
 
-                        console.log(`[CHAT LOG] Generated On-the-fly Satori URL for ${toolName}: ${satoriUrl}`);
+                        console.log(`[CHAT LOG] Generando imagen SATORI para ${toolName}: ${satoriUrl.substring(0, 100)}...`);
 
                         send({
                             media_url: satoriUrl,
-                            choices: [{
-                                delta: { content: "" }
-                            }]
+                            choices: [{ delta: { content: "" } }]
                         });
+                    } else {
+                        console.warn(`[CHAT LOG] No se pudo generar imagen para ${toolName} (sin items)`);
                     }
                 }
               }
