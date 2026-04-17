@@ -39,19 +39,24 @@ export async function generateMenuImage(title: string, items: { label: string, p
             loadFont('Inter-Bold.ttf')
         ]);
 
-        const finalHeight = Math.max(380 + (items.length * 52), 550);
+        const isMultiColumn = items.length > 15;
+        const columnCount = isMultiColumn ? 2 : 1;
+        const itemsPerColumn = Math.ceil(items.length / columnCount);
+        
+        const finalWidth = isMultiColumn ? 1200 : 750;
+        const finalHeight = Math.max(380 + (itemsPerColumn * 52), 600);
 
         const satoriConfig: any = {
             type: 'div',
             props: {
                 style: {
                     height: `${finalHeight}px`,
-                    width: '700px',
+                    width: `${finalWidth}px`,
                     display: 'flex',
                     flexDirection: 'column',
-                    backgroundColor: '#fdfcfb',
+                    backgroundColor: '#fff', // Pure white for better contrast
                     color: '#3d2b24',
-                    padding: '40px 50px',
+                    padding: '60px 70px',
                     fontFamily: 'Inter',
                     position: 'relative',
                 },
@@ -59,19 +64,19 @@ export async function generateMenuImage(title: string, items: { label: string, p
                     {
                         type: 'div',
                         props: {
-                            style: { display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '30px' },
+                            style: { display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '40px' },
                             children: [
                                 {
                                     type: 'div',
                                     props: {
-                                        style: { fontSize: '42px', color: '#c5a363', fontWeight: 700, letterSpacing: '6px' },
+                                        style: { fontSize: '48px', color: '#c5a363', fontWeight: 800, letterSpacing: '8px' },
                                         children: 'KÂLON'
                                     }
                                 },
                                 {
                                     type: 'div',
                                     props: {
-                                        style: { fontSize: '10px', color: '#8d7a6f', letterSpacing: '2px', marginTop: '4px' },
+                                        style: { fontSize: '12px', color: '#8d7a6f', letterSpacing: '4px', marginTop: '6px', opacity: 0.8 },
                                         children: 'ESTÉTICA & BIENESTAR'
                                     }
                                 }
@@ -83,12 +88,13 @@ export async function generateMenuImage(title: string, items: { label: string, p
                         props: {
                             style: { 
                                 display: 'flex', 
-                                fontSize: '24px', 
-                                fontWeight: 700, 
+                                fontSize: '28px', 
+                                fontWeight: 800, 
                                 color: '#3d2b24', 
-                                marginBottom: '25px', 
-                                borderBottom: '2px solid #c5a363',
-                                paddingBottom: '10px'
+                                marginBottom: '35px', 
+                                borderBottom: '3px solid #c5a363',
+                                paddingBottom: '12px',
+                                width: '100%'
                             },
                             children: title.toUpperCase()
                         }
@@ -96,35 +102,51 @@ export async function generateMenuImage(title: string, items: { label: string, p
                     {
                         type: 'div',
                         props: {
-                            style: { display: 'flex', flexDirection: 'column', width: '100%' },
-                            children: items.map((item, idx) => ({
+                            style: { 
+                                display: 'flex', 
+                                flexDirection: 'row', 
+                                width: '100%', 
+                                gap: isMultiColumn ? '80px' : '0px' 
+                            },
+                            children: Array.from({ length: columnCount }).map((_, colIdx) => ({
                                 type: 'div',
-                                key: idx,
+                                key: colIdx,
                                 props: {
                                     style: { 
                                         display: 'flex', 
-                                        justifyContent: 'space-between', 
-                                        alignItems: 'center',
-                                        padding: '12px 0', 
-                                        borderBottom: '1px solid rgba(197, 163, 99, 0.15)',
-                                        width: '100%'
+                                        flexDirection: 'column', 
+                                        flex: 1 
                                     },
-                                    children: [
-                                        { 
-                                            type: 'div', 
-                                            props: { 
-                                                style: { display: 'flex', fontWeight: 600, fontSize: '16px', color: '#3d2b24' }, 
-                                                children: `${startIndex + idx + 1}. ${item.label}` 
-                                            } 
-                                        },
-                                        item.price ? { 
-                                            type: 'div', 
-                                            props: { 
-                                                style: { display: 'flex', color: '#c5a363', fontWeight: 700, fontSize: '16px' }, 
-                                                children: `$${item.price}` 
-                                            } 
-                                        } : { type: 'div', props: { style: { display: 'flex' }, children: '' } }
-                                    ]
+                                    children: items.slice(colIdx * itemsPerColumn, (colIdx + 1) * itemsPerColumn).map((item, idx) => ({
+                                        type: 'div',
+                                        key: idx,
+                                        props: {
+                                            style: { 
+                                                display: 'flex', 
+                                                justifyContent: 'space-between', 
+                                                alignItems: 'center',
+                                                padding: '14px 0', 
+                                                borderBottom: '1px solid rgba(197, 163, 99, 0.1)',
+                                                width: '100%'
+                                            },
+                                            children: [
+                                                { 
+                                                    type: 'div', 
+                                                    props: { 
+                                                        style: { display: 'flex', fontWeight: 600, fontSize: '18px', color: '#3d2b24', flex: 1 }, 
+                                                        children: `${startIndex + (colIdx * itemsPerColumn) + idx + 1}. ${item.label}` 
+                                                    } 
+                                                },
+                                                item.price ? { 
+                                                    type: 'div', 
+                                                    props: { 
+                                                        style: { display: 'flex', color: '#c5a363', fontWeight: 700, fontSize: '18px', marginLeft: '20px' }, 
+                                                        children: `$${item.price}` 
+                                                    } 
+                                                } : { type: 'div', props: { style: { display: 'flex' }, children: '' } }
+                                            ]
+                                        }
+                                    }))
                                 }
                             }))
                         }
@@ -134,7 +156,7 @@ export async function generateMenuImage(title: string, items: { label: string, p
         };
 
         const svg = await satori(satoriConfig, {
-            width: 700,
+            width: finalWidth,
             height: finalHeight,
             fonts: [
                 { name: 'Inter', data: fontSemi, weight: 400, style: 'normal' },
