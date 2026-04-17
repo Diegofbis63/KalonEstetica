@@ -22,7 +22,8 @@ import {
   Upload,
   Save,
   Clock,
-  Sparkles
+  Sparkles,
+  Eye
 } from 'lucide-react';
 import { 
   DndContext, 
@@ -559,18 +560,58 @@ export default function ServicesManagement() {
                   <div className="flex-grow">
                      <div className="flex items-center justify-between mb-4">
                         <h2 className="text-3xl font-serif font-bold text-cream group-hover:text-gold transition-colors">{activeCategory.name}</h2>
-                        {!isReadOnly && (
-                          <button 
-                              onClick={() => { setEditingCategory(activeCategory); setIsCategoryModalOpen(true); }}
-                              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cream/5 text-cream/60 hover:text-gold hover:bg-gold/10 border border-transparent hover:border-gold/20 transition-all text-xs font-bold uppercase tracking-widest"
-                          >
-                              <Edit className="w-3.5 h-3.5" /> Editar Categoría
-                          </button>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {activeCategory.price_list_url && (
+                             <button 
+                                onClick={() => window.open(activeCategory.price_list_url!, '_blank')}
+                                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gold/10 text-gold hover:bg-gold/20 border border-gold/20 transition-all text-[10px] font-bold uppercase tracking-widest"
+                             >
+                                <Eye className="w-3.5 h-3.5" /> Ver Lista
+                             </button>
+                          )}
+                          {!isReadOnly && (
+                            <button 
+                                onClick={() => { setEditingCategory(activeCategory); setIsCategoryModalOpen(true); }}
+                                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cream/5 text-cream/60 hover:text-gold hover:bg-gold/10 border border-transparent hover:border-gold/20 transition-all text-[10px] font-bold uppercase tracking-widest"
+                            >
+                                <Edit className="w-3.5 h-3.5" /> Editar
+                            </button>
+                          )}
+                        </div>
                      </div>
-                     <p className="text-sm text-cream/40 font-sans leading-relaxed italic max-w-2xl">
+                     <p className="text-sm text-cream/40 font-sans leading-relaxed italic max-w-2xl mb-6">
                         {activeCategory.description || "Sin descripción establecida."}
                      </p>
+
+                     {activeCategory.price_list_url && (
+                       <div className="flex items-center gap-4 p-4 rounded-xl bg-noir border border-cream/5 animate-in fade-in slide-in-from-top-2">
+                          <div className="w-16 h-20 rounded-lg overflow-hidden border border-cream/10 bg-noir-light flex-shrink-0">
+                             <img src={activeCategory.price_list_url} alt="Preview" className="w-full h-full object-cover" />
+                          </div>
+                          <div className="flex-grow">
+                             <div className="text-[10px] uppercase tracking-widest text-gold font-bold mb-1">Imagen de Satori Detectada</div>
+                             <div className="text-xs text-cream/40 leading-snug">Esta imagen es la que se enviará a los clientes vía WhatsApp.</div>
+                          </div>
+                          {!isReadOnly && (
+                            <button 
+                              onClick={() => {
+                                if (confirm("¿Estás seguro de eliminar esta lista de precios? Tendrás que generarla de nuevo.")) {
+                                  // Update to null
+                                  fetch(`/api/categories?id=${activeCategory.id}`, {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ ...activeCategory, price_list_url: null })
+                                  }).then(() => queryClient.invalidateQueries({ queryKey: ['categories'] }));
+                                }
+                              }}
+                              className="p-2 text-cream/20 hover:text-rose transition-colors"
+                              title="Eliminar Lista de Precios"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                       </div>
+                     )}
                   </div>
                 </div>
             </div>
