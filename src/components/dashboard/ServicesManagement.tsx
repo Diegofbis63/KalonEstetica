@@ -247,6 +247,9 @@ export default function ServicesManagement() {
   const [editingCategory, setEditingCategory] = useState<Partial<Category> | null>(null);
   const [editingService, setEditingService] = useState<Partial<Service> | null>(null);
 
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
 
   // Queries
   const { data: catData, isLoading: catsLoading } = useQuery({
@@ -563,7 +566,8 @@ export default function ServicesManagement() {
                         <div className="flex items-center gap-2">
                           {activeCategory.price_list_url && (
                              <button 
-                                onClick={() => window.open(activeCategory.price_list_url!, '_blank')}
+                                type="button"
+                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPreviewUrl(activeCategory.price_list_url!); setIsPreviewModalOpen(true); }}
                                 className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gold/10 text-gold hover:bg-gold/20 border border-gold/20 transition-all text-[10px] font-bold uppercase tracking-widest"
                              >
                                 <Eye className="w-3.5 h-3.5" /> Ver Lista
@@ -585,7 +589,10 @@ export default function ServicesManagement() {
 
                      {activeCategory.price_list_url && (
                        <div className="flex items-center gap-4 p-4 rounded-xl bg-noir border border-cream/5 animate-in fade-in slide-in-from-top-2">
-                          <div className="w-16 h-20 rounded-lg overflow-hidden border border-cream/10 bg-noir-light flex-shrink-0">
+                          <div 
+                            className="w-16 h-20 rounded-lg overflow-hidden border border-cream/10 bg-noir-light flex-shrink-0 cursor-pointer hover:border-gold/30 transition-all"
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPreviewUrl(activeCategory.price_list_url!); setIsPreviewModalOpen(true); }}
+                          >
                              <img src={activeCategory.price_list_url} alt="Preview" className="w-full h-full object-cover" />
                           </div>
                           <div className="flex-grow">
@@ -832,6 +839,33 @@ export default function ServicesManagement() {
                 {saveServiceMutation.isPending ? 'Guardando...' : 'Guardar Tratamiento'}
             </button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Image Preview Modal (WhatsApp Style) */}
+      <Dialog open={isPreviewModalOpen} onOpenChange={setIsPreviewModalOpen}>
+        <DialogContent className="p-0 bg-transparent border-none max-w-[95vw] shadow-none">
+            <div className="relative w-full h-full flex items-center justify-center p-4">
+                <button 
+                    onClick={() => setIsPreviewModalOpen(false)}
+                    className="absolute top-4 right-4 z-50 p-3 rounded-full bg-noir/50 backdrop-blur-md text-white border border-white/10 hover:bg-gold hover:text-noir transition-all"
+                >
+                    <X className="w-6 h-6" />
+                </button>
+                {previewUrl && (
+                    <div className="bg-noir/90 backdrop-blur-xl p-2 rounded-2xl border border-cream/10 shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-300">
+                        <img 
+                            src={previewUrl} 
+                            alt="Lista de Precios" 
+                            className="max-h-[85vh] w-auto object-contain rounded-xl" 
+                        />
+                        <div className="mt-4 pb-2 text-center">
+                            <p className="text-[10px] uppercase tracking-[0.3em] text-gold font-bold">Kâlon Estética • Lista de Precios</p>
+                            <p className="text-[8px] text-cream/30 mt-1">Legible para clientes vía WhatsApp</p>
+                        </div>
+                    </div>
+                )}
+            </div>
         </DialogContent>
       </Dialog>
     </div>
