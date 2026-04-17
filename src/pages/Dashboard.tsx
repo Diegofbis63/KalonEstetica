@@ -144,7 +144,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
   
   const { data: apptsData, isLoading: apptsLoading } = useQuery({
     queryKey: ['appointments-paginated', apptPage, showCompleted, dateFilter],
-    queryFn: () => safeFetch(`/api/appointments?limit=${APPT_PAGE_SIZE}&offset=${apptPage * APPT_PAGE_SIZE}&status=${showCompleted ? 'completed' : 'all'}&date=${dateFilter}`, AppointmentsResponseSchema, { appointments: [] }),
+    queryFn: () => safeFetch(`/api/appointments?limit=${APPT_PAGE_SIZE}&offset=${apptPage * APPT_PAGE_SIZE}&status=${showCompleted ? 'all' : 'pending'}&date=${dateFilter}`, AppointmentsResponseSchema, { appointments: [] }),
     enabled: currentTab === 'appointments',
     refetchInterval: 30000,
   });
@@ -329,36 +329,48 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
     if (showCompleted) return filtered;
     return filtered.filter(a => {
         const status = a.status?.toLowerCase() || '';
-        return status !== 'completed' && status !== 'realizada';
+        const isFinished = ['realizada', 'completed', 'finalizada', 'servido', 'pagada', 'concluida'].includes(status);
+        return !isFinished;
     });
   }, [dashData, showCompleted, todayStr]);
 
   const filteredLeads = useMemo(() => {
-    if (showCompleted) return leads;
-    return leads.filter(l => {
-      if (l.status === 'qualified') return false;
-      const leadAppts = appointments.filter(a => a.lead_id === l.id);
-      if (leadAppts.length > 0) {
-        const allFinished = leadAppts.every(a => {
-            const status = a.status?.toLowerCase() || '';
-            return ['realizada', 'completed', 'canceled', 'cancelled', 'anulado', 'anulada', 'cancelado', 'cancelada', 'rechazada', 'rechazado'].includes(status);
-        });
-        if (allFinished) return false;
-      }
-      return true;
+    const leadsList = dashData?.leads || [];
+    const apptsList = dashData?.appointments || [];
+    
+    if (showCompleted) return leadsList;
+    
+    return leadsList.filter(l => {
+      // Si el lead no tiene ninguna cita, lo mostramos siempre (es un prospecto nuevo)
+      const leadAppts = apptsList.filter(a => a.lead_id === l.id);
+      if (leadAppts.length === 0) return true;
+
+      // Si tiene citas, solo lo ocultamos si TODAS están en estado realizado/cancelado
+      const allFinished = leadAppts.every(a => {
+          const status = a.status?.toLowerCase() || '';
+          return ['realizada', 'completed', 'finalizada', 'servido', 'pagada', 'concluida', 'canceled', 'cancelled', 'anulado', 'anulada', 'cancelado', 'cancelada', 'rechazada', 'rechazado'].includes(status);
+      });
+      
+      return !allFinished;
     });
-  }, [leads, appointments, showCompleted]);
+  }, [dashData, showCompleted]);
 
   const filteredAppointments = useMemo(() => {
-    let base = appointments.filter(a => {
+    // Usamos los turnos paginados si estamos en la pestaña de turnos, si no los del dashboard
+    const baseList = apptsData?.appointments || appointments;
+    
+    let base = baseList.filter(a => {
         const status = a.status?.toLowerCase() || '';
         return !['canceled', 'cancelled', 'anulado', 'anulada', 'cancelado', 'cancelada', 'rechazada', 'rechazado'].includes(status);
     });
     
+    // El filtrado de realizados ya viene del backend para apptsData, 
+    // pero lo refuorzamos aquí por si acaso o para el caso de dashData
     if (!showCompleted) {
       base = base.filter(a => {
           const status = a.status?.toLowerCase() || '';
-          return status !== 'realizada' && status !== 'completed';
+          const isFinished = ['realizada', 'completed', 'finalizada', 'servido', 'pagada', 'concluida'].includes(status);
+          return !isFinished;
       });
     }
 
@@ -366,13 +378,21 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
       const target = new Date();
       target.setDate(target.getDate() + 1);
       const targetStr = target.toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Cordoba' });
-      return base.filter(a => new Date(a.date_time).toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Cordoba' }) === targetStr);
+      return base.filter(a => {
+          try {
+              return new Date(a.date_time).toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Cordoba' }) === targetStr;
+          } catch(e) { return false; }
+      });
     }
     if (dateFilter === 'hoy') {
-      return base.filter(a => new Date(a.date_time).toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Cordoba' }) === todayStr);
+      return base.filter(a => {
+          try {
+              return new Date(a.date_time).toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Cordoba' }) === todayStr;
+          } catch(e) { return false; }
+      });
     }
     return base;
-  }, [appointments, dateFilter, showCompleted, todayStr]);
+  }, [apptsData?.appointments, appointments, dateFilter, showCompleted, todayStr]);
 
   const stats = [
     { 
@@ -847,7 +867,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                             </div>
                           </TableCell>
                         </TableRow>
-                      ) : (apptsData?.appointments || []).filter(a => a.status !== 'canceled').map((a) => (
+                      ) : filteredAppointments.map((a) => (
                          <TableRow key={a.id} className={`border-b border-cream/5 hover:bg-cream/[0.02] transition-colors group ${!(a.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? 'opacity-40 grayscale-[0.5]' : ''}`}>
                            <TableCell className="px-5 py-6">
                              <div className="font-serif font-bold text-lg text-cream tracking-tight whitespace-nowrap">
@@ -1129,7 +1149,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                           </TableCell>
                         </TableRow>
                       ))}
-                      {(!apptsLoading && (!apptsData?.appointments || apptsData.appointments.length === 0)) && (
+                      {(!apptsLoading && filteredAppointments.length === 0) && (
                         <TableRow>
                           <TableCell colSpan={10} className="h-48 text-center text-cream/10 italic font-serif">
                             <CalendarCheck className="w-8 h-8 mx-auto mb-2 opacity-5" />
@@ -1298,9 +1318,20 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
 
               {/* Leads Section */}
               <section className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
-                <div className="flex items-center gap-3">
-                  <div className="w-1.5 h-6 bg-gold rounded-full" />
-                  <h3 className="text-xl font-serif font-bold">Clientes Potenciales</h3>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-1.5 h-6 bg-gold rounded-full" />
+                    <h3 className="text-xl font-serif font-bold">Clientes Potenciales</h3>
+                  </div>
+                  
+                  <div className="flex items-center gap-2 bg-noir-light/50 px-3 py-1.5 rounded-xl border border-white/5">
+                    <span className="text-[10px] uppercase font-bold tracking-widest text-cream/40">Mostrar Realizados</span>
+                    <Switch 
+                      checked={showCompleted} 
+                      onCheckedChange={setShowCompleted}
+                      className="scale-75 data-[state=checked]:bg-gold"
+                    />
+                  </div>
                 </div>
                 
                 <div className="rounded-2xl border border-cream/5 bg-noir-light/20 overflow-hidden shadow-2xl backdrop-blur-md">

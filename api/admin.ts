@@ -267,9 +267,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
                 const conditions = [];
                 if (reqStatus === 'completed') {
-                    conditions.push(sql`LOWER(${schema.appointments.status}) IN ('completed', 'realizada', 'finalizada')`);
-                } else if (reqStatus === 'all') {
-                    // Por defecto en 'all' ocultamos las canceladas para no ensuciar la agenda
+                    conditions.push(sql`LOWER(${schema.appointments.status}) IN ('completed', 'realizada', 'finalizada', 'servido', 'pagada', 'concluida')`);
+                } else if (reqStatus === 'pending') {
+                    conditions.push(sql`LOWER(${schema.appointments.status}) NOT IN ('cancelled', 'canceled', 'anulado', 'anulada', 'completed', 'realizada', 'finalizada', 'servido', 'pagada', 'concluida')`);
+                } else {
+                    // 'all' includes everything except explicitly canceled
                     conditions.push(sql`LOWER(${schema.appointments.status}) NOT IN ('cancelled', 'canceled', 'anulado', 'anulada')`);
                 }
                 

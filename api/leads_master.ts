@@ -33,6 +33,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     status: sql<string>`COALESCE(${schema.leads.status}, 'active')`,
                     created_at: schema.leads.created_at,
                     total_appointments: sql<number>`COUNT(${schema.appointments.id})::int`,
+                    pending_appointments: sql<number>`COUNT(CASE WHEN LOWER(${schema.appointments.status}) NOT IN ('realizada', 'completed', 'finalizada', 'canceled', 'cancelled', 'anulado', 'anulada', 'cancelado', 'cancelada', 'rechazada', 'rechazado') THEN 1 END)::int`,
                     total_spent: sql<number>`SUM(COALESCE(${schema.appointments.total_price}, 0))::float`,
                     last_interaction: sql<string | null>`MAX(${schema.appointments.date_time})`
                 })
@@ -72,6 +73,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     created_at?: any;
                     last_interaction?: any;
                     total_appointments?: number;
+                    pending_appointments?: number;
                     total_spent?: number;
                 }
 
@@ -88,6 +90,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         last_interaction: safeISO(c.last_interaction),
                         last_appointment: safeISO(c.last_interaction) || new Date().toISOString(),
                         total_appointments: Number(c.total_appointments || 0),
+                        pending_appointments: Number(c.pending_appointments || 0),
                         total_spent: Number(c.total_spent || 0),
                         note: ''
                     };

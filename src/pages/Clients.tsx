@@ -82,6 +82,7 @@ export default function Clients() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'new' | 'recurrent' | 'vip'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+  const [showCompleted, setShowCompleted] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const PAGE_SIZE = 20;
 
@@ -169,7 +170,16 @@ export default function Clients() {
     if (filterStatus === 'active') matchesStatus = daysSinceLast <= 30;
     else if (filterStatus === 'inactive') matchesStatus = daysSinceLast > 30;
 
-    return matchesSearch && matchesType && matchesStatus;
+    let matchesCompleted = true;
+    if (!showCompleted) {
+        const total = Number(c.total_appointments || 0);
+        const pending = Number((c as any).pending_appointments || 0);
+        if (total > 0 && pending === 0) {
+            matchesCompleted = false;
+        }
+    }
+
+    return matchesSearch && matchesType && matchesStatus && matchesCompleted;
   });
 
   const clearFilters = () => {
@@ -370,14 +380,23 @@ export default function Clients() {
           <p className="text-cream/40 mt-1 font-sans">Gestión y seguimiento de clientes registrados en KÂLON.</p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="relative group">
+        <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
+          <div className="relative group flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-cream/20 group-focus-within:text-gold transition-colors" />
             <Input
               placeholder="Buscar por nombre o teléfono..."
-              className="pl-10 bg-noir border-cream/5 focus:border-gold/30 text-cream w-full md:w-[300px] transition-all"
+              className="pl-10 bg-noir border-cream/5 focus:border-gold/30 text-cream w-full transition-all"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          
+          <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-xl border border-white/10 shrink-0">
+            <span className="text-[10px] uppercase font-bold tracking-widest text-cream/60">Mostrar Realizados</span>
+            <Switch 
+              checked={showCompleted} 
+              onCheckedChange={setShowCompleted}
+              className="data-[state=checked]:bg-gold"
             />
           </div>
 

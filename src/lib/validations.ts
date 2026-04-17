@@ -101,6 +101,7 @@ export const LeadSchema = z.object({
   category_name: coerceString('General'),
   email: coerceString().nullable(),
   total_appointments: z.number().optional().default(0),
+  pending_appointments: z.number().optional().default(0),
   total_spent: coerceNumber.optional().default(0),
   canManage: z.boolean().optional().default(true),
 });
@@ -138,6 +139,7 @@ export const ClientSchema = z.object({
   last_interaction: coerceString().nullable(),
   last_appointment: z.string().default(() => new Date().toISOString()),
   total_appointments: z.number().default(0),
+  pending_appointments: z.number().optional().default(0),
   total_spent: z.number().default(0),
   note: z.string().nullish(),
   is_bot_enabled: z.boolean().default(true),
