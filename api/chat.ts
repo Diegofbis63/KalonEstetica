@@ -87,8 +87,9 @@ export default async function handler(req: Request) {
                 if (toolName === 'consultar_servicios' && results.price_list_url) {
                     console.log(`[CHAT LOG] Using PRE-GENERATED Price List URL for ${toolName}`);
                     send({
+                        media_url: results.price_list_url,
                         choices: [{
-                            delta: { content: "", media_url: results.price_list_url }
+                            delta: { content: "" }
                         }]
                     });
                 } else {
@@ -112,8 +113,9 @@ export default async function handler(req: Request) {
                         console.log(`[CHAT LOG] Generated On-the-fly Satori URL for ${toolName}: ${satoriUrl}`);
 
                         send({
+                            media_url: satoriUrl,
                             choices: [{
-                                delta: { content: "", media_url: satoriUrl }
+                                delta: { content: "" }
                             }]
                         });
                     }
