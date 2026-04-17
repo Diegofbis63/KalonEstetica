@@ -8,7 +8,8 @@ import {
     createLead,
     type ContactInfo,
     createAppointment,
-    getServicesByCategory
+    getServicesByCategory,
+    getAllStaff
 } from './db.js';
 
 /**
@@ -141,7 +142,10 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                     const end = new Date(start);
                     end.setDate(end.getDate() + 1);
 
-                    const slots = await getAvailableSlotsFromDB(categoriaId, start, end);
+                    const [slots, allStaff] = await Promise.all([
+                        getAvailableSlotsFromDB(categoriaId, start, end),
+                        getAllStaff()
+                    ]);
                     
                     if (!slots || slots.length === 0) {
                         return { disponible: false, mensaje: 'No hay horarios disponibles para esa fecha.', fecha, horarios: [], error: null };
@@ -152,8 +156,11 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                         fecha,
                         horarios: slots.slice(0, 8).map(s => {
                             const d = new Date(s.slot_time);
+                            const staffMember = allStaff.find(st => st.id === s.staff_id);
                             return {
                                 hora: d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }),
+                                staff_name: staffMember?.name || "Especialista",
+                                staff_role: staffMember?.role || "Staff",
                                 staff_id: s.staff_id
                             };
                         }),
@@ -163,6 +170,23 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                 } catch (err) {
                     console.error('[Tool:consultar_disponibilidad] ERROR:', err);
                     return { disponible: false, error: 'Error buscando disponibilidad.', mensaje: null, fecha: null, horarios: [] };
+                }
+            }
+        }),
+
+        listar_cuerpo_profesional: tool({
+            description: 'Lista a los profesionales que trabajan en el local, sus nombres y roles. Usalo para que el cliente sepa quiénes lo atenderán.',
+            parameters: z.object({}),
+            execute: async () => {
+                try {
+                    const staff = await getAllStaff();
+                    return staff.map(s => ({
+                        nombre: s.name,
+                        rol: s.role
+                    }));
+                } catch (err) {
+                    console.error('[Tool:listar_cuerpo_profesional] ERROR:', err);
+                    return { error: 'No se pudo obtener la lista de profesionales.' };
                 }
             }
         }),

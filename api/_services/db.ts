@@ -79,10 +79,10 @@ export async function getActiveServices(): Promise<Service[]> {
             with: { category: true },
             orderBy: [asc(schema.services.sort_order)]
         }),
-        5000, [] as (typeof schema.services.$inferSelect & { category: typeof schema.categories.$inferSelect })[]
+        5000, [] as any[]
     );
     
-    return results.map(s => ({
+    return results.map((s: any) => ({
         ...s,
         category_name: s.category?.name || "Servicio",
         duration: s.duration || `${s.duration_min} min`
@@ -116,7 +116,7 @@ export async function getServicesByCategory(categoryNameOrId: string): Promise<{
 
     console.log(`[DB CRITICAL] MATCH FOUND: ${match.name} (ID: ${match.id})`);
 
-    const results = await withTimeout(
+    const results = await withTimeout<any[]>(
         db.query.services.findMany({
             where: and(eq(schema.services.active, true), eq(schema.services.category_id, match.id)),
             orderBy: [asc(schema.services.sort_order)]
@@ -245,12 +245,30 @@ export async function createAppointment(leadId: string, orgId: string | null, da
 
 export async function getStaffByCategory(categoryId: string) {
     console.log(`[db.ts] Fetching staff for category: ${categoryId}`);
-    const results = await withTimeout(
-        db.select({ id: schema.staff.id, name: schema.staff.name })
+    const results = await withTimeout<any[]>(
+        db.select({ 
+            id: schema.staff.id, 
+            name: schema.staff.name,
+            role: schema.staff.role
+        })
             .from(schema.staff)
             .innerJoin(schema.staff_specialties, eq(schema.staff.id, schema.staff_specialties.staff_id))
             .where(and(eq(schema.staff_specialties.category_id, categoryId), eq(schema.staff.is_active, true))),
         3000, []
     );
     return results;
+}
+
+export async function getAllStaff() {
+    console.log(`[db.ts] Fetching all active staff`);
+    return await withTimeout<any[]>(
+        db.select({
+            id: schema.staff.id,
+            name: schema.staff.name,
+            role: schema.staff.role
+        })
+        .from(schema.staff)
+        .where(eq(schema.staff.is_active, true)),
+        3000, []
+    );
 }
