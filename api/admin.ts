@@ -460,11 +460,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
         }
 
-        // --- CATALOGS ADMIN (POST/PUT/DELETE) ---
-        if (sec === 'catalogs') {
-            const table = catType === 'categories' ? schema.categories : (catType === 'services' ? schema.services : schema.staff);
-            const rawCategoryId = (req.query.categoryId || req.query.category_id) as string;
-            
         // --- CATALOGS ADMIN (Write Operations) ---
         if (sec === 'catalogs') {
             const table = catType === 'categories' ? schema.categories : (catType === 'services' ? schema.services : schema.staff);
