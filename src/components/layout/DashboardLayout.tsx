@@ -62,7 +62,7 @@ export default function DashboardLayout() {
           <div className="absolute bottom-[-10%] right-[10%] w-[800px] h-[600px] bg-rose/[0.02] rounded-full blur-[120px]" />
         </div>
 
-        <div className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar pb-20 lg:pb-0 scroll-smooth">
+        <div className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar pb-20 lg:pb-0 scroll-smooth w-full box-border">
           <Outlet />
         </div>
 

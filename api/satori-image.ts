@@ -13,7 +13,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'OPTIONS') return res.status(200).end();
 
     try {
-        const { title, data } = req.query;
+        let { title, data } = req.query;
+
+        // Soporte para POST (para evitar límites de longitud de URL en categorías grandes)
+        if (req.method === 'POST') {
+            title = title || req.body.title;
+            data = data || req.body.data;
+        }
 
         if (!title || !data) {
             return res.status(400).json({ error: 'Missing title or data' });

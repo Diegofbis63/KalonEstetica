@@ -26,12 +26,95 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
         // --- 1. PUBLIC GETS (Categories / Services for Landing) ---
         // This is temporarily simplified for landing page requests that don't pass 'section'
-        if (req.method === 'GET' && !section) {
-            const results = await db.query.categories.findMany({ 
-                with: { services: true },
-                orderBy: [sql`sort_order ASC`]
-            });
-            return res.status(200).json({ categories: results });
+        // --- 1. PUBLIC GET HANDLERS (No Auth Required) ---
+        // Allow landing page, bot, and admin dashboard to fetch catalogs safely
+        if (req.method === 'GET' && (!section || section === 'catalogs')) {
+            const catalogType = (type || 'categories') as string;
+            
+            // Validate catalog type
+            if (!['categories', 'services', 'staff'].includes(catalogType)) {
+                if (!section) {
+                    const results = await db.query.categories.findMany({ 
+                        with: { services: true },
+                        orderBy: [asc(schema.categories.sort_order)]
+                    });
+                    return res.status(200).json({ categories: results });
+                }
+                return res.status(400).json({ error: 'Invalid catalog type' });
+            }
+
+            const table = catalogType === 'categories' ? schema.categories : (catalogType === 'services' ? schema.services : schema.staff);
+            
+            const findOptions: any = {
+                orderBy: []
+            };
+
+            if ((table as any).sort_order) {
+                findOptions.orderBy.push(asc((table as any).sort_order));
+            } else if ((table as any).created_at) {
+                findOptions.orderBy.push(desc((table as any).created_at));
+            }
+
+            if (catalogType === 'categories') {
+                findOptions.with = { services: true };
+            } else if (catalogType === 'staff') {
+                findOptions.with = { specialties: true };
+            }
+
+            const rawCategoryId = (req.query.categoryId || req.query.category_id) as string;
+            if (catalogType === 'services' && rawCategoryId) {
+                findOptions.where = eq(schema.services.category_id, rawCategoryId);
+            }
+
+            const results = await (db.query as any)[catalogType].findMany(findOptions);
+            
+            console.log(`[admin API] ${catalogType} query results: ${results?.length || 0}`);
+
+            const safeNum = (v: any) => {
+                if (v === null || v === undefined) return 0;
+                const n = Number(String(v).replace(/[^0-9.]/g, ''));
+                return isNaN(n) ? 0 : n;
+            };
+
+            let formatted = results;
+            if (catalogType === 'services') {
+                formatted = results.map((s: any) => {
+                    const dMin = safeNum(s.duration_min || s.duration);
+                    return {
+                        ...s,
+                        title: s.title || s.name || 'Servicio',
+                        name: s.name || s.title || 'Servicio',
+                        price: safeNum(s.price),
+                        duration_min: dMin,
+                        duration: s.duration || `${dMin} min`,
+                        sort_order: safeNum(s.sort_order)
+                    };
+                });
+            } else if (catalogType === 'categories') {
+                formatted = results.map((c: any) => ({
+                    ...c,
+                    services: (c.services || []).map((s: any) => {
+                        const dMin = safeNum(s.duration_min || s.duration);
+                        return {
+                            ...s,
+                            title: s.title || s.name || 'Servicio',
+                            name: s.name || s.title || 'Servicio',
+                            price: safeNum(s.price),
+                            duration_min: dMin,
+                            duration: s.duration || `${dMin} min`
+                        };
+                    })
+                }));
+            } else if (catalogType === 'staff') {
+                formatted = results.map((s: any) => ({
+                    ...s,
+                    is_active: s.is_active ?? s.active ?? true,
+                    specialties: s.specialties?.map((sp: any) => String(sp.category_id)) || []
+                }));
+            }
+
+            console.log(`[admin API] Returning ${formatted?.length || 0} ${catalogType}`);
+            return res.status(200).json({ [catalogType]: formatted });
         }
 
         // --- 2. AUTHENTICATION (POST /api/admin?section=auth) ---
@@ -380,75 +463,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const table = catType === 'categories' ? schema.categories : (catType === 'services' ? schema.services : schema.staff);
             const rawCategoryId = (req.query.categoryId || req.query.category_id) as string;
             
+        // --- CATALOGS ADMIN (Write Operations) ---
+        if (sec === 'catalogs') {
+            const table = catType === 'categories' ? schema.categories : (catType === 'services' ? schema.services : schema.staff);
+            
+            // GET is handled at the top (publicly) to resolve session/rewrite issues
             if (req.method === 'GET') {
-                const findOptions: any = {
-                    orderBy: []
-                };
-
-                // Dynamic filters
-                const filters = [];
-                if (catType === 'services') {
-                    if (rawCategoryId) filters.push(eq(schema.services.category_id, rawCategoryId));
-                }
-
-                if (filters.length > 0) {
-                    findOptions.where = and(...filters);
-                }
-
-                // Better sorting logic
-                if ((table as any).sort_order) {
-                    findOptions.orderBy.push(asc((table as any).sort_order));
-                } else if ((table as any).created_at) {
-                    findOptions.orderBy.push(desc((table as any).created_at));
-                }
-
-                // Add relations
-                if (catType === 'staff') {
-                    findOptions.with = { specialties: true };
-                } else if (catType === 'categories') {
-                    findOptions.with = { services: true };
-                }
-
-                const results = await (db.query as any)[catType].findMany(findOptions);
-
-                // Format results with numeric safety and field normalization
-                const safeNum = (v: any) => {
-                    if (v === null || v === undefined) return 0;
-                    const n = Number(String(v).replace(/[^0-9.]/g, ''));
-                    return isNaN(n) ? 0 : n;
-                };
-
-                let formatted = results;
-                if (catType === 'services') {
-                    formatted = results.map((s: any) => ({ 
-                        ...s, 
-                        title: s.title || s.name || 'Servicio',
-                        name: s.name || s.title || 'Servicio',
-                        price: safeNum(s.price),
-                        duration: s.duration_min ? safeNum(s.duration_min) : (s.duration ? safeNum(s.duration) : 0),
-                        sort_order: safeNum(s.sort_order)
-                    }));
-                } else if (catType === 'categories') {
-                    formatted = results.map((c: any) => ({
-                        ...c,
-                        services: c.services?.map((s: any) => ({
-                            ...s,
-                            title: s.title || s.name || 'Servicio',
-                            name: s.name || s.title || 'Servicio',
-                            price: safeNum(s.price),
-                            duration: s.duration_min ? safeNum(s.duration_min) : (s.duration ? safeNum(s.duration) : 0),
-                            sort_order: safeNum(s.sort_order)
-                        })) || []
-                    }));
-                } else if (catType === 'staff') {
-                    formatted = results.map((s: any) => ({
-                        ...s,
-                        is_active: s.is_active ?? s.active ?? true,
-                        specialties: s.specialties?.map((sp: any) => String(sp.category_id)) || []
-                    }));
-                }
-
-                return res.status(200).json({ [catType]: formatted });
+                return res.status(405).json({ error: 'GET handled by public catalog handler' });
             }
 
             if (req.method === 'POST') {

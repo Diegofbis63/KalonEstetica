@@ -169,7 +169,7 @@ export function StaffManagement() {
 
       <div className="rounded-2xl border border-cream/5 bg-noir-light/20 overflow-hidden shadow-2xl backdrop-blur-md">
         {/* Desktop Table */}
-        <div className="hidden md:block">
+        <div className="hidden lg:block">
         <Table>
           <TableHeader>
             <TableRow className="border-b border-white/5 hover:bg-transparent bg-white/[0.02]">
@@ -246,7 +246,7 @@ export function StaffManagement() {
         </div>
 
         {/* Mobile View */}
-        <div className="md:hidden divide-y divide-white/5">
+        <div className="lg:hidden divide-y divide-white/5">
           {staffList.map((s) => (
             <div key={s.id} className="p-6 space-y-5">
               <div className="flex justify-between items-start">

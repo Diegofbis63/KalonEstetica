@@ -113,7 +113,7 @@ export default function Settings() {
   const categories: Category[] = catData?.categories || [];
 
   return (
-    <div className="px-4 md:px-8 py-6 md:py-10 max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-700">
+    <div className="px-4 lg:px-8 py-6 lg:py-10 max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-700">
       <header className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -165,7 +165,7 @@ export default function Settings() {
 
           <div className="rounded-2xl border border-cream/5 bg-noir-light/20 overflow-hidden shadow-2xl backdrop-blur-md">
             {/* Desktop Table View */}
-            <div className="hidden md:block">
+            <div className="hidden lg:block">
             <Table>
               <TableHeader>
                 <TableRow className="border-b border-cream/5 hover:bg-transparent">
@@ -223,7 +223,7 @@ export default function Settings() {
             </div>
 
             {/* Mobile Cards View */}
-            <div className="md:hidden divide-y divide-white/5">
+            <div className="lg:hidden divide-y divide-white/5">
               {userData?.users?.map((u: UserAccount) => (
                 <div key={u.id} className="p-6 space-y-5">
                    <div className="flex justify-between items-start">

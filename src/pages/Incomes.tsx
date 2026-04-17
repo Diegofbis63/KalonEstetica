@@ -567,7 +567,7 @@ export default function Incomes() {
 
            <div className="rounded-2xl sm:rounded-[2rem] border border-white/[0.05] bg-noir-light/5 overflow-hidden shadow-2xl">
             {/* Desktop Table View */}
-            <div className="hidden md:block overflow-x-auto">
+            <div className="hidden lg:block overflow-x-auto">
               <Table>
               <TableHeader className="bg-white/[0.03]">
                 <TableRow className="hover:bg-transparent border-white/5 h-16">
@@ -731,7 +731,7 @@ export default function Incomes() {
             </div>
 
             {/* Mobile Card View - Refactored for Premium Experience */}
-            <div className="md:hidden divide-y divide-white/5 bg-noir/20">
+            <div className="lg:hidden divide-y divide-white/5 bg-noir/20">
               {isLoading ? (
                 Array.from({ length: 3 }).map((_, i) => (
                   <div key={i} className="p-6 animate-pulse space-y-4">

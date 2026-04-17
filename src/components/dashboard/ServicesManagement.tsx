@@ -263,6 +263,13 @@ export default function ServicesManagement() {
     retry: 3,
   });
 
+  // Auto-select first category
+  React.useEffect(() => {
+    if (catData?.categories?.length && !activeCategoryId) {
+      setActiveCategoryId(catData.categories[0].id);
+    }
+  }, [catData, activeCategoryId]);
+
 
   // Mutations
   const reorderCategoriesMutation = useMutation({
@@ -383,15 +390,24 @@ export default function ServicesManagement() {
 
       if (items.length === 0) throw new Error("La categoría no tiene servicios activos.");
 
-      // 2. Call Satori
-      const dataB64 = btoa(unescape(encodeURIComponent(JSON.stringify(items))));
-      const response = await fetch(`/api/satori-image?title=${encodeURIComponent(category.name)}&data=${dataB64}`);
+      // 2. Call Satori via POST (to avoid URL length limits)
+      const response = await fetch('/api/satori-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: category.name,
+          data: btoa(unescape(encodeURIComponent(JSON.stringify(items))))
+        })
+      });
       
-      if (!response.ok) throw new Error("Error al generar imagen");
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || "Error al generar imagen");
+      }
       
       const blob = await response.blob();
       
-      // 3. Convert to Base64 for DB storage (simple approach for now)
+      // 3. Convert to Base64 for DB storage
       return new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result as string);
