@@ -378,23 +378,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // --- CATALOGS ADMIN (POST/PUT/DELETE) ---
         if (sec === 'catalogs') {
             const table = catType === 'categories' ? schema.categories : (catType === 'services' ? schema.services : schema.staff);
-            const categoryId = req.query.categoryId as string;
+            const rawCategoryId = (req.query.categoryId || req.query.category_id) as string;
             
             if (req.method === 'GET') {
-                if (catType === 'services') {
-                    const filters = [eq(schema.services.active, true)];
-                    if (categoryId) filters.push(eq(schema.services.category_id, categoryId));
-
-                    const servicesData = await db.query.services.findMany({
-                        orderBy: [asc(schema.services.sort_order)],
-                        where: and(...filters)
-                    });
-                    return res.status(200).json({ services: servicesData });
-                }
-
                 const findOptions: any = {
                     orderBy: []
                 };
+
+                // Dynamic filters
+                const filters = [];
+                if (catType === 'services') {
+                    if (rawCategoryId) filters.push(eq(schema.services.category_id, rawCategoryId));
+                }
+
+                if (filters.length > 0) {
+                    findOptions.where = and(...filters);
+                }
 
                 // Better sorting logic
                 if ((table as any).sort_order) {
@@ -403,7 +402,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     findOptions.orderBy.push(desc((table as any).created_at));
                 }
 
-                // Add relations and filters
+                // Add relations
                 if (catType === 'staff') {
                     findOptions.with = { specialties: true };
                 } else if (catType === 'categories') {
@@ -412,9 +411,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
                 const results = await (db.query as any)[catType].findMany(findOptions);
 
-                // Format results with numeric safety
+                // Format results with numeric safety and field normalization
                 const safeNum = (v: any) => {
-                    const n = Number(v);
+                    if (v === null || v === undefined) return 0;
+                    const n = Number(String(v).replace(/[^0-9.]/g, ''));
                     return isNaN(n) ? 0 : n;
                 };
 
@@ -422,23 +422,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 if (catType === 'services') {
                     formatted = results.map((s: any) => ({ 
                         ...s, 
-                        price: s.price ? safeNum(s.price) : 0,
-                        duration: s.duration_min ? safeNum(s.duration_min) : (s.duration ? parseInt(String(s.duration).replace(/\D/g, ''), 10) || 0 : 0)
+                        title: s.title || s.name || 'Servicio',
+                        name: s.name || s.title || 'Servicio',
+                        price: safeNum(s.price),
+                        duration: s.duration_min ? safeNum(s.duration_min) : (s.duration ? safeNum(s.duration) : 0),
+                        sort_order: safeNum(s.sort_order)
                     }));
                 } else if (catType === 'categories') {
                     formatted = results.map((c: any) => ({
                         ...c,
                         services: c.services?.map((s: any) => ({
                             ...s,
-                            price: s.price ? safeNum(s.price) : 0,
-                            duration: s.duration_min ? safeNum(s.duration_min) : (s.duration ? parseInt(String(s.duration).replace(/\D/g, ''), 10) || 0 : 0)
-                        }))
+                            title: s.title || s.name || 'Servicio',
+                            name: s.name || s.title || 'Servicio',
+                            price: safeNum(s.price),
+                            duration: s.duration_min ? safeNum(s.duration_min) : (s.duration ? safeNum(s.duration) : 0),
+                            sort_order: safeNum(s.sort_order)
+                        })) || []
                     }));
                 } else if (catType === 'staff') {
-                    // Map specialties to array of category IDs as strings to match StaffSchema
                     formatted = results.map((s: any) => ({
                         ...s,
-                        is_active: s.active ?? true, // Support both naming variants if they exist
+                        is_active: s.is_active ?? s.active ?? true,
                         specialties: s.specialties?.map((sp: any) => String(sp.category_id)) || []
                     }));
                 }
@@ -453,7 +458,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             
             if (req.method === 'PUT' || req.method === 'PATCH') {
                 const id = req.query.id as string;
-                const [item] = await db.update(table as any).set(req.body).where(eq((table as any).id, id)).returning();
+                
+                // Sanitize body: Remove relational/virtual fields that don't exist in the DB table
+                const { services: _s, specialties: _sp, ...cleanBody } = req.body;
+                
+                const [item] = await db.update(table as any)
+                    .set(cleanBody)
+                    .where(eq((table as any).id, id))
+                    .returning();
                 return res.status(200).json({ [catType.slice(0,-1)]: item });
             }
 
@@ -465,8 +477,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         return res.status(405).json({ error: 'Method not allowed or Section missing' });
-    } catch (e) {
-        console.error(`[ADMIN API ERROR] ${sec}:`, e);
-        return res.status(500).json({ error: 'Internal Server Error', details: (e as Error).message });
+    } catch (e: any) {
+        console.error(`[ADMIN ERROR] section=${sec} type=${req.query.type}`, e);
+        return res.status(500).json({ 
+            error: 'Internal Server Error', 
+            details: e.message,
+            stack: process.env.NODE_ENV === 'development' ? e.stack : undefined
+        });
     }
+
 }

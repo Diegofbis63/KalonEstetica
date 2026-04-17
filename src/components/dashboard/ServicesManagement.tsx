@@ -21,7 +21,8 @@ import {
   X,
   Upload,
   Save,
-  Clock
+  Clock,
+  Sparkles
 } from 'lucide-react';
 import { 
   DndContext, 
@@ -108,22 +109,23 @@ const SortableCategoryItem = ({
           <button 
             disabled={isGenerating}
             onClick={(e) => { e.stopPropagation(); onGenerate(); }}
-            title="Generar Imagen de Precios para Chatbot"
-            className={`p-1 px-1.5 rounded-md transition-all ${
+            title="Generar Imagen de Precios"
+            className={`p-2 rounded-xl transition-all flex items-center gap-1.5 ${
               category.price_list_url 
-                ? 'hover:bg-gold/10 text-gold' 
-                : 'hover:bg-cream/10 text-cream/40'
+                ? 'bg-gold/10 text-gold border border-gold/20' 
+                : 'bg-white/5 text-cream/40 border border-white/5 hover:border-gold/30 hover:text-gold'
             }`}
           >
             {isGenerating ? (
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
             ) : (
-              <FileText className="w-3.5 h-3.5" />
+              <Sparkles className="w-3.5 h-3.5" />
             )}
+            <span className="text-[8px] font-black uppercase tracking-tighter hidden sm:inline">Generar Lista</span>
           </button>
           <button 
             onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            className="p-1 px-1.5 rounded-md hover:bg-rose/10 hover:text-rose transition-all"
+            className="p-2 rounded-xl bg-rose-500/5 text-rose-500/40 hover:bg-rose-500/10 hover:text-rose-500 transition-all border border-rose-500/10"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -177,7 +179,7 @@ const SortableServiceItem = ({
       <div className="flex-grow">
         <h4 className="text-cream font-serif font-bold group-hover:text-gold transition-colors">{service.title}</h4>
         <div className="flex items-center gap-4 mt-1">
-          <span className="text-xs text-gold/60 font-medium whitespace-nowrap">${Number(service.price).toLocaleString('es-AR')}</span>
+          <span className="text-xs text-gold font-bold whitespace-nowrap">${(Number(service.price) || 0).toLocaleString('es-AR')}</span>
           <span className="text-[10px] text-cream/30 uppercase tracking-widest">{service.duration}</span>
         </div>
       </div>
@@ -518,7 +520,7 @@ export default function ServicesManagement() {
           <div className="animate-in fade-in slide-in-from-right-4 duration-500">
             
             {/* Category Header/Edit */}
-            <div className="p-8 rounded-2xl border border-cream/5 bg-noir-light/20 relative overflow-hidden mb-8">
+            <div className="p-5 sm:p-8 rounded-2xl border border-cream/5 bg-noir-light/20 relative overflow-hidden mb-8">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-gold/5 rounded-full blur-3xl -mr-32 -mt-32" />
                 
                 <div className="relative z-10 flex flex-col md:flex-row gap-8 items-start">

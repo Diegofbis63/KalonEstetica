@@ -266,19 +266,30 @@ export function StaffManagement() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-white/5 p-3 rounded-2xl border border-white/5">
-                   <div className="text-[8px] uppercase tracking-widest text-cream/30 font-bold mb-1">Contacto</div>
-                   <div className="text-xs font-bold text-cream flex items-center gap-2">
-                     <Phone className="w-3 h-3 text-gold" />
-                     {s.phone || 'S/D'}
+              <div className="space-y-3">
+                <div className="bg-white/5 p-4 rounded-2xl border border-white/5 flex items-center justify-between">
+                   <div className="flex items-center gap-3">
+                     <div className="w-8 h-8 rounded-xl bg-gold/10 flex items-center justify-center">
+                       <Phone className="w-4 h-4 text-gold" />
+                     </div>
+                     <div>
+                       <div className="text-[8px] uppercase tracking-widest text-cream/30 font-black">Contacto</div>
+                       <div className="text-sm font-bold text-cream">{s.phone || 'Sin dato'}</div>
+                     </div>
                    </div>
+                   {s.phone && (
+                     <a href={`tel:${s.phone}`} className="w-10 h-10 rounded-full bg-gold/10 flex items-center justify-center text-gold active:bg-gold active:text-noir transition-all">
+                       <Phone className="w-4 h-4" />
+                     </a>
+                   )}
                 </div>
-                <div className="bg-white/5 p-3 rounded-2xl border border-white/5">
-                   <div className="text-[8px] uppercase tracking-widest text-cream/30 font-bold mb-1">Horario</div>
-                   <div className="text-xs font-bold text-cream flex items-center gap-2">
-                     <Clock className="w-3 h-3 text-gold" />
-                     {s.work_start} - {s.work_end}
+                <div className="bg-white/5 p-4 rounded-2xl border border-white/5 flex items-center gap-3">
+                   <div className="w-8 h-8 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                     <Clock className="w-4 h-4 text-emerald-400" />
+                   </div>
+                   <div>
+                     <div className="text-[8px] uppercase tracking-widest text-cream/30 font-black">Horario Laboral</div>
+                     <div className="text-sm font-bold text-cream capitalize">{s.work_start} A {s.work_end}</div>
                    </div>
                 </div>
               </div>

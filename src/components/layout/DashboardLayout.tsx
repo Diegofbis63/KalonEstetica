@@ -22,7 +22,7 @@ export default function DashboardLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   return (
-    <div className="flex h-screen bg-noir text-cream overflow-hidden">
+    <div className="flex h-screen bg-noir text-cream overflow-hidden touch-none selection:bg-gold/30">
       {/* Global Chat Modal */}
       <ChatModal 
         open={isChatModalOpen} 
@@ -62,9 +62,7 @@ export default function DashboardLayout() {
           <div className="absolute bottom-[-10%] right-[10%] w-[800px] h-[600px] bg-rose/[0.02] rounded-full blur-[120px]" />
         </div>
 
-        {/* Scrollable Page Content */}
-        {/* pb-20 on mobile to account for BottomNav */}
-        <div className="relative z-10 flex-1 overflow-y-auto custom-scrollbar pb-20 lg:pb-0">
+        <div className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar pb-20 lg:pb-0 scroll-smooth">
           <Outlet />
         </div>
 

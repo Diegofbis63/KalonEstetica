@@ -114,23 +114,40 @@ export default function Settings() {
 
   return (
     <div className="px-4 md:px-8 py-6 md:py-10 max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-700">
-      <header className="space-y-2">
-        <div className="flex items-center gap-3">
-          <Shield className="w-5 h-5 text-gold" />
-          <h2 className="text-3xl font-serif font-bold tracking-tight">Configuración</h2>
+      <header className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-1 h-6 bg-gold rounded-full" />
+            <h1 className="text-xl sm:text-2xl font-serif font-bold tracking-tight">Panel Administrativo</h1>
+          </div>
+          <div className="p-2 rounded-xl bg-gold/10 text-gold border border-gold/10">
+            <Shield className="w-4 h-4" />
+          </div>
         </div>
-        <p className="text-cream/30 font-sans text-sm italic">Gestión de equipo y control de acceso premium (RBAC)</p>
+        <div className="p-3 rounded-2xl bg-noir-light/30 border border-cream/5 backdrop-blur-md">
+          <p className="text-[11px] text-cream/40 font-sans italic">Gestión de equipo y control de acceso premium (RBAC)</p>
+        </div>
       </header>
 
       <Tabs defaultValue="team" className="w-full space-y-8">
         <TabsList className="bg-noir-light/30 border border-white/5 p-1 rounded-2xl w-full grid grid-cols-2 h-auto">
-          <TabsTrigger value="team" className="flex flex-col sm:flex-row items-center gap-2 rounded-xl text-[9px] sm:text-[10px] uppercase tracking-widest font-black data-[state=active]:bg-gold data-[state=active]:text-noir transition-all py-3 px-2 sm:px-6">
-            <Contact2 className="w-4 h-4" />
-            <span className="text-center">Staff Control</span>
+          <TabsTrigger 
+            value="team" 
+            className="flex items-center justify-center gap-2 rounded-xl text-[9px] sm:text-[10px] uppercase tracking-widest font-black data-[state=active]:bg-gold data-[state=active]:text-noir transition-all py-3"
+          >
+            <div className="flex flex-col sm:flex-row items-center gap-1">
+              <Contact2 className="w-3.5 h-3.5" />
+              <span>Personal</span>
+            </div>
           </TabsTrigger>
-          <TabsTrigger value="access" className="flex flex-col sm:flex-row items-center gap-2 rounded-xl text-[9px] sm:text-[10px] uppercase tracking-widest font-black data-[state=active]:bg-gold data-[state=active]:text-noir transition-all py-3 px-2 sm:px-6">
-            <UserCog className="w-4 h-4" />
-            <span className="text-center">Sistema Admin</span>
+          <TabsTrigger 
+            value="access" 
+            className="flex items-center justify-center gap-2 rounded-xl text-[9px] sm:text-[10px] uppercase tracking-widest font-black data-[state=active]:bg-gold data-[state=active]:text-noir transition-all py-3"
+          >
+            <div className="flex flex-col sm:flex-row items-center gap-1">
+              <UserCog className="w-3.5 h-3.5" />
+              <span>Accesos</span>
+            </div>
           </TabsTrigger>
         </TabsList>
 

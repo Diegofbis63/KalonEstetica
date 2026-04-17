@@ -775,32 +775,49 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
              <div className="space-y-12">
               {/* Agenda Section */}
               <section className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-100">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-1.5 h-6 bg-gold rounded-full" />
-                    <h3 className="text-xl font-serif font-bold">Gestión de Citas Agendadas</h3>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2 bg-noir-light/50 px-4 py-2 rounded-2xl border border-white/5">
-                      <span className="text-[10px] uppercase font-bold tracking-widest text-cream/40">Mostrar Realizados</span>
-                      <Switch 
-                        checked={showCompleted} 
-                        onCheckedChange={setShowCompleted}
-                        className="scale-75 data-[state=checked]:bg-gold"
-                      />
+                <div className="flex flex-col gap-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-6 bg-gold rounded-full" />
+                      <h3 className="text-xl sm:text-2xl font-serif font-bold tracking-tight text-cream">Gestión de Citas</h3>
                     </div>
-                    <div className="flex gap-1 bg-noir-light p-1 rounded-full border border-white/5">
-                    {['all', 'hoy', 'tomorrow'].map(f => (
-                      <button 
-                        key={f} 
-                        onClick={() => setDateFilter(f as 'all' | 'hoy' | 'tomorrow')} 
-                        className={`px-4 py-1.5 rounded-full text-[10px] uppercase font-bold tracking-widest transition-all ${dateFilter === f ? 'bg-gold text-noir' : 'text-cream/30 hover:text-cream'}`}
-                      >
-                        {f === 'all' ? 'Ver Todos' : f === 'hoy' ? 'Hoy' : 'Mañana'}
-                      </button>
-                    ))}
+                    <button 
+                      onClick={() => setIsAddAppointmentModalOpen(true)}
+                      className="p-3 rounded-2xl bg-gold text-noir shadow-lg shadow-gold/20 active:scale-95 transition-all flex items-center gap-2"
+                    >
+                      <Plus className="w-5 h-5" />
+                      <span className="text-[10px] font-black uppercase tracking-widest hidden sm:inline">Nueva Cita</span>
+                    </button>
                   </div>
-                </div>
+                  
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3 overflow-x-auto pb-4 no-scrollbar -mx-4 px-4">
+                      {['all', 'hoy', 'tomorrow'].map(f => (
+                        <button 
+                          key={f} 
+                          onClick={() => setDateFilter(f as 'all' | 'hoy' | 'tomorrow')} 
+                          className={`px-5 py-2.5 rounded-xl text-[10px] uppercase font-black tracking-widest transition-all whitespace-nowrap border ${dateFilter === f ? 'bg-gold text-noir border-gold' : 'bg-white/5 text-cream/40 border-white/5 hover:border-white/10'}`}
+                        >
+                          {f === 'all' ? 'Todas' : f === 'hoy' ? 'Hoy' : 'Mañana'}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center justify-between gap-4 p-2 bg-white/5 rounded-2xl border border-white/5">
+                      <div className="flex items-center gap-3 px-3">
+                        <span className="text-[10px] uppercase font-black tracking-widest text-cream/40">Realizados</span>
+                        <Switch 
+                          checked={showCompleted} 
+                          onCheckedChange={setShowCompleted}
+                          className="scale-75 data-[state=checked]:bg-gold"
+                        />
+                      </div>
+                      <div className="h-6 w-px bg-white/10" />
+                      <div className="flex-1 flex justify-end px-3">
+                         <span className="text-[10px] uppercase font-black tracking-tighter text-gold/60">{filteredAppointments.length} Citas</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="rounded-2xl border border-cream/5 bg-noir-light/20 overflow-hidden shadow-2xl backdrop-blur-md">
@@ -1114,9 +1131,9 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                       ))}
                       {(!apptsLoading && (!apptsData?.appointments || apptsData.appointments.length === 0)) && (
                         <TableRow>
-                          <TableCell colSpan={6} className="h-48 text-center text-cream/10 italic font-serif">
+                          <TableCell colSpan={10} className="h-48 text-center text-cream/10 italic font-serif">
                             <CalendarCheck className="w-8 h-8 mx-auto mb-2 opacity-5" />
-                            No hay turnos registrados para este criterio
+                            No hay turnos registrados
                           </TableCell>
                         </TableRow>
                       )}

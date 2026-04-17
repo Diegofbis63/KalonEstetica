@@ -497,7 +497,7 @@ export default function Incomes() {
         </div>
 
         {/* Evolution Chart */}
-        <div className="p-10 rounded-[2.5rem] border border-white/[0.05] bg-noir-light/5 backdrop-blur-md shadow-3xl">
+        <div className="p-5 sm:p-10 rounded-2xl sm:rounded-[2.5rem] border border-white/[0.05] bg-noir-light/5 backdrop-blur-md shadow-3xl overflow-hidden">
           <div className="flex items-center justify-between mb-10">
             <div>
               <h3 className="text-2xl font-serif font-bold text-cream mb-1">Evolución de Ingresos</h3>
@@ -555,17 +555,17 @@ export default function Incomes() {
 
         {/* Recent Payments Table */}
         <div className="space-y-6">
-          <div className="flex items-center justify-between mb-4 px-2">
-            <div className="flex items-center gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 px-2">
+            <div className="flex items-center gap-3">
               <div className="w-1.5 h-8 bg-gold rounded-full shadow-[0_0_15px_rgba(194,154,91,0.5)]" />
-              <h3 className="text-2xl font-serif font-bold tracking-tight">Registro de Transacciones</h3>
+              <h3 className="text-xl sm:text-2xl font-serif font-bold tracking-tight">Registro de Transacciones</h3>
             </div>
-            <div className="px-4 py-1.5 rounded-full bg-white/[0.03] border border-white/5 shadow-inner">
+            <div className="w-fit px-4 py-1.5 rounded-full bg-white/[0.03] border border-white/5 shadow-inner">
                <span className="text-[10px] text-gold font-black uppercase tracking-[0.2em]">{payments.length} Registros</span>
             </div>
           </div>
 
-           <div className="rounded-[2rem] border border-white/[0.05] bg-noir-light/5 overflow-hidden shadow-2xl">
+           <div className="rounded-2xl sm:rounded-[2rem] border border-white/[0.05] bg-noir-light/5 overflow-hidden shadow-2xl">
             {/* Desktop Table View */}
             <div className="hidden md:block overflow-x-auto">
               <Table>
