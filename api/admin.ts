@@ -360,6 +360,58 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
         }
 
+        // --- CLIENTES (LEADS) ---
+        if (sec === 'leads') {
+            if (req.method === 'GET') {
+                const results = await db.select({
+                    id: schema.leads.id,
+                    client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente sin nombre')`,
+                    phone: sql<string>`COALESCE(${schema.leads.phone}, '')`,
+                    status: sql<string>`COALESCE(${schema.leads.status}, 'new')`,
+                    is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, true)`,
+                    created_at: schema.leads.created_at,
+                    intent_score: sql<number>`COALESCE(${schema.leads.intent_score}, 0)`,
+                    category_id: schema.leads.category_id,
+                    category_name: sql<string>`COALESCE(${schema.categories.name}, 'General')`,
+                    last_interaction: schema.leads.last_interaction,
+                    last_message: schema.leads.last_interaction, // fallback
+                    updated_at: schema.leads.updated_at
+                })
+                .from(schema.leads)
+                .leftJoin(schema.categories, eq(schema.leads.category_id, schema.categories.id))
+                .orderBy(desc(schema.leads.last_interaction))
+                .limit(limit)
+                .offset(offset);
+
+                const [totalLeads] = await db.select({ count: sql`count(*)` }).from(schema.leads);
+
+                return res.status(200).json({ 
+                    leads: results.map(l => ({
+                        ...l,
+                        created_at: l.created_at ? new Date(l.created_at).toISOString() : undefined,
+                        updated_at: l.updated_at ? new Date(l.updated_at).toISOString() : null,
+                    })),
+                    metadata: {
+                        total: Number(totalLeads?.count || 0),
+                        limit,
+                        offset
+                    }
+                });
+            }
+
+            if (req.method === 'DELETE') {
+                const id = req.query.id as string;
+                await db.delete(schema.leads).where(eq(schema.leads.id, id));
+                return res.status(200).json({ success: true });
+            }
+
+            if (req.method === 'PUT' || req.method === 'PATCH') {
+                const id = req.query.id as string;
+                const [updated] = await db.update(schema.leads).set(req.body).where(eq(schema.leads.id, id)).returning();
+                return res.status(200).json({ lead: updated });
+            }
+        }
+
         // --- USERS / PROFILE ---
         if (sec === 'users') {
             if (req.method === 'GET') {
