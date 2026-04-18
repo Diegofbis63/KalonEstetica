@@ -97,11 +97,14 @@ export default function KalonChat() {
     const upsertAssistant = (chunk: string) => {
       assistantSoFar += chunk;
       setMessages((prev) => {
-        const last = prev[prev.length - 1];
-        if (last?.role === "assistant") {
-          return prev.map((m, i) =>
-            i === prev.length - 1 ? { ...m, content: assistantSoFar } : m
-          );
+        const lastIdx = prev.length - 1;
+        if (lastIdx >= 0 && prev[lastIdx].role === "assistant") {
+          const newMessages = [...prev];
+          newMessages[lastIdx] = { 
+            ...newMessages[lastIdx], 
+            content: assistantSoFar 
+          };
+          return newMessages;
         }
         return [...prev, { role: "assistant", content: assistantSoFar }];
       });
@@ -123,10 +126,14 @@ export default function KalonChat() {
       },
       onStage: (s) => setCurrentStage(s),
       onMedia: (url) => setMessages(prev => {
-        const last = prev[prev.length-1];
-        if (last?.role === 'assistant') {
-          return prev.map((m, idx) => idx === prev.length-1 ? { ...m, media_url: url } : m);
+        const last = prev[prev.length - 1];
+        if (last && last.role === 'assistant') {
+          // Actualizamos el existente preservando contenido
+          return prev.map((m, idx) => 
+            idx === prev.length - 1 ? { ...m, media_url: url } : m
+          );
         }
+        // Si no hay mensaje de asistente previo, creamos uno nuevo
         return [...prev, { role: 'assistant', content: '', media_url: url }];
       }),
       onDone: () => setIsLoading(false),
