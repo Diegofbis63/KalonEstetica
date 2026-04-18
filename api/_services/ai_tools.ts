@@ -47,7 +47,7 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                         success: true, 
                         leadId: newLead.id, 
                         nombre: fullName,
-                        mensaje: `¡Excelente, ${fullName}! Ya te anoté en mi agenda. Dame un segundo que te muestro nuestras especialidades:` 
+                        mensaje: `¡Qué alegría tenerte con nosotros, ${fullName}! ✨ Ya te registré en mi agenda. Dame un segundito que te muestro todas las especialidades que tenemos para vos en KÂLON: 💖` 
                     };
                 } catch (err) {
                     console.error('[Tool:registrar_cliente] ERROR:', err);
