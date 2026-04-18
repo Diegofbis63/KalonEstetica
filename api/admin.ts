@@ -431,9 +431,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
         }
 
-        // --- STAFF MANAGEMENT REDIRECT TO CATALOGS ---
+        // --- STAFF MANAGEMENT ---
         if (sec === 'staff') {
-            return res.status(200).json({ redirect: '/api/admin?section=catalogs&type=staff' });
+            if (req.method === 'GET') {
+                const results = await db.query.staff.findMany({
+                    with: { specialties: true }
+                });
+                return res.status(200).json({ 
+                    staff: results.map(s => ({
+                        ...s,
+                        is_active: s.is_active ?? true,
+                        specialties: s.specialties?.map(sp => String(sp.category_id)) || []
+                    }))
+                });
+            }
         }
 
         // --- INCOME / CASHFLOW ---
