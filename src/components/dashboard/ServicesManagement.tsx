@@ -382,6 +382,67 @@ export default function ServicesManagement() {
       }
   });
 
+  const { data: configData } = useQuery({
+    queryKey: ['config'],
+    queryFn: () => fetch('/api/admin?section=config').then(res => res.json())
+  });
+
+  const mainCatalogUrl = configData?.configs?.find((c: any) => c.key === 'MAIN_CATALOG_IMAGE_URL')?.value;
+
+  const saveConfigMutation = useMutation({
+    mutationFn: (config: { key: string, value: string }) => 
+      fetch('/api/admin?section=config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['config'] });
+    }
+  });
+
+  const generateMainCatalogMutation = useMutation({
+    mutationFn: async () => {
+      if (!catData?.categories) return null;
+      
+      const items = catData.categories
+        .filter(c => c.active !== false)
+        .map(c => ({
+          label: c.name,
+          price: "Ver Mas" // Or some generic text
+        }));
+
+      if (items.length === 0) throw new Error("No hay categorías activas.");
+
+      const response = await fetch('/api/satori-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: "Nuestras Especialidades",
+          data: btoa(unescape(encodeURIComponent(JSON.stringify(items))))
+        })
+      });
+      
+      if (!response.ok) throw new Error("Error al generar imagen maestra");
+      
+      const blob = await response.blob();
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    },
+    onSuccess: async (base64) => {
+      if (!base64) return;
+      await saveConfigMutation.mutateAsync({ key: 'MAIN_CATALOG_IMAGE_URL', value: base64 });
+      toast.success("Catálogo Maestro de Especialidades actualizado");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Error al generar catálogo");
+    }
+  });
+
   const generatePriceListMutation = useMutation({
     mutationFn: async (category: Category) => {
       // 1. Prepare data
@@ -487,8 +548,52 @@ export default function ServicesManagement() {
       
       {/* --- Sidebar: Categories --- */}
       <div className="w-full lg:w-72 flex flex-col gap-6">
+        {/* Main Catalog Generation Button */}
+        {!isReadOnly && (
+          <div className={`p-4 rounded-2xl border transition-all ${mainCatalogUrl ? 'bg-gold/5 border-gold/20' : 'bg-noir-light/30 border-white/5'}`}>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[10px] font-black uppercase tracking-widest text-gold">Catálogo Maestro</span>
+              {generateMainCatalogMutation.isPending && <Loader2 className="w-3 h-3 animate-spin text-gold" />}
+            </div>
+            {mainCatalogUrl ? (
+              <div className="flex gap-3 items-center">
+                <div 
+                  className="w-12 h-16 rounded-lg overflow-hidden border border-gold/20 cursor-pointer hover:scale-105 transition-transform"
+                  onClick={() => { setPreviewUrl(mainCatalogUrl); setIsPreviewModalOpen(true); }}
+                >
+                  <img src={mainCatalogUrl} alt="Main Catalog" className="w-full h-full object-cover" />
+                </div>
+                <div className="flex flex-col gap-1">
+                   <button 
+                    onClick={() => generateMainCatalogMutation.mutate()}
+                    className="text-[9px] font-bold text-gold/60 hover:text-gold flex items-center gap-1 transition-colors"
+                   >
+                     <Sparkles className="w-3 h-3" /> Actualizar
+                   </button>
+                   <button 
+                    onClick={() => { setPreviewUrl(mainCatalogUrl); setIsPreviewModalOpen(true); }}
+                    className="text-[9px] font-bold text-cream/40 hover:text-cream flex items-center gap-1 transition-colors"
+                   >
+                     <Eye className="w-3 h-3" /> Ver Imagen
+                   </button>
+                </div>
+              </div>
+            ) : (
+              <button 
+                onClick={() => generateMainCatalogMutation.mutate()}
+                className="w-full py-3 rounded-xl bg-gold/10 text-gold border border-gold/20 hover:bg-gold hover:text-noir font-bold text-xs flex items-center justify-center gap-2 transition-all"
+              >
+                <Sparkles className="w-4 h-4" /> Generar Catálogo Principal
+              </button>
+            )}
+            <p className="text-[9px] text-cream/30 mt-3 leading-relaxed">
+              Esta imagen es la que el bot enviará cuando un cliente nuevo se registre.
+            </p>
+          </div>
+        )}
+
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-sans uppercase tracking-[0.2em] text-cream/40 font-bold">Categorías</h3>
+          <h3 className="text-sm font-sans uppercase tracking-[0.2em] text-cream/40 font-bold">Categorías Individuales</h3>
           {!isReadOnly && (
             <button 
               onClick={() => { setEditingCategory({}); setIsCategoryModalOpen(true); }}

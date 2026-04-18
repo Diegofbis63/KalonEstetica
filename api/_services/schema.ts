@@ -186,6 +186,12 @@ export const user_permissions = pgTable('user_permissions', {
   category_id: uuid('category_id').references(() => categories.id, { onDelete: 'cascade' }),
 });
 
+export const business_config = pgTable('business_config', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+});
+
 export const system_logs = pgTable('system_logs', {
   id: uuid('id').primaryKey().defaultRandom(),
   level: text('level').default('error'),

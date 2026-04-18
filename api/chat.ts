@@ -82,7 +82,19 @@ export default async function handler(req: Request) {
                 const newLeadId = (toolResults as any).leadId;
                 console.log(`[STREAM] Nuevo Lead detectado: ${newLeadId}. Inyectando catálogo automático.`);
                 
-                const catUrl = 'https://vdyjlyovunbgeunryccl.supabase.co/storage/v1/object/public/kalon-assets/categorias.png';
+                // Intentamos buscar la imagen configurada por el usuario en el dashboard
+                let catUrl = 'https://vdyjlyovunbgeunryccl.supabase.co/storage/v1/object/public/kalon-assets/categorias.png';
+                try {
+                  const config = await db.query.business_config.findFirst({
+                    where: eq(schema.business_config.key, 'MAIN_CATALOG_IMAGE_URL')
+                  });
+                  if (config?.value) {
+                    catUrl = config.value;
+                    console.log(`[STREAM] Usando imagen de catálogo MAESTRA de la DB: ${catUrl.substring(0, 50)}...`);
+                  }
+                } catch (dbErr) {
+                  console.error('[STREAM] Error buscando config de imagen:', dbErr);
+                }
                 
                 // Enviamos AMBOS datos en el mismo objeto para evitar que el frontend ignore uno
                 send({ 
@@ -96,6 +108,18 @@ export default async function handler(req: Request) {
               if (toolName === 'listar_categorias_principales' || toolName === 'consultar_servicios') {
                 const results = toolResults as any;
                 
+                // Si es categorias principales y no tiene price_list_url, usamos la maestra
+                if (toolName === 'listar_categorias_principales' && !results.price_list_url) {
+                    try {
+                        const config = await db.query.business_config.findFirst({
+                          where: eq(schema.business_config.key, 'MAIN_CATALOG_IMAGE_URL')
+                        });
+                        if (config?.value) {
+                          results.price_list_url = config.value;
+                        }
+                    } catch (e) {}
+                }
+
                 // Prioridad 1: Imagen pre-generada de la base de datos (price_list_url)
                 const savedUrl = results.price_list_url;
                 

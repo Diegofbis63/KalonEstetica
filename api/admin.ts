@@ -174,8 +174,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const user = await requireAuth(req, res);
         if (!user) return;
 
-        // --- DASHBOARD / STATS ---
-        if (sec === 'dashboard' && req.method === 'GET') {
+        // --- BUSINESS CONFIG (GET) ---
+        if (sec === 'config' && req.method === 'GET') {
+            const configs = await db.query.business_config.findMany();
+            return res.status(200).json({ configs });
+        }
             const [ordersCount] = await db.select({ count: sql`count(*)` }).from(schema.appointments);
             const [leadsCount] = await db.select({ count: sql`count(*)` }).from(schema.leads);
             
@@ -492,6 +495,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 await db.delete(table as any).where(eq((table as any).id, id));
                 return res.status(200).json({ success: true });
             }
+        }
+
+        // --- BUSINESS CONFIG (POST/PUT) ---
+        if (sec === 'config' && (req.method === 'POST' || req.method === 'PUT')) {
+            const { key, value } = req.body;
+            if (!key || value === undefined) return res.status(400).json({ error: 'Key and value required' });
+
+            await db.insert(schema.business_config)
+                .values({ key, value, updated_at: new Date() })
+                .onConflictDoUpdate({
+                    target: schema.business_config.key,
+                    set: { value, updated_at: new Date() }
+                });
+
+            return res.status(200).json({ success: true });
         }
 
         return res.status(405).json({ error: 'Method not allowed or Section missing' });
