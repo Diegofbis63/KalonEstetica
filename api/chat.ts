@@ -63,6 +63,26 @@ export default async function handler(req: Request) {
         };
 
         let fullAssistantMessage = "";
+        let masterImageSent = false;
+
+        // Si el lead ya está identificado desde el inicio de este request,
+        // nos preparamos para inyectar su catálogo en el primer mensaje.
+        if (leadId && messages.length < 5) {
+            try {
+                const configResult = await db.execute(sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`);
+                if (configResult && configResult.rows && configResult.rows.length > 0) {
+                    const catUrl = configResult.rows[0].value;
+                    console.log(`[STREAM] Cliente antiguo detectado. Inyectando catálogo proactivamente: ${catUrl}`);
+                    send({
+                        media_url: catUrl,
+                        choices: [{ delta: { content: "" } }]
+                    });
+                    masterImageSent = true;
+                }
+            } catch (e) {
+                console.error('[STREAM] Error en inyección proactiva:', e);
+            }
+        }
 
         try {
           for await (const part of result.fullStream) {
@@ -78,35 +98,30 @@ export default async function handler(req: Request) {
             if (part.type === 'tool-result') {
               const { toolName, result: toolResults } = part;
               
-              // 1. PERSISTENCIA DE IDENTIDAD Y AUTO-CATÁLOGO: 
-              // Capturamos el leadId y forzamos la imagen de categorías en un solo envío atómico
-              if (toolName === 'registrar_cliente' && (toolResults as any).leadId) {
-                const newLeadId = (toolResults as any).leadId;
-                console.log(`[STREAM] Nuevo Lead detectado: ${newLeadId}. Inyectando catálogo automático.`);
-                
-                // Intentamos buscar la imagen configurada por el usuario en el dashboard
-                let catUrl = 'https://vdyjlyovunbgeunryccl.supabase.co/storage/v1/object/public/kalon-assets/categorias.png';
-                try {
-                  // SQL Directo para evitar problemas de schema en el Edge
-                  const configResult = await db.execute(sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`);
-                  if (configResult && configResult.rows && configResult.rows.length > 0) {
-                    catUrl = configResult.rows[0].value;
-                    console.log(`[STREAM] Imagen maestra encontrada vía SQL: ${catUrl}`);
-                  }
-                } catch (dbErr) {
-                  console.error('[STREAM] Error buscando config maestra:', dbErr);
-                }
-                
-                // Enviamos AMBOS datos en el mismo objeto para evitar que el frontend ignore uno
-                send({ 
-                    leadId: newLeadId,
-                    media_url: catUrl,
-                    choices: [{ delta: { content: "" } }]
-                });
-                
-                // También guardamos el leadId en el log para debug
-                console.log(`[STREAM] Catálogo inyectado para lead ${newLeadId}: ${catUrl}`);
-              }
+               // 1. PERSISTENCIA DE IDENTIDAD Y AUTO-CATÁLOGO: 
+               if (toolName === 'registrar_cliente' && (toolResults as any).leadId) {
+                 const newLeadId = (toolResults as any).leadId;
+                 
+                 // Solo enviamos si no enviamos ya proactivamente arriba
+                 if (!masterImageSent) {
+                    let catUrl = 'https://vdyjlyovunbgeunryccl.supabase.co/storage/v1/object/public/kalon-assets/categorias.png';
+                    try {
+                        const configResult = await db.execute(sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`);
+                        if (configResult && configResult.rows && configResult.rows.length > 0) {
+                            catUrl = configResult.rows[0].value;
+                        }
+                    } catch (dbErr) {}
+                    
+                    send({ 
+                        leadId: newLeadId,
+                        media_url: catUrl,
+                        choices: [{ delta: { content: "" } }]
+                    });
+                 } else {
+                    // Si ya enviamos la imagen, solo enviamos la vinculación de ID
+                    send({ leadId: newLeadId });
+                 }
+               }
 
               // 2. INYECCIÓN DE IMÁGENES: Para Categorías y Servicios
               if (toolName === 'listar_categorias_principales' || toolName === 'consultar_servicios') {
