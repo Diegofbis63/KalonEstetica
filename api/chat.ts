@@ -1,7 +1,9 @@
 import { streamText } from 'ai';
 import { getKalonModel, getSystemPrompt } from './_services/ai.js';
 import { buildTools } from './_services/ai_tools.js';
-import { saveChatLog } from './_services/db.js';
+import { saveChatLog, db } from './_services/db.js';
+import * as schema from './_services/schema.js';
+import { eq } from 'drizzle-orm';
 
 /**
  * Chatbot KÂLON - Versión Edge Optimizada para compatibilidad SSE Legacy.
@@ -102,6 +104,9 @@ export default async function handler(req: Request) {
                     media_url: catUrl,
                     choices: [{ delta: { content: "" } }]
                 });
+                
+                // También guardamos el leadId en el log para debug
+                console.log(`[STREAM] Catálogo inyectado para lead ${newLeadId}: ${catUrl}`);
               }
 
               // 2. INYECCIÓN DE IMÁGENES: Para Categorías y Servicios
