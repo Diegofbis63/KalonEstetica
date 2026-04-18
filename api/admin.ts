@@ -179,6 +179,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const configs = await db.query.business_config.findMany();
             return res.status(200).json({ configs });
         }
+
+        // --- DASHBOARD / STATS ---
+        if (sec === 'dashboard' && req.method === 'GET') {
             const [ordersCount] = await db.select({ count: sql`count(*)` }).from(schema.appointments);
             const [leadsCount] = await db.select({ count: sql`count(*)` }).from(schema.leads);
             
