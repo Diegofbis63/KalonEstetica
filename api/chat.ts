@@ -93,7 +93,7 @@ export default async function handler(req: Request) {
                     console.log(`[STREAM] Usando imagen de catálogo MAESTRA de la DB: ${catUrl.substring(0, 50)}...`);
                   }
                 } catch (dbErr) {
-                  console.error('[STREAM] Error buscando config de imagen:', dbErr);
+                  console.error('[STREAM] Table business_config not found or error, using fallback');
                 }
                 
                 // Enviamos AMBOS datos en el mismo objeto para evitar que el frontend ignore uno

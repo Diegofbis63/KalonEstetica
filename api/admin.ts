@@ -176,8 +176,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         // --- BUSINESS CONFIG (GET) ---
         if (sec === 'config' && req.method === 'GET') {
-            const configs = await db.query.business_config.findMany();
-            return res.status(200).json({ configs });
+            try {
+                const configs = await db.query.business_config.findMany();
+                return res.status(200).json({ configs });
+            } catch (e) {
+                console.warn('[ADMIN] Table business_config not found, returning empty');
+                return res.status(200).json({ configs: [] });
+            }
         }
 
         // --- DASHBOARD / STATS ---
