@@ -3,7 +3,7 @@ import { getKalonModel, getSystemPrompt } from './_services/ai.js';
 import { buildTools } from './_services/ai_tools.js';
 import { saveChatLog, db } from './_services/db.js';
 import * as schema from './_services/schema.js';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 /**
  * Chatbot KÂLON - Versión Edge Optimizada para compatibilidad SSE Legacy.
@@ -87,15 +87,14 @@ export default async function handler(req: Request) {
                 // Intentamos buscar la imagen configurada por el usuario en el dashboard
                 let catUrl = 'https://vdyjlyovunbgeunryccl.supabase.co/storage/v1/object/public/kalon-assets/categorias.png';
                 try {
-                  const config = await db.query.business_config.findFirst({
-                    where: eq(schema.business_config.key, 'MAIN_CATALOG_IMAGE_URL')
-                  });
-                  if (config?.value) {
-                    catUrl = config.value;
-                    console.log(`[STREAM] Usando imagen de catálogo MAESTRA de la DB: ${catUrl.substring(0, 50)}...`);
+                  // SQL Directo para evitar problemas de schema en el Edge
+                  const configResult = await db.execute(sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`);
+                  if (configResult && configResult.rows && configResult.rows.length > 0) {
+                    catUrl = configResult.rows[0].value;
+                    console.log(`[STREAM] Imagen maestra encontrada vía SQL: ${catUrl}`);
                   }
                 } catch (dbErr) {
-                  console.error('[STREAM] Table business_config not found or error, using fallback');
+                  console.error('[STREAM] Error buscando config maestra:', dbErr);
                 }
                 
                 // Enviamos AMBOS datos en el mismo objeto para evitar que el frontend ignore uno
@@ -116,11 +115,9 @@ export default async function handler(req: Request) {
                 // Si es categorias principales y no tiene price_list_url, usamos la maestra
                 if (toolName === 'listar_categorias_principales' && !results.price_list_url) {
                     try {
-                        const config = await db.query.business_config.findFirst({
-                          where: eq(schema.business_config.key, 'MAIN_CATALOG_IMAGE_URL')
-                        });
-                        if (config?.value) {
-                          results.price_list_url = config.value;
+                        const configResult = await db.execute(sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`);
+                        if (configResult && configResult.rows && configResult.rows.length > 0) {
+                          results.price_list_url = configResult.rows[0].value;
                         }
                     } catch (e) {}
                 }
