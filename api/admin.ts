@@ -360,37 +360,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
         }
 
-        // --- CLIENTES (LEADS) ---
-        if (sec === 'leads') {
+        // --- CLIENTES COMPLETO (LEADS + STATS) ---
+        if (sec === 'leads' || sec === 'clients') {
             if (req.method === 'GET') {
                 const results = await db.select({
                     id: schema.leads.id,
-                    client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente sin nombre')`,
+                    client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente')`,
                     phone: sql<string>`COALESCE(${schema.leads.phone}, '')`,
                     status: sql<string>`COALESCE(${schema.leads.status}, 'new')`,
-                    is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, true)`,
                     created_at: schema.leads.created_at,
-                    intent_score: sql<number>`COALESCE(${schema.leads.intent_score}, 0)`,
-                    category_id: schema.leads.category_id,
-                    category_name: sql<string>`COALESCE(${schema.categories.name}, 'General')`,
                     last_interaction: schema.leads.last_interaction,
-                    last_message: schema.leads.last_interaction, // fallback
-                    updated_at: schema.leads.updated_at
+                    total_appointments: sql<number>`COUNT(${schema.appointments.id})::int`,
+                    pending_appointments: sql<number>`COUNT(CASE WHEN LOWER(${schema.appointments.status}) NOT IN ('realizada', 'completed', 'finalizada', 'canceled', 'cancelled', 'anulado', 'anulada', 'cancelado', 'cancelada') THEN 1 END)::int`,
+                    total_spent: sql<number>`SUM(COALESCE(${schema.appointments.total_price}, 0))::float`
                 })
                 .from(schema.leads)
-                .leftJoin(schema.categories, eq(schema.leads.category_id, schema.categories.id))
+                .leftJoin(schema.appointments, eq(schema.leads.id, schema.appointments.lead_id))
+                .groupBy(schema.leads.id, schema.leads.client_name, schema.leads.phone, schema.leads.status, schema.leads.created_at, schema.leads.last_interaction)
                 .orderBy(desc(schema.leads.last_interaction))
                 .limit(limit)
                 .offset(offset);
 
                 const [totalLeads] = await db.select({ count: sql`count(*)` }).from(schema.leads);
 
+                const formattedClients = results.map(c => ({
+                    id: c.id,
+                    client_name: c.client_name,
+                    name: c.client_name,
+                    phone: c.phone,
+                    email: null,
+                    status: c.status,
+                    created_at: c.created_at ? new Date(c.created_at).toISOString() : new Date().toISOString(),
+                    last_interaction: c.last_interaction ? new Date(c.last_interaction).toISOString() : null,
+                    last_appointment: c.last_interaction ? new Date(c.last_interaction).toISOString() : null,
+                    total_appointments: Number(c.total_appointments || 0),
+                    pending_appointments: Number(c.pending_appointments || 0),
+                    total_spent: Number(c.total_spent || 0),
+                    note: ''
+                }));
+
                 return res.status(200).json({ 
-                    leads: results.map(l => ({
-                        ...l,
-                        created_at: l.created_at ? new Date(l.created_at).toISOString() : undefined,
-                        updated_at: l.updated_at ? new Date(l.updated_at).toISOString() : null,
-                    })),
+                    leads: formattedClients, // para el dashboard
+                    clients: formattedClients, // para la solapa clientes
                     metadata: {
                         total: Number(totalLeads?.count || 0),
                         limit,
@@ -432,7 +443,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // --- STAFF MANAGEMENT ---
-        if (sec === 'staff') {
+        if (sec === 'staff' || (sec === 'catalogs' && catType === 'staff')) {
             if (req.method === 'GET') {
                 const results = await db.query.staff.findMany({
                     with: { specialties: true }

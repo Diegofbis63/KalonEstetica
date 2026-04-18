@@ -9,9 +9,9 @@
     { "source": "/api/categories", "destination": "/api/admin?section=catalogs&type=categories" },
     { "source": "/api/services", "destination": "/api/admin?section=catalogs&type=services" },
     { "source": "/api/staff", "destination": "/api/admin?section=catalogs&type=staff" },
-    { "source": "/api/clients", "destination": "/api/leads_master?section=clients" },
-    { "source": "/api/leads/identify", "destination": "/api/leads_master?section=identify" },
-    { "source": "/api/leads/chat", "destination": "/api/leads_master?section=tracking" },
+    { "source": "/api/clients", "destination": "/api/admin?section=clients" },
+    { "source": "/api/leads/identify", "destination": "/api/admin?section=identify" },
+    { "source": "/api/leads/chat", "destination": "/api/admin?section=tracking" },
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
