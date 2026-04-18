@@ -76,10 +76,18 @@ export default async function handler(req: Request) {
             if (part.type === 'tool-result') {
               const { toolName, result: toolResults } = part;
               
-              // 1. PERSISTENCIA DE IDENTIDAD: Capturamos el leadId si se acaba de crear
+              // 1. PERSISTENCIA DE IDENTIDAD Y AUTO-CATÁLOGO: 
+              // Capturamos el leadId y forzamos la imagen de categorías apenas se registra
               if (toolName === 'registrar_cliente' && (toolResults as any).leadId) {
-                console.log(`[STREAM] Nuevo Lead detectado: ${(toolResults as any).leadId}`);
+                console.log(`[STREAM] Nuevo Lead detectado: ${(toolResults as any).leadId}. Inyectando catálogo automático.`);
                 send({ leadId: (toolResults as any).leadId });
+                
+                // Forzamos la imagen de categorías principales INMEDIATAMENTE
+                const catUrl = 'https://vdyjlyovunbgeunryccl.supabase.co/storage/v1/object/public/kalon-assets/categorias.png';
+                send({
+                    media_url: catUrl,
+                    choices: [{ delta: { content: "" } }]
+                });
               }
 
               // 2. INYECCIÓN DE IMÁGENES: Para Categorías y Servicios
