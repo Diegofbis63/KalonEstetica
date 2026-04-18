@@ -562,12 +562,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const { key, value } = req.body;
             if (!key || value === undefined) return res.status(400).json({ error: 'Key and value required' });
 
-            await db.insert(schema.business_config)
-                .values({ key, value, updated_at: new Date() })
-                .onConflictDoUpdate({
-                    target: schema.business_config.key,
-                    set: { value, updated_at: new Date() }
-                });
+            try {
+                await db.insert(schema.business_config)
+                    .values({ key, value, updated_at: new Date() })
+                    .onConflictDoUpdate({
+                        target: schema.business_config.key,
+                        set: { value, updated_at: new Date() }
+                    });
+            } catch (err: any) {
+                // Si falla porque la tabla no existe, intentamos CREARLA
+                if (err.message?.includes('relation "business_config" does not exist')) {
+                    console.log('[ADMIN] Creating business_config table on demand...');
+                    await db.execute(sql`
+                        CREATE TABLE IF NOT EXISTS business_config (
+                            key TEXT PRIMARY KEY,
+                            value TEXT NOT NULL,
+                            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                        );
+                    `);
+                    // Re-intentamos el insert
+                    await db.insert(schema.business_config)
+                        .values({ key, value, updated_at: new Date() })
+                        .onConflictDoUpdate({
+                            target: schema.business_config.key,
+                            set: { value, updated_at: new Date() }
+                        });
+                } else {
+                    throw err; // Otros errores los dejamos pasar al catch general
+                }
+            }
 
             return res.status(200).json({ success: true });
         }
