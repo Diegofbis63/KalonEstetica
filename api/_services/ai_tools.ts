@@ -140,16 +140,20 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                         return { disponible: false, error: 'No seleccionaste servicios válidos.' };
                     }
 
-                    // Calculamos duración total y usamos la categoría del primer servicio para buscar profesionales
                     const totalDuration = selected.reduce((acc, s) => acc + (s.duration_min || 30), 0);
-                    const categoryId = selected[0].category_id || '';
+                    
+                    // Lógica de Combos: Obtenemos todas las categorías únicas involucradas
+                    const uniqueCategories = [...new Set(selected.map(s => s.category_id))];
+                    const primaryCategoryId = uniqueCategories[0] || '';
 
                     const start = new Date(fecha + "T00:00:00");
                     const end = new Date(start);
                     end.setDate(end.getDate() + 1);
 
+                    // Buscamos disponibilidad basándonos en la duración total
+                    // (Nota: Esto asume que el local maneja turnos secuenciales o que la función de DB resuelve el solapamiento)
                     const [slots, allStaff] = await Promise.all([
-                        getAvailableSlotsFromDB(categoryId, start, end, totalDuration),
+                        getAvailableSlotsFromDB(primaryCategoryId, start, end, totalDuration),
                         getAllStaff()
                     ]);
                     
@@ -167,11 +171,11 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                                 hora: d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }),
                                 staff_name: staffMember?.name || "Especialista",
                                 staff_role: staffMember?.role || "Staff",
-                                staff_id: s.staff_id
+                                staff_id: s.staff_id,
+                                total_duration: totalDuration
                             };
                         }),
-                        mensaje: null as string | null,
-                        error: null as string | null
+                        mensaje: uniqueCategories.length > 1 ? `Coordinando disponibilidad para ${uniqueCategories.length} especialidades...` : null
                     };
                 } catch (err) {
                     console.error('[Tool:consultar_disponibilidad] ERROR:', err);
