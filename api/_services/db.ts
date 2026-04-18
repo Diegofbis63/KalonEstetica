@@ -209,11 +209,11 @@ export async function updateLeadState(leadId: string, state: ConvState) {
 }
 
 // --- SLOTS ---
-export async function getAvailableSlotsFromDB(categoryId: string, startDate: Date, endDate: Date): Promise<any[]> {
-    console.log(`[db.ts] Calling availability DB for category: ${categoryId}`);
+export async function getAvailableSlotsFromDB(categoryId: string, startDate: Date, endDate: Date, minDuration: number = 30): Promise<any[]> {
+    console.log(`[db.ts] Calling availability DB for category: ${categoryId} (Min Duration: ${minDuration})`);
     const query = drizzleSql`
         SELECT slot_time as "slot_time", professional_id as "staff_id"
-        FROM get_available_slots(${categoryId}, ${startDate.toISOString()}, ${endDate.toISOString()}, 30)
+        FROM get_available_slots(${categoryId}, ${startDate.toISOString()}, ${endDate.toISOString()}, ${minDuration})
         ORDER BY slot_time ASC
     `;
     const results = await withTimeout(db.execute(query), 5000, { 

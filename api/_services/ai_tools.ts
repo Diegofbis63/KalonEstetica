@@ -123,27 +123,33 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
         }),
 
         consultar_disponibilidad: tool({
-            description: 'Busca horarios disponibles. REQUIERE IDENTIFICACIÓN PREVIA.',
+            description: 'Busca horarios disponibles basándose en los servicios elegidos. REQUIERE IDENTIFICACIÓN.',
             parameters: z.object({
-                categoriaId: z.string().describe('UUID de la categoría del servicio'),
+                serviceIds: z.array(z.string()).describe('Lista de IDs de los servicios en el carrito'),
                 fecha: z.string().describe('Fecha en formato YYYY-MM-DD'),
             }),
-            execute: async ({ categoriaId, fecha }: { categoriaId: string; fecha: string }) => {
+            execute: async ({ serviceIds, fecha }: { serviceIds: string[]; fecha: string }) => {
                 if (!currentLeadId) {
-                    return { disponible: false, error: 'Primero necesito tu nombre y apellido para ver disponibilidad.' };
+                    return { disponible: false, error: 'Primero necesito tu nombre para ver disponibilidad.' };
                 }
                 try {
-                    const staffMembers = await getStaffByCategory(categoriaId);
-                    if (staffMembers.length === 0) {
-                        return { disponible: false, mensaje: 'No hay profesionales para este servicio.', fecha: null, horarios: [], error: null };
+                    const services = await getActiveServices();
+                    const selected = services.filter(s => serviceIds.includes(s.id));
+                    
+                    if (selected.length === 0) {
+                        return { disponible: false, error: 'No seleccionaste servicios válidos.' };
                     }
+
+                    // Calculamos duración total y usamos la categoría del primer servicio para buscar profesionales
+                    const totalDuration = selected.reduce((acc, s) => acc + (s.duration_min || 30), 0);
+                    const categoryId = selected[0].category_id || '';
 
                     const start = new Date(fecha + "T00:00:00");
                     const end = new Date(start);
                     end.setDate(end.getDate() + 1);
 
                     const [slots, allStaff] = await Promise.all([
-                        getAvailableSlotsFromDB(categoriaId, start, end),
+                        getAvailableSlotsFromDB(categoryId, start, end, totalDuration),
                         getAllStaff()
                     ]);
                     
