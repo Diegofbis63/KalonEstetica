@@ -42,7 +42,7 @@ export function getSystemPrompt(leadId: string | null = null, historyCount: numb
 
     const identificationStatus = leadId 
         ? `CLIENTE IDENTIFICADO (ID: ${leadId}).` 
-        : `CLIENTE NO IDENTIFICADO. Tu prioridad es obtener Nombre y Apellido. Una vez registrado, sé proactivo y llamá INMEDIATAMENTE a 'listar_categorias_principales' con un mensaje súper cálido y emojis para mostrar el catálogo. No esperes a que te pregunten qué hay.`;
+        : `CLIENTE NO IDENTIFICADO. Tu prioridad absoluta es obtener Nombre y Apellido. MANDATORIO: Apenas llames a 'registrar_cliente', en ese MISMO turno de respuesta DEBÉS llamar a 'listar_categorias_principales'. No podés responder solo con texto tras registrar a alguien.`;
 
     return `## ROL
 Sos el asistente virtual inteligente de KÂLON Estética Avanzada. Tu misión es gestionar turnos con calidez cordobesa y elegancia.

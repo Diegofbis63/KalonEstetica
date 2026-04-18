@@ -47,7 +47,7 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                         success: true, 
                         leadId: newLead.id, 
                         nombre: fullName,
-                        mensaje: `REGISTRO EXITOSO: ${fullName}` 
+                        mensaje: `REGISTRO EXITOSO para ${fullName}. MANDATORIO: Ahora debés llamar a 'listar_categorias_principales' inmediatamente para mostrar el catálogo.` 
                     };
                 } catch (err) {
                     console.error('[Tool:registrar_cliente] ERROR:', err);
