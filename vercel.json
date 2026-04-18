@@ -12,7 +12,10 @@
     { "source": "/api/clients", "destination": "/api/admin?section=clients" },
     { "source": "/api/leads/identify", "destination": "/api/admin?section=identify" },
     { "source": "/api/leads/chat", "destination": "/api/admin?section=tracking" },
-    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/api/leads", "destination": "/api/admin?section=leads" },
+    { "source": "/api/appointments", "destination": "/api/admin?section=appointments" },
+    { "source": "/api/dashboard", "destination": "/api/admin?section=dashboard" },
+    { "source": "/api/(.*)", "destination": "/api/admin?section=$1" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

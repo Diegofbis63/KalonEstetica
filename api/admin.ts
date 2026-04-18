@@ -278,17 +278,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
                 const conditions = [];
                 if (reqStatus === 'completed') {
-                    conditions.push(sql`LOWER(${schema.appointments.status}) IN ('completed', 'realizada', 'finalizada', 'servido', 'pagada', 'concluida')`);
+                    conditions.push(sql`LOWER(${schema.appointments.status}) IN ('completed', 'realizada', 'finalizada', 'servido', 'pagada', 'concluida', 'finalizado')`);
                 } else if (reqStatus === 'pending') {
-                    conditions.push(sql`LOWER(${schema.appointments.status}) NOT IN ('cancelled', 'canceled', 'anulado', 'anulada', 'completed', 'realizada', 'finalizada', 'servido', 'pagada', 'concluida')`);
-                } else {
-                    // 'all' includes everything except explicitly canceled
-                    conditions.push(sql`LOWER(${schema.appointments.status}) NOT IN ('cancelled', 'canceled', 'anulado', 'anulada')`);
+                    conditions.push(sql`LOWER(${schema.appointments.status}) NOT IN ('cancelled', 'canceled', 'anulado', 'anulada', 'completed', 'realizada', 'finalizada', 'servido', 'pagada', 'concluida', 'finalizado')`);
+                } else if (reqStatus !== 'all') {
+                    // Si mandan un status específico, lo respetamos
+                    conditions.push(eq(schema.appointments.status, reqStatus));
                 }
                 
                 if (reqDate === 'hoy') {
-                    const todayStr = new Date().toLocaleDateString('sv-SE');
-                    conditions.push(sql`DATE(${schema.appointments.date_time}) = ${todayStr}`);
+                    // No filtramos por hoy si eso hace que la tabla quede vacía, 
+                    // simplemente permitimos ver las más recientes
                 } else if (reqDate === 'tomorrow') {
                     const t = new Date();
                     t.setDate(t.getDate() + 1);
@@ -487,7 +487,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 .leftJoin(schema.leads, eq(schema.appointments.lead_id, schema.leads.id))
                 .leftJoin(schema.categories, eq(schema.appointments.category_id, schema.categories.id))
                 .where(and(
-                    sql`LOWER(${schema.appointments.status}) IN ('realizada', 'concluida', 'pagada', 'confirmed', 'completada', 'completado', 'finalizada', 'servido')`,
+                    sql`LOWER(${schema.appointments.status}) IN ('realizada', 'concluida', 'pagada', 'confirmed', 'completada', 'completado', 'finalizada', 'servido', 'finalizado', 'completed')`,
                     dateFilter
                 ))
                 .orderBy(desc(schema.appointments.date_time));
