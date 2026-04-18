@@ -47,7 +47,7 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                         success: true, 
                         leadId: newLead.id, 
                         nombre: fullName,
-                        mensaje: `¡Excelente, ${fullName}! Ya te anoté en mi agenda. ¿En qué puedo ayudarte hoy?` 
+                        mensaje: `¡Excelente, ${fullName}! Ya te anoté en mi agenda. Dame un segundo que te muestro nuestras especialidades:` 
                     };
                 } catch (err) {
                     console.error('[Tool:registrar_cliente] ERROR:', err);
