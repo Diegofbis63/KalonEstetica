@@ -44,6 +44,10 @@ export default async function handler(req: Request) {
     const system = getSystemPrompt(leadId || null, messages.length);
     const aiTools = buildTools(leadId || null, 'kalon-estetica', initId || null);
 
+    // Timeout de 25s para que nunca se cuelgue
+    const abortCtrl = new AbortController();
+    const aiTimeout = setTimeout(() => abortCtrl.abort(), 25000);
+
     const result = streamText({
       model,
       system,
@@ -53,6 +57,7 @@ export default async function handler(req: Request) {
       })),
       tools: aiTools,
       maxSteps: 5,
+      abortSignal: abortCtrl.signal,
     });
 
     const encoder = new TextEncoder();
@@ -63,10 +68,6 @@ export default async function handler(req: Request) {
         };
 
         let fullAssistantMessage = "";
-
-        // Removida inyección proactiva para evitar duplicados. 
-        // El AI se encarga de llamar a las herramientas según el flujo.
-
 
         try {
           for await (const part of result.fullStream) {
@@ -79,13 +80,16 @@ export default async function handler(req: Request) {
               });
             }
 
+            if (part.type === 'error') {
+              console.error('[api/chat] AI Error Part:', part.error);
+            }
+
             if (part.type === 'tool-result') {
               const { toolName, result: toolResults } = part;
               
                // 1. PERSISTENCIA DE IDENTIDAD Y AUTO-CATÁLOGO: 
                if (toolName === 'registrar_cliente' && (toolResults as any).leadId) {
                  const newLeadId = (toolResults as any).leadId;
-                 // Ahora solo vinculamos el ID. El AI decide qué catálogo mostrar según las reglas.
                  send({ leadId: newLeadId });
                }
 
@@ -129,7 +133,6 @@ export default async function handler(req: Request) {
                         const host = req.headers.get('host') || 'kalon-estetica.vercel.app';
                         const protocol = host.includes('localhost') ? 'http' : 'https';
                         
-                        // Usamos una URL absoluta para asegurar que el componente Img la encuentre
                         const satoriUrl = `${protocol}://${host}/api/satori-image?title=${encodeURIComponent(title)}&data=${encodedData}`;
 
                         console.log(`[CHAT LOG] Generando imagen SATORI para ${toolName}: ${satoriUrl.substring(0, 100)}...`);
@@ -146,6 +149,18 @@ export default async function handler(req: Request) {
             }
           }
 
+          clearTimeout(aiTimeout);
+
+          // Si la IA no generó texto, enviar mensaje de fallback
+          if (!fullAssistantMessage) {
+            console.error('[api/chat] ALERTA: La IA no generó texto. Enviando fallback.');
+            send({
+              choices: [{
+                delta: { content: "Disculpá, tuve un problema técnico momentáneo. ¿Podés repetirme lo que me decías? ✨" }
+              }]
+            });
+          }
+
           // Log assistant message (Fire and Forget)
           if (fullAssistantMessage && leadId) {
             saveChatLog(leadId, 'assistant', fullAssistantMessage).catch(err =>
@@ -156,8 +171,21 @@ export default async function handler(req: Request) {
           controller.enqueue(encoder.encode('data: [DONE]\n\n'));
           controller.close();
         } catch (error) {
+          clearTimeout(aiTimeout);
           console.error('[api/chat] Stream Error:', error);
-          controller.error(error);
+          
+          // Enviar error visible al usuario en vez de morir silenciosamente
+          try {
+            send({
+              choices: [{
+                delta: { content: "Disculpá, ocurrió un error momentáneo. Por favor intentá de nuevo. ✨" }
+              }]
+            });
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            controller.close();
+          } catch (e) {
+            controller.error(error);
+          }
         }
       },
     });
