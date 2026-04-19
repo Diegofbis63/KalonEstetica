@@ -57,6 +57,7 @@ export default async function handler(req: Request) {
       })),
       tools: aiTools,
       maxSteps: 5,
+      maxTokens: 2048,
       abortSignal: abortCtrl.signal,
     });
 
