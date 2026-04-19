@@ -9,8 +9,11 @@ import {
     type ContactInfo,
     createAppointment,
     getServicesByCategory,
-    getAllStaff
+    getAllStaff,
+    db,
+    schema
 } from './db.js';
+import { eq } from 'drizzle-orm';
 
 /**
  * Herramientas del Chatbot KÂLON.
@@ -35,14 +38,13 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                         source: "web_chatbot",
                         initId: initId || null
                     };
-                    const newLead = await createLead(orgId, fullName, contactInfo);
+                    const newLead = await createLead(orgId, fullName, contactInfo) as any;
                     
                     if (!newLead) {
-                        return { success: false, error: 'Hubo un problemita guardando tus datos. ¿Podrías decirme tu nombre de nuevo? Perdón la molestia.' };
+                        return { success: false, error: 'Hubo un problemita guardando tus datos. ¿Podrías decirme tu nombre de nuevo? ✨' };
                     }
 
                     currentLeadId = newLead.id; 
-                    console.log(`[Tool:registrar_cliente] Lead creado: ${newLead.id} (${fullName})`);
                     return { 
                         success: true, 
                         leadId: newLead.id, 
@@ -201,6 +203,43 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
             }
         }),
 
+        modificar_carrito: tool({
+            description: 'Agrega o quita servicios del carrito del cliente. Usalo cada vez que el cliente elija un servicio de la imagen.',
+            parameters: z.object({
+                serviceIds: z.array(z.string()).describe('Lista completa de IDs de servicios que deben quedar en el carrito'),
+                accion: z.enum(['agregar', 'quitar', 'reemplazar']).describe('Qué acción se está realizando')
+            }),
+            execute: async ({ serviceIds, accion }: { serviceIds: string[]; accion: string }) => {
+                if (!currentLeadId) {
+                    return { success: false, error: 'Primero necesito registrarte para manejar tu carrito.' };
+                }
+                try {
+                    const services = await getActiveServices();
+                    const selected = services.filter(s => serviceIds.includes(s.id));
+                    
+                    const newState = {
+                        selectedServiceIds: serviceIds,
+                        clientName: null, // Se puede expandir
+                        stage: 'selecting_services'
+                    };
+
+                    await db.update(schema.leads)
+                        .set({ current_state: newState, updated_at: new Date() })
+                        .where(eq(schema.leads.id, currentLeadId));
+
+                    return { 
+                        success: true, 
+                        total_items: selected.length,
+                        servicios: selected.map(s => s.title),
+                        mensaje: `Carrito actualizado (${accion}). Tenés ${selected.length} servicios seleccionados.`
+                    };
+                } catch (err) {
+                    console.error('[Tool:modificar_carrito] ERROR:', err);
+                    return { success: false, error: 'No se pudo actualizar el carrito.' };
+                }
+            }
+        }),
+
         agendar_turno: tool({
             description: 'Confirma y agenda un turno en la base de datos.',
             parameters: z.object({
@@ -229,6 +268,11 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
 
                     await createAppointment(currentLeadId, orgId, dateTimeIso, catNames, totalPrice, totalDuration, selected);
                     
+                    // Limpiar carrito después de agendar
+                    await db.update(schema.leads)
+                        .set({ current_state: null, updated_at: new Date() })
+                        .where(eq(schema.leads.id, currentLeadId));
+
                     return {
                         success: true,
                         mensaje: `Turno confirmado para ${catNames}`,

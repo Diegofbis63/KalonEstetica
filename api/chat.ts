@@ -56,7 +56,7 @@ export default async function handler(req: Request) {
         content: m.content
       })),
       tools: aiTools,
-      maxSteps: 5,
+      maxSteps: 10,
       maxTokens: 2048,
       abortSignal: abortCtrl.signal,
     });
@@ -70,11 +70,13 @@ export default async function handler(req: Request) {
 
         let fullAssistantMessage = "";
         let currentLeadId = leadId;
+        let hasSentContent = false;
 
         try {
           for await (const part of result.fullStream) {
             if (part.type === 'text-delta') {
               fullAssistantMessage += part.textDelta;
+              hasSentContent = true;
               send({
                 choices: [{
                   delta: { content: part.textDelta }
@@ -83,11 +85,12 @@ export default async function handler(req: Request) {
             }
 
             if (part.type === 'error') {
-              console.error('[api/chat] AI Error Part:', part.error);
+              console.error('[api/chat] AI Internal Error Part:', part.error);
             }
 
             if (part.type === 'tool-result') {
               const { toolName, result: toolResults } = part;
+              hasSentContent = true; // Si ejecutó un tool, ya hay "contenido" visual
               
                // 1. PERSISTENCIA DE IDENTIDAD Y AUTO-CATÁLOGO: 
                if (toolName === 'registrar_cliente' && (toolResults as any).leadId) {
@@ -119,7 +122,6 @@ export default async function handler(req: Request) {
                 const savedUrl = results.price_list_url;
                 
                 if (savedUrl) {
-                    console.log(`[CHAT LOG] Usando imagen GUARDADA para ${toolName}: ${savedUrl}`);
                     send({
                         media_url: savedUrl,
                         choices: [{ delta: { content: "" } }]
@@ -143,14 +145,10 @@ export default async function handler(req: Request) {
                         
                         const satoriUrl = `${protocol}://${host}/api/satori-image?title=${encodeURIComponent(title)}&data=${encodedData}`;
 
-                        console.log(`[CHAT LOG] Generando imagen SATORI para ${toolName}: ${satoriUrl.substring(0, 100)}...`);
-
                         send({
                             media_url: satoriUrl,
                             choices: [{ delta: { content: "" } }]
                         });
-                    } else {
-                        console.warn(`[CHAT LOG] No se pudo generar imagen para ${toolName} (sin items)`);
                     }
                 }
               }
@@ -159,9 +157,8 @@ export default async function handler(req: Request) {
 
           clearTimeout(aiTimeout);
 
-          // Si la IA no generó texto, enviar mensaje de fallback
-          if (!fullAssistantMessage) {
-            console.error('[api/chat] ALERTA: La IA no generó texto. Enviando fallback.');
+          // Si la IA no generó texto y no envió imágenes, enviar mensaje de fallback
+          if (!fullAssistantMessage && !hasSentContent) {
             send({
               choices: [{
                 delta: { content: "Disculpá, tuve un problema técnico momentáneo. ¿Podés repetirme lo que me decías? ✨" }
@@ -182,18 +179,20 @@ export default async function handler(req: Request) {
           clearTimeout(aiTimeout);
           console.error('[api/chat] Stream Error:', error);
           
-          // Enviar error visible al usuario en vez de morir silenciosamente
+          if (!hasSentContent) {
+            try {
+              send({
+                choices: [{
+                  delta: { content: "Disculpá, ocurrió un error momentáneo. Por favor intentá de nuevo. ✨" }
+                }]
+              });
+            } catch (e) {}
+          }
+          
           try {
-            send({
-              choices: [{
-                delta: { content: "Disculpá, ocurrió un error momentáneo. Por favor intentá de nuevo. ✨" }
-              }]
-            });
             controller.enqueue(encoder.encode('data: [DONE]\n\n'));
             controller.close();
-          } catch (e) {
-            controller.error(error);
-          }
+          } catch (e) {}
         }
       },
     });

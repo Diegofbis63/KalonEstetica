@@ -1,6 +1,7 @@
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import * as schema from './schema.js';
+export { schema };
 import { eq, and, sql as drizzleSql, asc, desc, like, or } from 'drizzle-orm';
 import type { ConvState, Category, Service } from './schema.js';
 
