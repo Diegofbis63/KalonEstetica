@@ -47,7 +47,7 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                         success: true, 
                         leadId: newLead.id, 
                         nombre: fullName,
-                        mensaje: `¡Hola ${fullName}! Ya estás registrada en KÂLON. OBLIGATORIO: Llamá a 'listar_categorias_principales' ahora mismo para mostrar el catálogo.` 
+                        result: "CLIENTE_REGISTRADO_EXITOSAMENTE"
                     };
                 } catch (err) {
                     console.error('[Tool:registrar_cliente] ERROR:', err);
