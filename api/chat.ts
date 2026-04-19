@@ -69,6 +69,7 @@ export default async function handler(req: Request) {
         };
 
         let fullAssistantMessage = "";
+        let currentLeadId = leadId;
 
         try {
           for await (const part of result.fullStream) {
@@ -91,7 +92,13 @@ export default async function handler(req: Request) {
                // 1. PERSISTENCIA DE IDENTIDAD Y AUTO-CATÁLOGO: 
                if (toolName === 'registrar_cliente' && (toolResults as any).leadId) {
                  const newLeadId = (toolResults as any).leadId;
+                 currentLeadId = newLeadId;
                  send({ leadId: newLeadId });
+
+                 // Si acabamos de registrar al cliente, guardamos el mensaje del usuario que inició esto
+                 if (lastUserMessage?.content) {
+                    saveChatLog(newLeadId, 'user', lastUserMessage.content).catch(e => {});
+                 }
                }
 
               // 2. INYECCIÓN DE IMÁGENES: Para Categorías y Servicios
@@ -163,8 +170,8 @@ export default async function handler(req: Request) {
           }
 
           // Log assistant message (Fire and Forget)
-          if (fullAssistantMessage && leadId) {
-            saveChatLog(leadId, 'assistant', fullAssistantMessage).catch(err =>
+          if (fullAssistantMessage && currentLeadId) {
+            saveChatLog(currentLeadId, 'assistant', fullAssistantMessage).catch(err =>
               console.error('[api/chat] Error logging assistant message:', err)
             );
           }
