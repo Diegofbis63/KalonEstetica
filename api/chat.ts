@@ -63,26 +63,10 @@ export default async function handler(req: Request) {
         };
 
         let fullAssistantMessage = "";
-        let masterImageSent = false;
 
-        // Si el lead ya está identificado desde el inicio de este request,
-        // nos preparamos para inyectar su catálogo en el primer mensaje.
-        if (leadId && messages.length < 5) {
-            try {
-                const configResult = await db.execute(sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`);
-                if (configResult && configResult.rows && configResult.rows.length > 0) {
-                    const catUrl = configResult.rows[0].value;
-                    console.log(`[STREAM] Cliente antiguo detectado. Inyectando catálogo proactivamente: ${catUrl}`);
-                    send({
-                        media_url: catUrl,
-                        choices: [{ delta: { content: "" } }]
-                    });
-                    masterImageSent = true;
-                }
-            } catch (e) {
-                console.error('[STREAM] Error en inyección proactiva (DB):', e);
-            }
-        }
+        // Removida inyección proactiva para evitar duplicados. 
+        // El AI se encarga de llamar a las herramientas según el flujo.
+
 
         try {
           for await (const part of result.fullStream) {
@@ -101,30 +85,8 @@ export default async function handler(req: Request) {
                // 1. PERSISTENCIA DE IDENTIDAD Y AUTO-CATÁLOGO: 
                if (toolName === 'registrar_cliente' && (toolResults as any).leadId) {
                  const newLeadId = (toolResults as any).leadId;
-                 
-                 // Solo enviamos si no enviamos ya proactivamente arriba
-                 if (!masterImageSent) {
-                    let catUrl = 'https://vdyljlyovunbgeunrycc1.supabase.co/storage/v1/object/public/kalon-assets/categorias.png';
-                    try {
-                        const configResult = await db.execute(sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`);
-                        if (configResult && configResult.rows && configResult.rows.length > 0) {
-                            catUrl = configResult.rows[0].value;
-                        }
-                    } catch (dbErr) {
-                        console.error('[STREAM] Error buscando config de catálogo:', dbErr);
-                    }
-                    
-                    console.log(`[STREAM] Enviando catálogo a cliente nuevo: ${catUrl}`);
-                    send({ 
-                        leadId: newLeadId,
-                        media_url: catUrl,
-                        choices: [{ delta: { content: "" } }]
-                    });
-                    masterImageSent = true;
-                 } else {
-                    // Si ya enviamos la imagen, solo enviamos la vinculación de ID
-                    send({ leadId: newLeadId });
-                 }
+                 // Ahora solo vinculamos el ID. El AI decide qué catálogo mostrar según las reglas.
+                 send({ leadId: newLeadId });
                }
 
               // 2. INYECCIÓN DE IMÁGENES: Para Categorías y Servicios
