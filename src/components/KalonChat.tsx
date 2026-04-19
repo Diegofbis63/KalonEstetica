@@ -7,8 +7,8 @@ import { toast } from "sonner";
 type Msg = { 
   role: "user" | "assistant"; 
   content: string; 
-  mediaUrl?: string;
   media_url?: string;
+  media_urls?: string[];
 };
 
 type ChatStep = "identifying" | "phone_input" | "chatting";
@@ -128,13 +128,15 @@ export default function KalonChat() {
       onMedia: (url) => setMessages(prev => {
         const last = prev[prev.length - 1];
         if (last && last.role === 'assistant') {
-          // Actualizamos el existente preservando contenido
-          return prev.map((m, idx) => 
-            idx === prev.length - 1 ? { ...m, media_url: url } : m
-          );
+          const currentUrls = last.media_urls || (last.media_url ? [last.media_url] : []);
+          if (!currentUrls.includes(url)) {
+            return prev.map((m, idx) => 
+              idx === prev.length - 1 ? { ...m, media_urls: [...currentUrls, url], media_url: url } : m
+            );
+          }
+          return prev;
         }
-        // Si no hay mensaje de asistente previo, creamos uno nuevo
-        return [...prev, { role: 'assistant', content: '', media_url: url }];
+        return [...prev, { role: 'assistant', content: '', media_urls: [url], media_url: url }];
       }),
       onDone: () => setIsLoading(false),
       onError: (err) => {
@@ -282,15 +284,20 @@ export default function KalonChat() {
         {step === "chatting" && messages.map((m, i) => (
           <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
             <div className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${m.role === "user" ? "bg-gold/15 border border-gold/20 text-cream" : "bg-cream/5 border border-cream/8 text-cream/70"}`}>
-              {(m.mediaUrl || m.media_url) && (
-                <div className="mb-2 rounded-lg overflow-hidden border border-white/10">
-                  <img 
-                    src={m.mediaUrl || m.media_url} 
-                    alt="Adjunto" 
-                    className="max-w-full h-auto cursor-pointer hover:opacity-90"
-                    onClick={() => setZoomImage(m.mediaUrl || m.media_url || null)}
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                  />
+              {/* Renderización de Imágenes (Soporte Multiple) */}
+              {((m.media_urls && m.media_urls.length > 0) || m.media_url) && (
+                <div className={`grid gap-2 mb-3 ${m.media_urls && m.media_urls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                  {(m.media_urls || [m.media_url]).map((url, idx) => url && (
+                    <div key={idx} className="rounded-lg overflow-hidden border border-white/10 bg-noir/20 group relative">
+                      <img 
+                        src={url} 
+                        alt={`Adjunto ${idx + 1}`} 
+                        className="w-full h-auto cursor-zoom-in hover:opacity-90 transition-opacity"
+                        onClick={() => setZoomImage(url)}
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    </div>
+                  ))}
                 </div>
               )}
               {m.role === "assistant" ? (
