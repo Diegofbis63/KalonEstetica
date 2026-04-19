@@ -80,7 +80,7 @@ export default async function handler(req: Request) {
                     masterImageSent = true;
                 }
             } catch (e) {
-                console.error('[STREAM] Error en inyección proactiva:', e);
+                console.error('[STREAM] Error en inyección proactiva (DB):', e);
             }
         }
 
@@ -104,19 +104,23 @@ export default async function handler(req: Request) {
                  
                  // Solo enviamos si no enviamos ya proactivamente arriba
                  if (!masterImageSent) {
-                    let catUrl = 'https://vdyjlyovunbgeunryccl.supabase.co/storage/v1/object/public/kalon-assets/categorias.png';
+                    let catUrl = 'https://vdyljlyovunbgeunrycc1.supabase.co/storage/v1/object/public/kalon-assets/categorias.png';
                     try {
                         const configResult = await db.execute(sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`);
                         if (configResult && configResult.rows && configResult.rows.length > 0) {
                             catUrl = configResult.rows[0].value;
                         }
-                    } catch (dbErr) {}
+                    } catch (dbErr) {
+                        console.error('[STREAM] Error buscando config de catálogo:', dbErr);
+                    }
                     
+                    console.log(`[STREAM] Enviando catálogo a cliente nuevo: ${catUrl}`);
                     send({ 
                         leadId: newLeadId,
                         media_url: catUrl,
                         choices: [{ delta: { content: "" } }]
                     });
+                    masterImageSent = true;
                  } else {
                     // Si ya enviamos la imagen, solo enviamos la vinculación de ID
                     send({ leadId: newLeadId });

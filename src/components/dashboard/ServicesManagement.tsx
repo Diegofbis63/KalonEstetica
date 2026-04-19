@@ -571,6 +571,17 @@ export default function ServicesManagement() {
                      <Sparkles className="w-3 h-3" /> Actualizar
                    </button>
                    <button 
+                    onClick={() => {
+                        if (confirm("¿Estás seguro de eliminar el Catálogo Maestro?")) {
+                            saveConfigMutation.mutate({ key: 'MAIN_CATALOG_IMAGE_URL', value: '' });
+                            toast.success("Catálogo Maestro eliminado");
+                        }
+                    }}
+                    className="text-[9px] font-bold text-rose-500/60 hover:text-rose-500 flex items-center gap-1 transition-colors"
+                   >
+                     <Trash2 className="w-3 h-3" /> Borrar
+                   </button>
+                   <button 
                     onClick={() => { setPreviewUrl(mainCatalogUrl); setIsPreviewModalOpen(true); }}
                     className="text-[9px] font-bold text-cream/40 hover:text-cream flex items-center gap-1 transition-colors"
                    >

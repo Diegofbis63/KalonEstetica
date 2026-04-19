@@ -141,7 +141,9 @@ export async function generateMenuImage(title: string, items: { label: string, p
                                                     type: 'div', 
                                                     props: { 
                                                         style: { display: 'flex', color: '#c5a363', fontWeight: 700, fontSize: '18px', marginLeft: '20px' }, 
-                                                        children: `$${item.price}` 
+                                                        children: typeof item.price === 'number' || !isNaN(Number(item.price.toString().replace(/[,.]/g, ''))) 
+                                                            ? `$${item.price}` 
+                                                            : item.price.toString()
                                                     } 
                                                 } : { type: 'div', props: { style: { display: 'flex' }, children: '' } }
                                             ]
