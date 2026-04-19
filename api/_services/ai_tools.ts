@@ -59,7 +59,7 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
         }),
 
         listar_categorias_principales: tool({
-            description: 'Lista las categorías principales de servicios. REQUIERE IDENTIFICACIÓN PREVIA.',
+            description: 'Lista las categorías principales de servicios para uso interno. REQUIERE IDENTIFICACIÓN PREVIA.',
             parameters: z.object({}),
             execute: async () => {
                 if (!currentLeadId) {
@@ -67,59 +67,50 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                 }
                 try {
                     const categories = await getCategories();
-                    console.log(`[Tool:listar_categorias] ${categories.length} categorías encontradas`);
-                    return categories.map((c, i) => ({
-                        numero: i + 1,
-                        nombre: c.name,
+                    return categories.map(c => ({
                         id: c.id,
-                        error: null as string | null
+                        nombre: c.name,
+                        hint: "Menciona el nombre para ver servicios"
                     }));
                 } catch (err) {
                     console.error('[Tool:listar_categorias] ERROR:', err);
-                    return [{ numero: 0, nombre: null, id: null, error: 'No se pudieron cargar las categorías.' }];
+                    return { error: 'No se pudieron cargar las categorías.' };
                 }
             }
         }),
 
         consultar_servicios: tool({
-            description: 'Muestra los servicios específicos con precios dentro de una categoría. REQUIERE IDENTIFICACIÓN PREVIA.',
+            description: 'Obtiene detalles de servicios internos. REQUIERE IDENTIFICACIÓN PREVIA.',
             parameters: z.object({
                 categoriaNombre: z.string().describe('Nombre de la categoría (ej: "Depilación", "Pestañas"). También acepta UUID.')
             }),
             execute: async ({ categoriaNombre }: { categoriaNombre: string }) => {
                 if (!currentLeadId) {
-                    return { success: false, error: 'Primero necesito tu nombre y apellido para poder mostrarte los servicios.', servicios: [] };
+                    return { success: false, error: 'Primero necesito tu nombre y apellido.', servicios: [] };
                 }
                 try {
                     const { services, category } = await getServicesByCategory(categoriaNombre);
                     
                     if (services.length === 0) {
-                        const categories = await getCategories();
-                        console.warn(`[TOOL CRITICAL] No match for category: "${categoriaNombre}"`);
                         return { 
                             success: false,
-                            error: `No encontré la categoría "${categoriaNombre}".`, 
-                            categorias_disponibles: categories.map((c, i) => `${i+1}. ${c.name}`).join(', '),
+                            error: `Categoría "${categoriaNombre}" no encontrada.`, 
                             servicios: []
                         };
                     }
 
-                    console.log(`[TOOL CRITICAL] Found ${services.length} services for ${categoriaNombre}`);
                     return {
                         success: true,
                         servicios: services.map(s => ({
-                            label: s.title || "Servicio",
-                            price: s.price || 0,
                             id: s.id,
-                            category: s.category_name || "Servicios"
+                            nombre: s.title,
+                            precio: s.price
                         })),
-                        price_list_url: category?.price_list_url || null,
-                        error: null as string | null,
-                        categorias_disponibles: null as string | null
+                        price_list_url: category?.price_list_url || null
                     };
                 } catch (err) {
                     console.error('[Tool:consultar_servicios] ERROR:', err);
-                    return { success: false, error: 'No se pudieron cargar los servicios.', servicios: [], categorias_disponibles: null };
+                    return { success: false, error: 'Error cargando servicios.', servicios: [] };
                 }
             }
         }),
