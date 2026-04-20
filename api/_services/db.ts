@@ -183,13 +183,21 @@ export async function getChatHistory(leadId: string) {
     );
 }
 
-export async function createLead(orgId: string | null, name: string, contactInfo: ContactInfo) {
+export async function createLead(orgId: string | null, name: string, contactInfo: ContactInfo = { phone: 'N/A', source: 'chatbot' }) {
+    if (!db) throw new Error("DB not initialized");
     console.log(`[db.ts] Creating a new lead for: ${name}`);
+    
+    // Aseguramos que contact_info siempre tenga la estructura mínima requerida por el constraint NOT NULL
+    const finalContact = {
+        ...contactInfo,
+        source: contactInfo.source || 'chatbot'
+    };
+
     const results = await withTimeout(
         db.insert(schema.leads).values({
             organization_id: orgId || null,
             client_name: name,
-            contact_info: contactInfo,
+            contact_info: finalContact,
             status: 'new',
             is_bot_enabled: true,
             chat_history: []
