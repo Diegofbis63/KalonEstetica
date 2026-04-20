@@ -74,6 +74,7 @@ export default async function handler(req: Request) {
 
         try {
           for await (const part of result.fullStream) {
+            console.log(`[DEBUG chat] Part type: ${part.type}`);
             if (part.type === 'text-delta') {
               fullAssistantMessage += part.textDelta;
               hasSentContent = true;
@@ -86,6 +87,8 @@ export default async function handler(req: Request) {
 
             if (part.type === 'error') {
               console.error('[api/chat] AI Internal Error Part:', JSON.stringify(part.error, Object.getOwnPropertyNames(part.error || {}), 2));
+              // Si falla después de haber enviado algo, no mostramos el fallback total
+              if (hasSentContent) continue;
             }
 
             if (part.type === 'tool-result') {
