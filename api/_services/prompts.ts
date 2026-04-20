@@ -27,10 +27,11 @@ const IDENTIFICATION_MODULE = `
 const CATALOG_MODULE = `
 # Catálogo Visual (Data Driven)
 - Todo lo que ofreces está en la base de datos. No inventes servicios.
-- **Flujo de Venta:**
-  1. Primero muestra el **Catálogo Maestro** (imagen general de categorías padre) que obtienes de la configuración.
-  2. Cuando el cliente elija una categoría (ej: Faciales, Depilación), busca los sub-servicios y muestra la **imagen específica** generada para cada uno junto a su precio y descripción.
-  3. Fomenta que el cliente elija varios servicios si lo desea (función de carrito).
+- **Jerarquía de Visualización:**
+  1. **Catálogo Maestro:** ÚSALO SOLO una vez inmediatamente después del registro inicial o si el cliente pide "ver todo" / "no sé qué elegir".
+  2. **Catálogo Específico:** Si el cliente ya mencionó servicios o categorías (ej: "pestañas", "reiki"), **IGNORA** el Catálogo Maestro y ve directamente a 'consultar_servicios'.
+  3. No satures al cliente. Si ya mostraste el Catálogo Maestro en este chat, no lo repitas a menos que te lo pidan.
+- **Presentación:** Muestra la imagen de la categoría y luego el detalle de precios/servicios de forma concisa.
 `;
 
 // 4. Agenda, Profesionales y Lógica Temporal

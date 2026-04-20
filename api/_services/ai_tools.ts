@@ -62,7 +62,7 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                             success: true, 
                             leadId: newLead.id,
                             message: `¡Perfecto ${fullName.split(' ')[0]}! Ya te registré en nuestro sistema. 😊`,
-                            next_step: "Muestra el catálogo maestro inmediatamente usando la herramienta 'listar_categorias_principales'."
+                            next_step: "Si ya sabes qué servicio buscas, usa 'consultar_servicios'. Si no, muestra el catálogo maestro con 'listar_categorias_principales'."
                         };
                     }
                     
@@ -86,7 +86,7 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
         }),
 
         listar_categorias_principales: tool({
-            description: 'PASO 2: Muestra el catálogo maestro y categorías.',
+            description: 'Muestra el Catálogo Maestro (todas las especialidades). Usar solo si el cliente pide ver todo o está indeciso.',
             parameters: z.object({}),
             execute: async () => {
                 console.log('[PASO 2] Cargando Catálogo');
