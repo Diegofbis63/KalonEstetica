@@ -57,7 +57,7 @@ export default async function handler(req: Request) {
       })),
       tools: aiTools,
       maxSteps: 15, // Más pasos para encadenar herramientas complejas
-      maxTokens: 4096, // Más capacidad de respuesta
+      maxTokens: 1000, // Reducido para ajustarse al saldo de créditos de OpenRouter
       abortSignal: abortCtrl.signal,
     });
 
