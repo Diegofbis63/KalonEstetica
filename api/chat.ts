@@ -60,7 +60,7 @@ export default async function handler(req: Request | any) {
       system: getSystemPrompt(leadId, argentinaTime),
       tools: buildTools(leadId, null, identificationId),
       maxSteps: 8,
-      maxTokens: 200, // Limite ultra-bajo para evitar errores 402 de OpenRouter
+      maxTokens: 500, // Límite seguro (evita error 402) pero suficiente para lógica compleja
       onStepFinish: ({ toolCalls }) => {
         // En el servidor podemos loguear los pasos internos
         if (toolCalls?.length) console.log('[api/chat] Step tools:', toolCalls.map(t => t.toolName));
