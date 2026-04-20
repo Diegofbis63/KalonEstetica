@@ -26,16 +26,18 @@ export const db = connectionString ? drizzle(sql, { schema }) : null as any;
  * Helper para guardar logs de chat de forma asíncrona.
  */
 export async function saveChatLog(leadId: string, role: 'user' | 'assistant', content: string) {
-    if (!db || !leadId) return;
+    if (!db || !leadId || !content) return;
     try {
-        await db.insert(schema.chat_logs).values({
+        // Ejecutamos el insert sin esperar (o al menos sin bloquear el flujo principal si falla)
+        db.insert(schema.chat_logs).values({
             lead_id: leadId,
             role,
             content,
             created_at: new Date()
-        });
+        }).catch(e => console.warn('[db.ts] Deferred log saving failed:', e.message));
     } catch (e) {
-        console.error(`[db.ts] Error saving chat log:`, e);
+        // Fallar aquí no debería romper la experiencia del usuario
+        console.warn(`[db.ts] Non-blocking chat log error ignored.`);
     }
 }
 
