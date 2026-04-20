@@ -17,9 +17,9 @@ export const getKalonModel = () => {
         },
     });
 
-    // Restauramos GPT-4o-mini para asegurar el cumplimiento estricto del protocolo
-    // Mantenemos el límite de tokens bajo en api/chat.ts para evitar errores de créditos
-  return openrouter('openai/gpt-4o-mini');
+    // Usamos el modelo FREE de Google para evitar errores de 402 (créditos)
+    // Este modelo es extremadamente rápido y capaz de seguir instrucciones si son claras.
+  return openrouter('google/gemini-2.0-flash-lite-preview-02-05:free');
 };
 
 /**
