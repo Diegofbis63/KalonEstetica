@@ -11,6 +11,7 @@ import {
     getServicesByCategory,
     getAllStaff,
     db,
+    sql,
     schema
 } from './db.js';
 import { eq } from 'drizzle-orm';
