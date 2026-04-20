@@ -58,7 +58,7 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                         return { 
                             success: true, 
                             leadId: newLead.id,
-                            message: `¡Perfecto ${args.nombre}! Ya te registré en nuestro sistema. 😊`,
+                            message: `¡Perfecto ${nombre}! Ya te registré en nuestro sistema. 😊`,
                             next_action_hint: "MANDATORIO: Inmediatamente llamá a 'listar_categorias_principales' para mostrar el catálogo maestro al cliente."
                         };
                     }
