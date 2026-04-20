@@ -20,7 +20,7 @@ Este documento es de lectura OBLIGATORIA para mí en cada sesión. Aquí registr
 - Si el cliente da su nombre y pide un servicio en el mismo mensaje, SALTAR la confirmación de registro e ir directo a los servicios.
 
 ### Base de Datos
-- Las consultas en paralelo (`Promise.all`) son mejores que los bucles `for` para traer varios servicios a la vez.
+- Priorizar estabilidad: El procesamiento secuencial es preferible al paralelo para evitar crasheos. NO OPTIMIZAR si no se solicita expresamente.
 
 ---
 *Última actualización: 20 de Abril de 2026 - Estabilización Crítica del Flujo de Registro y Catálogo.*
