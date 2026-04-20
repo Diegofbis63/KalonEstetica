@@ -96,16 +96,25 @@ export default async function handler(req: Request) {
               hasSentContent = true; // Si ejecutó un tool, ya hay "contenido" visual
               
                // 1. PERSISTENCIA DE IDENTIDAD Y AUTO-CATÁLOGO: 
-               if (toolName === 'registrar_cliente' && (toolResults as { leadId?: string }).leadId) {
-                 const newLeadId = (toolResults as { leadId: string }).leadId;
-                 currentLeadId = newLeadId;
-                 send({ leadId: newLeadId });
+               if (toolName === 'registrar_cliente') {
+                  const results = toolResults as { success: boolean; leadId: string; message?: string };
+                  const newLeadId = results.leadId;
+                  currentLeadId = newLeadId;
+                  send({ leadId: newLeadId });
 
-                 if (lastUserMessage?.content) {
+                  if (results.message) {
+                    send({
+                      choices: [{ delta: { content: results.message } }]
+                    });
+                    fullAssistantMessage += results.message;
+                    hasSentContent = true;
+                  }
+
+                  if (lastUserMessage?.content) {
                     saveChatLog(newLeadId, 'user', lastUserMessage.content).catch((err) => {
                        console.error('[api/chat] Log error after reg:', err);
                     });
-                 }
+                  }
                }
 
               // 2. INYECCIÓN DE IMÁGENES: Para Categorías y Servicios
@@ -153,10 +162,13 @@ export default async function handler(req: Request) {
                             
                             const satoriUrl = `${protocol}://${host}/api/satori-image?title=${encodeURIComponent(title)}&data=${encodedData}`;
 
+                        if (satoriUrl) {
                             send({
                                 media_url: satoriUrl,
                                 choices: [{ delta: { content: "" } }]
                             });
+                            hasSentContent = true;
+                        }
                         }
                     }
                 }
@@ -170,7 +182,7 @@ export default async function handler(req: Request) {
           if (!fullAssistantMessage && !hasSentContent) {
             send({
               choices: [{
-                delta: { content: "Disculpá, tuve un problema técnico momentáneo. ¿Podés repetirme lo que me decías? ✨" }
+                delta: { content: "¡Ups! El sistema está reiniciando sus motores, por favor reintentá en un segundito. ✨" }
               }]
             });
           }
