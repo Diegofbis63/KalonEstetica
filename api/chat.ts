@@ -101,12 +101,6 @@ export default async function handler(req: Request | any) {
                 send({ leadId: res.leadId });
               }
 
-              // Si la herramienta devuelve un mensaje textual, lo inyectamos en el stream
-              if (res.message) {
-                send({ choices: [{ delta: { content: res.message } }] });
-                fullAssistantMessage += res.message;
-              }
-
               // Manejo de catálogos e imágenes
               const catalogs = Array.isArray(res.catalogs) 
                 ? res.catalogs 

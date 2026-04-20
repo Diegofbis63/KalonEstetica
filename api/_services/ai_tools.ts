@@ -61,7 +61,6 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                         return { 
                             success: true, 
                             leadId: newLead.id,
-                            message: "STATUS_OK_REGISTERED",
                             next_step: "ETAPA 2: Llama a 'listar_categorias_principales' ahora."
                         };
                     }
@@ -69,7 +68,7 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                     // Fallback de ID para no romper el flujo
                     currentLeadId = `temp_${Date.now()}`;
                     const firstName = fullName.split(' ')[0];
-                    return { success: true, leadId: currentLeadId, message: `¡Gusto en conocerte ${firstName}!` };
+                    return { success: true, leadId: currentLeadId };
 
                 } catch (err) {
                     console.error('[Error Registro]:', err);
@@ -104,7 +103,6 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                             id: c.id,
                             nombre: c.name
                         })),
-                        message: "STATUS_OK_CATALOG_LOADED"
                     };
                 } catch (err) {
                     return {
@@ -141,8 +139,7 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                     }
                     return { 
                         success: true, 
-                        catalogs,
-                        message: "STATUS_OK_SERVICES_FOUND"
+                        catalogs
                     };
                 } catch (err) {
                     console.error('[Tool:consultar_servicios] ERROR:', err);
