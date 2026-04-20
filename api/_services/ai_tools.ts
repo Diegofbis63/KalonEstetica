@@ -37,12 +37,10 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
         registrar_cliente: tool({
             description: 'PASO 1: Registra al cliente. Solo requiere nombre y apellido. USAR ESTA HERRAMIENTA SOLO UNA VEZ POR SESIÓN.',
             parameters: z.object({
-                nombre: z.string().optional().describe('Nombre de pila'),
-                apellido: z.string().optional().describe('Apellido'),
-                nombre_completo: z.string().optional().describe('Nombre y apellido juntos si los dio así')
+                nombre_completo: z.string().describe('Nombre y apellido del cliente (obligatorio)')
             }),
-            execute: async ({ nombre, apellido, nombre_completo }) => {
-                const fullName = nombre_completo || `${nombre || ''} ${apellido || ''}`.trim() || 'Cliente Nuevo';
+            execute: async ({ nombre_completo }) => {
+                const fullName = nombre_completo || 'Cliente Nuevo';
                 console.log('[PASO 1] Registrando:', fullName);
                 
                 try {

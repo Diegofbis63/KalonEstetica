@@ -38,8 +38,8 @@ export async function POST(req: Request) {
       system,
       messages: convertToCoreMessages(messages),
       tools: aiTools,
-      maxSteps: 15,
-      maxTokens: 1500,
+      maxSteps: 5,
+      maxTokens: 400,
     });
 
     const encoder = new TextEncoder();
