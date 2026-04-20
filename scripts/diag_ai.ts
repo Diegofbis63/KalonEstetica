@@ -10,7 +10,7 @@ const openrouter = createOpenAI({
     apiKey: process.env.OPENROUTER_API_KEY,
 });
 
-const model = openrouter('openai/gpt-4o-mini');
+const model = openrouter('google/gemini-2.0-flash-001');
 
 const tools = {
     registrar_cliente: {
@@ -41,7 +41,8 @@ async function test() {
     let hasSent = false;
     for await (const part of result.fullStream) {
         console.log('PART TYPE:', part.type);
-        if (part.type === 'error') console.error('ERROR DATA:', part.error);
+        if (part.type === 'error') console.error('ERROR DATA:', JSON.stringify(part.error, null, 2));
+        if (part.type === 'tool-result') console.log('TOOL RESULT DATA:', JSON.stringify(part, null, 2));
         if (part.type === 'text-delta') hasSent = true;
         if (part.type === 'tool-result') hasSent = true;
     }

@@ -35,13 +35,13 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
 
     return {
         registrar_cliente: tool({
-            description: 'PASO 1: Registra al cliente. Solo requiere nombre y apellido. USAR ESTA HERRAMIENTA SOLO UNA VEZ POR SESIÓN.',
+            description: 'PASO 1: Registra al cliente. Solo requiere nombre y apellido. USAR ESTA HERRAMIENTA SOLO UNA VEZ.',
             parameters: z.object({
-                nombre_completo: z.string().describe('Nombre y apellido del cliente (obligatorio)')
+                nombre_completo: z.string().describe('Nombre y apellido del cliente (OBLIGATORIO)')
             }),
             execute: async ({ nombre_completo }) => {
                 const fullName = nombre_completo || 'Cliente Nuevo';
-                console.log('[PASO 1] Registrando:', fullName);
+                console.log('[TOOL:registrar_cliente] Iniciando para:', fullName, 'InitId:', initId);
                 
                 try {
                     // Generar un identificador único para el teléfono si no lo tenemos para evitar errores UNIQUE

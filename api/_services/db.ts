@@ -232,6 +232,17 @@ export async function updateLeadState(leadId: string, state: ConvState) {
     );
 }
 
+export async function saveChatHistory(leadId: string, history: any[]) {
+    if (!db || !leadId) return;
+    console.log(`[db.ts] Saving history for lead ${leadId} (${history.length} messages)`);
+    return await withTimeout(
+        db.update(schema.leads)
+            .set({ chat_history: history, updated_at: new Date() })
+            .where(eq(schema.leads.id, leadId)),
+        5000, null
+    );
+}
+
 // --- SLOTS ---
 export async function getAvailableSlotsFromDB(categoryId: string, startDate: Date, endDate: Date, minDuration: number = 30): Promise<any[]> {
     console.log(`[db.ts] Calling availability DB for category: ${categoryId} (Min Duration: ${minDuration})`);

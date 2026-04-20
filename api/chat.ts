@@ -1,51 +1,38 @@
 import { streamText, convertToCoreMessages } from 'ai';
-import { getKalonModel, getSystemPrompt } from './_services/ai.js';
-import { buildTools } from './_services/ai_tools.js';
-import { saveChatLog } from './_services/db.js';
+import { getKalonModel, getSystemPrompt } from './_services/ai';
+import { buildTools } from './_services/ai_tools';
+import { saveChatHistory } from './_services/db';
 
 export const config = {
-  runtime: 'edge',
+  maxDuration: 60,
 };
 
-export const maxDuration = 60;
-
-export async function POST(req: Request) {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204 });
+export default async function handler(req: Request) {
+  if (req.method !== 'POST') {
+    return new Response('Method Not Allowed', { status: 405 });
   }
 
   try {
-    const { messages, leadId: bodyLeadId, identificationId, initId: bodyInitId } = await req.json();
-    const leadId = bodyLeadId || identificationId;
-    const initId = bodyInitId || (identificationId?.includes('-') ? identificationId : null);
+    const { messages, clientPhone, mediaUrl, message, identificationId } = await req.json();
+    const leadId = identificationId || null;
 
-    if (!messages || !Array.isArray(messages)) {
-      return new Response(JSON.stringify({ error: 'Messages are required' }), { status: 400 });
-    }
-
-    // Log user message
-    const lastUserMessage = [...messages].reverse().find(m => m.role === 'user');
-    if (lastUserMessage?.content && leadId) {
-      saveChatLog(leadId, 'user', String(lastUserMessage.content)).catch(() => {});
-    }
-
-    const model = getKalonModel(); // GPT-4o-mini es más estable para tools
-    const system = getSystemPrompt(leadId || null, messages.length);
-    const aiTools = buildTools(leadId || null, 'kalon-estetica', initId || null);
-
-    const result = streamText({
-      model,
-      system,
+    // Aumentamos maxSteps para permitir que la IA registre y luego liste servicios en un solo turno
+    const result = await streamText({
+      model: getKalonModel(),
       messages: convertToCoreMessages(messages),
-      tools: aiTools,
-      maxSteps: 5,
-      maxTokens: 400,
+      system: getSystemPrompt(leadId, messages.length),
+      tools: buildTools(leadId, null, identificationId),
+      maxSteps: 10,
+      onStepFinish: ({ text, toolCalls, toolResults }) => {
+        // En el servidor podemos loguear los pasos internos
+        if (toolCalls?.length) console.log('[api/chat] Step tools:', toolCalls.map(t => t.toolName));
+      }
     });
 
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
-        const send = (data: Record<string, any>) => {
+        const send = (data: any) => {
           try {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
           } catch (e) {}
@@ -57,6 +44,9 @@ export async function POST(req: Request) {
 
         try {
           for await (const part of result.fullStream) {
+            // DEBUG: Seguimiento del flujo para el desarrollador (se ignora en el front)
+            if (part.type === 'tool-call') console.log(`[TOOL CALL] ${part.toolName}`);
+
             if (part.type === 'text-delta') {
               fullAssistantMessage += part.textDelta;
               hasSentContent = true;
@@ -64,28 +54,30 @@ export async function POST(req: Request) {
             }
 
             if (part.type === 'tool-result') {
-              const { toolName, result: toolResults } = part;
-              const results = toolResults as any;
+              const res = part.result as any;
               hasSentContent = true; 
               
-              if (results.message) {
-                send({ choices: [{ delta: { content: results.message } }] });
-                fullAssistantMessage += results.message;
+              // Si la herramienta devuelve un ID de lead, lo sincronizamos al front
+              if (part.toolName === 'registrar_cliente' && res.leadId) {
+                currentLeadId = res.leadId;
+                send({ leadId: res.leadId });
               }
 
-              if (toolName === 'registrar_cliente' && results.leadId) {
-                currentLeadId = results.leadId;
-                send({ leadId: results.leadId });
+              // Si la herramienta devuelve un mensaje textual, lo inyectamos en el stream
+              if (res.message) {
+                send({ choices: [{ delta: { content: res.message } }] });
+                fullAssistantMessage += res.message;
               }
 
-              const catalogs = Array.isArray(results.catalogs) ? results.catalogs : (results.id ? [results] : []);
+              // Manejo de catálogos e imágenes (Satori)
+              const catalogs = Array.isArray(res.catalogs) ? res.catalogs : (res.id ? [res] : []);
               if (catalogs.length > 0) {
                 for (const cat of catalogs) {
                   const savedUrl = cat.price_list_url || cat.main_catalog_url || cat.priceListUrl;
                   if (savedUrl) {
                     send({ media_url: savedUrl, choices: [{ delta: { content: "" } }] });
-                    hasSentContent = true;
                   } else if (cat.servicios || cat.categorias) {
+                    // Generación dinámica de imagen si no hay URL estática
                     const title = (cat.categoria || cat.category_name || 'Nuestros Servicios');
                     const items = cat.servicios || cat.categorias || [];
                     if (items.length > 0) {
@@ -97,30 +89,43 @@ export async function POST(req: Request) {
                       const protocol = host.includes('localhost') ? 'http' : 'https';
                       const satoriUrl = `${protocol}://${host}/api/satori-image?title=${encodeURIComponent(title)}&data=${Buffer.from(JSON.stringify(menuData)).toString('base64')}`;
                       send({ media_url: satoriUrl, choices: [{ delta: { content: "" } }] });
-                      hasSentContent = true;
                     }
                   }
                 }
               }
             }
+
+            if (part.type === 'error') {
+              console.error('[api/chat] Error en parte del stream:', part.error);
+              const err = part.error as any;
+              if (err.status === 402 || (err.message && err.message.includes('credit'))) {
+                 send({ choices: [{ delta: { content: "¡Ups! Me quedé sin créditos momentáneamente. Por favor contactanos por WhatsApp al +54 9 11 1234-5678. 😊" } }] });
+                 hasSentContent = true;
+              }
+            }
           }
 
           if (!hasSentContent) {
-            send({ choices: [{ delta: { content: "¡Ups! Estoy afinando los últimos detalles. ¿Podrías repetirme eso? ✨" } }] });
+            console.warn('[api/chat] Stream terminó sin enviar contenido.');
+            send({ choices: [{ delta: { content: "¡Perfecto! ¿En qué más puedo ayudarte hoy? ✨" } }] });
           }
 
+          // Guardado final del historial
           if (fullAssistantMessage && currentLeadId) {
-            saveChatLog(currentLeadId, 'assistant', fullAssistantMessage).catch(() => {});
+            await saveChatHistory(currentLeadId, [
+              ...messages,
+              { role: 'assistant', content: fullAssistantMessage }
+            ]).catch(e => console.error('[api/chat] Error DB:', e));
           }
 
-          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-          controller.close();
-        } catch (error) {
-          console.error('[api/chat] Error en el stream:', error);
+          send('[DONE]');
+        } catch (error: any) {
+          console.error('[api/chat] Error en bucle del stream:', error);
           if (!hasSentContent) {
-            send({ choices: [{ delta: { content: "Ocurrió un error. Por favor intentá enviar el mensaje de nuevo." } }] });
+            send({ choices: [{ delta: { content: "Tuve un pequeño problema técnico, pero ya estoy de vuelta. ¿Podrías repetirme eso? 😊" } }] });
           }
-          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          send('[DONE]');
+        } finally {
           controller.close();
         }
       },
@@ -128,14 +133,14 @@ export async function POST(req: Request) {
 
     return new Response(stream, {
       headers: {
-        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
       },
     });
 
   } catch (error: any) {
-    console.error('[api/chat] Error en la API:', error);
+    console.error('[api/chat] Error Fatal:', error);
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 }
