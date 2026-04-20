@@ -72,8 +72,11 @@ export default async function handler(req: Request) {
                 fullAssistantMessage += res.message;
               }
 
-              // Manejo de catálogos e imágenes (Satori)
-              const catalogs = Array.isArray(res.catalogs) ? res.catalogs : (res.id ? [res] : []);
+              // Manejo de catálogos e imágenes
+              const catalogs = Array.isArray(res.catalogs) 
+                ? res.catalogs 
+                : (res.id || res.price_list_url || res.categorias ? [res] : []);
+              
               if (catalogs.length > 0) {
                 for (const cat of catalogs) {
                   // 1. Imagen de la categoría (Price List)
@@ -100,9 +103,11 @@ export default async function handler(req: Request) {
                         label: i.nombre || i.label || i.title || 'Servicio',
                         price: i.precio || i.price ? (String(i.precio || i.price).startsWith('$') ? (i.precio || i.price) : `$${i.precio || i.price}`) : undefined
                       }));
+                      const menuDataStr = JSON.stringify(menuData);
+                      const base64Data = btoa(encodeURIComponent(menuDataStr).replace(/%([0-9A-F]{2})/g, (match, p1) => String.fromCharCode(parseInt(p1, 16))));
                       const host = req.headers.get('host') || 'kalon-estetica.vercel.app';
                       const protocol = host.includes('localhost') ? 'http' : 'https';
-                      const satoriUrl = `${protocol}://${host}/api/satori-image?title=${encodeURIComponent(title)}&data=${Buffer.from(JSON.stringify(menuData)).toString('base64')}`;
+                      const satoriUrl = `${protocol}://${host}/api/satori-image?title=${encodeURIComponent(title)}&data=${base64Data}`;
                       send({ media_url: satoriUrl, choices: [{ delta: { content: "" } }] });
                     }
                   }
