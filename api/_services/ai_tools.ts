@@ -69,7 +69,12 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                 } catch (err) {
                     console.error('[Error Registro]:', err);
                     currentLeadId = `temp_${Date.now()}`;
-                    return { success: true, leadId: currentLeadId, note: "Modo contingencia activo" };
+                    return { 
+                        success: true, 
+                        leadId: currentLeadId, 
+                        message: `¡Hola ${nombre}! Tuve un pequeño problema técnico al registrarte, pero igual podemos seguir adelante. ¿Qué servicio estás buscando hoy? ✨`,
+                        note: "Modo contingencia activo" 
+                    };
                 }
             }
         }),

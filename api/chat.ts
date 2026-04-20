@@ -76,6 +76,7 @@ export default async function handler(req: Request) {
           for await (const part of result.fullStream) {
             console.log(`[DEBUG chat] Part type: ${part.type}`);
             if (part.type === 'text-delta') {
+              console.log(`[DEBUG chat] Text Delta: "${part.textDelta}"`);
               fullAssistantMessage += part.textDelta;
               hasSentContent = true;
               send({
@@ -98,11 +99,13 @@ export default async function handler(req: Request) {
                // 1. PERSISTENCIA DE IDENTIDAD Y AUTO-CATÁLOGO: 
                if (toolName === 'registrar_cliente') {
                   const results = toolResults as { success: boolean; leadId: string; message?: string };
+                  console.log('[DEBUG chat] Registro OK:', results.leadId);
                   const newLeadId = results.leadId;
                   currentLeadId = newLeadId;
                   send({ leadId: newLeadId });
 
                   if (results.message) {
+                    console.log('[DEBUG chat] Enviando mensaje de herramienta:', results.message);
                     send({
                       choices: [{ delta: { content: results.message } }]
                     });
@@ -111,9 +114,7 @@ export default async function handler(req: Request) {
                   }
 
                   if (lastUserMessage?.content) {
-                    saveChatLog(newLeadId, 'user', lastUserMessage.content).catch((err) => {
-                       console.error('[api/chat] Log error after reg:', err);
-                    });
+                    saveChatLog(newLeadId, 'user', lastUserMessage.content).catch(() => {});
                   }
                }
 
@@ -180,9 +181,10 @@ export default async function handler(req: Request) {
 
           // Si la IA no generó texto y no envió imágenes, enviar mensaje de fallback
           if (!fullAssistantMessage && !hasSentContent) {
+            console.warn('[DEBUG chat] No se generó contenido. Enviando mensaje de seguridad.');
             send({
               choices: [{
-                delta: { content: "¡Ups! El sistema está reiniciando sus motores, por favor reintentá en un segundito. ✨" }
+                delta: { content: "¡Ups! El sistema está afinando detalles, por favor reintentá en un segundito. ✨" }
               }]
             });
           }
@@ -204,7 +206,7 @@ export default async function handler(req: Request) {
             try {
               send({
                 choices: [{
-                  delta: { content: "¡Ups! El sistema está reiniciando sus motores, por favor reintentá en un segundito. ✨" }
+                  delta: { content: "¡Ups! El sistema está afinando detalles, por favor reintentá en un segundito. ✨" }
                 }]
               });
             } catch (e) {}
