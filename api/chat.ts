@@ -3,29 +3,45 @@ import { getKalonModel, getSystemPrompt } from './_services/ai.js';
 import { buildTools } from './_services/ai_tools.js';
 import { saveChatHistory } from './_services/db.js';
 
-export const runtime = 'edge';
-export const preferredRegion = 'iad1';
-export const maxDuration = 60;
+export const config = {
+  runtime: 'edge',
+};
 
-export default async function handler(req: Request) {
+export default async function handler(req: Request | any) {
   if (req.method !== 'POST') {
     return new Response('Method Not Allowed', { status: 405 });
   }
   try {
-    // Intentamos obtener el cuerpo de la petición de forma robusta (Edge vs Node)
-    let body;
+    // Parser de Body Universal (Edge / Node / Streams)
+    let body: any;
     try {
       if (typeof req.json === 'function') {
         body = await req.json();
-      } else {
+      } else if ((req as any).body && typeof (req as any).body === 'object') {
         body = (req as any).body;
+      } else {
+        // Fallback para Node.js puro donde el body es un stream
+        const chunks = [];
+        const reader = (req as any).body?.getReader?.();
+        if (reader) {
+          let done = false;
+          while (!done) {
+            const { value, done: Done } = await reader.read();
+            if (value) chunks.push(value);
+            done = Done;
+          }
+          const raw = new TextDecoder().decode(new Uint8Array(chunks.flatMap(c => Array.from(c))));
+          body = JSON.parse(raw);
+        } else {
+          body = {};
+        }
       }
     } catch (e) {
       console.error('[api/chat] Error parsing body:', e);
-      body = (req as any).body || {};
+      body = {};
     }
 
-    const { messages, clientPhone, mediaUrl, message, identificationId } = body;
+    const { messages = [], identificationId } = body;
     const leadId = identificationId || null;
 
     // Obtenemos la fecha actual en formato legible (Argentina)
@@ -43,9 +59,9 @@ export default async function handler(req: Request) {
       messages: convertToCoreMessages(messages),
       system: getSystemPrompt(leadId, argentinaTime),
       tools: buildTools(leadId, null, identificationId),
-      maxSteps: 10,
-      maxTokens: 1000,
-      onStepFinish: ({ text, toolCalls, toolResults }) => {
+      maxSteps: 8,
+      maxTokens: 400, // Limite ultra-bajo para evitar errores 402 de OpenRouter
+      onStepFinish: ({ toolCalls }) => {
         // En el servidor podemos loguear los pasos internos
         if (toolCalls?.length) console.log('[api/chat] Step tools:', toolCalls.map(t => t.toolName));
       }
@@ -124,7 +140,7 @@ export default async function handler(req: Request) {
                       }));
                       const menuDataStr = JSON.stringify(menuData);
                       const base64Data = btoa(encodeURIComponent(menuDataStr).replace(/%([0-9A-F]{2})/g, (match, p1) => String.fromCharCode(parseInt(p1, 16))));
-                      const host = req.headers.get('host') || 'kalon-estetica.vercel.app';
+                      const host = (typeof req.headers.get === 'function' ? req.headers.get('host') : (req.headers as any).host) || 'kalon-estetica.vercel.app';
                       const protocol = host.includes('localhost') ? 'http' : 'https';
                       const satoriUrl = `${protocol}://${host}/api/satori-image?title=${encodeURIComponent(title)}&data=${base64Data}`;
                       send({ media_url: satoriUrl, choices: [{ delta: { content: "" } }] });
