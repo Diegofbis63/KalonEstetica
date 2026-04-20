@@ -61,7 +61,7 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                         return { 
                             success: true, 
                             leadId: newLead.id,
-                            message: `Registro exitoso para ${fullName}.`,
+                            message: "STATUS_OK_REGISTERED",
                             next_step: "ETAPA 2: Llama a 'listar_categorias_principales' ahora."
                         };
                     }
@@ -104,7 +104,7 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                             id: c.id,
                             nombre: c.name
                         })),
-                        message: "Catálogo cargado con éxito."
+                        message: "STATUS_OK_CATALOG_LOADED"
                     };
                 } catch (err) {
                     return {
@@ -142,7 +142,7 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                     return { 
                         success: true, 
                         catalogs,
-                        message: "Servicios cargados con éxito."
+                        message: "STATUS_OK_SERVICES_FOUND"
                     };
                 } catch (err) {
                     console.error('[Tool:consultar_servicios] ERROR:', err);
