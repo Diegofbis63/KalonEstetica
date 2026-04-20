@@ -16,7 +16,7 @@ export const getKalonModel = () => {
         },
     });
 
-    return openrouter('google/gemini-2.0-flash-001');
+    return openrouter('openai/gpt-4o-mini');
 };
 
 /**

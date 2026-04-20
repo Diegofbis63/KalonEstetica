@@ -94,86 +94,62 @@ export default async function handler(req: Request) {
 
             if (part.type === 'tool-result') {
               const { toolName, result: toolResults } = part;
-              hasSentContent = true; // Si ejecutó un tool, ya hay "contenido" visual
+              const results = toolResults as any;
               
-               // 1. PERSISTENCIA DE IDENTIDAD Y AUTO-CATÁLOGO: 
-               if (toolName === 'registrar_cliente') {
-                  const results = toolResults as { success: boolean; leadId: string; message?: string };
-                  console.log('[DEBUG chat] Registro OK:', results.leadId);
-                  const newLeadId = results.leadId;
-                  currentLeadId = newLeadId;
-                  send({ leadId: newLeadId });
+              // 1. Mensajes inyectados (si existen)
+              if (results.message) {
+                send({ choices: [{ delta: { content: results.message } }] });
+                fullAssistantMessage += results.message;
+                hasSentContent = true;
+              }
 
-                  if (results.message) {
-                    console.log('[DEBUG chat] Enviando mensaje de herramienta:', results.message);
-                    send({
-                      choices: [{ delta: { content: results.message } }]
-                    });
-                    fullAssistantMessage += results.message;
-                    hasSentContent = true;
-                  }
+              // 2. Persistencia de identidad
+              if (toolName === 'registrar_cliente' && results.leadId) {
+                currentLeadId = results.leadId as string;
+                send({ leadId: results.leadId });
+                if (lastUserMessage?.content) {
+                  saveChatLog(results.leadId as string, 'user', lastUserMessage.content).catch(e => {
+                    console.error('[DEBUG chat] Error guardando log diferido:', e);
+                  });
+                }
+              }
 
-                  if (lastUserMessage?.content) {
-                    saveChatLog(newLeadId, 'user', lastUserMessage.content).catch(() => {});
-                  }
-               }
-
-              // 2. INYECCIÓN DE IMÁGENES: Para Categorías y Servicios
+              // 3. Imágenes y Catálogos
               if (toolName === 'listar_categorias_principales' || toolName === 'consultar_servicios') {
-                const results = toolResults as { 
-                    success: boolean; 
-                    price_list_url?: string | null; 
-                    catalogs?: Array<{ categoria: string; servicios: any[]; price_list_url?: string | null }>;
-                    categorias?: any[];
-                };
-                
-                // Las herramientas ya traen todo lo necesario o su fallback interno.
-                // Usamos los resultados ya tipados arriba.
-                
-                // Normalizamos a un array de catálogos procesables
-
-                // Normalizamos a un array de catálogos procesables
                 const catalogsToProcess = Array.isArray(results.catalogs) ? results.catalogs : [results];
 
-                for (const cat of catalogsToProcess as any[]) {
-                    // Detectar URL de imagen (puede venir como price_list_url o main_catalog_url)
-                    const savedUrl = cat.price_list_url || cat.main_catalog_url;
+                for (const cat of catalogsToProcess) {
+                  const savedUrl = cat.price_list_url || cat.main_catalog_url || cat.priceListUrl;
+                  
+                  if (savedUrl) {
+                    send({
+                      media_url: savedUrl,
+                      choices: [{ delta: { content: "" } }]
+                    });
+                    hasSentContent = true;
+                  } else {
+                    // Fallback Satori
+                    const title = (cat.categoria || cat.category_name || 'Nuestros Servicios');
+                    const items = cat.servicios || cat.categorias || [];
                     
-                    console.log(`[DEBUG chat] Procesando catálogo para tool ${toolName}. URL:`, savedUrl || 'Ninguna (usará Satori)');
-                    
-                    if (savedUrl) {
-                        send({
-                            media_url: savedUrl,
-                            choices: [{ delta: { content: "" } }]
-                        });
-                    } else {
-                        // Prioridad 2: Generación via Satori (Catálogo dinámico)
-                        const isCategory = toolName === 'listar_categorias_principales';
-                        const title = isCategory ? 'Especialidades KÂLON' : ((cat as { categoria?: string }).categoria || 'Nuestros Servicios');
-                        
-                        const items = (cat as { servicios?: any[]; categorias?: any[] }).servicios || (cat as { servicios?: any[]; categorias?: any[] }).categorias || [];
-                        
-                        const menuData = items.map((item: { nombre?: string; label?: string; title?: string; precio?: string | number; price?: string | number }) => ({
-                            label: item.nombre || item.label || item.title || 'Servicio',
-                            price: item.precio || item.price ? (String(item.precio || item.price).startsWith('$') ? (item.precio || item.price) : `$${item.precio || item.price}`) : undefined
-                        }));
+                    if (items.length > 0) {
+                      const menuData = items.map((i: any) => ({
+                        label: i.nombre || i.label || i.title || 'Servicio',
+                        price: i.precio || i.price ? (String(i.precio || i.price).startsWith('$') ? (i.precio || i.price) : `$${i.precio || i.price}`) : undefined
+                      }));
 
-                        if (menuData.length > 0) {
-                            const encodedData = Buffer.from(JSON.stringify(menuData)).toString('base64');
-                            const host = req.headers.get('host') || 'kalon-estetica.vercel.app';
-                            const protocol = host.includes('localhost') ? 'http' : 'https';
-                            
-                            const satoriUrl = `${protocol}://${host}/api/satori-image?title=${encodeURIComponent(title)}&data=${encodedData}`;
+                      const encodedData = Buffer.from(JSON.stringify(menuData)).toString('base64');
+                      const host = req.headers.get('host') || 'kalon-estetica.vercel.app';
+                      const protocol = host.includes('localhost') ? 'http' : 'https';
+                      const satoriUrl = `${protocol}://${host}/api/satori-image?title=${encodeURIComponent(title)}&data=${encodedData}`;
 
-                        if (satoriUrl) {
-                            send({
-                                media_url: satoriUrl,
-                                choices: [{ delta: { content: "" } }]
-                            });
-                            hasSentContent = true;
-                        }
-                        }
+                      send({
+                        media_url: satoriUrl,
+                        choices: [{ delta: { content: "" } }]
+                      });
+                      hasSentContent = true;
                     }
+                  }
                 }
               }
             }
@@ -211,11 +187,13 @@ export default async function handler(req: Request) {
                   delta: { content: "¡Ups! El sistema está afinando detalles, por favor reintentá en un segundito. ✨" }
                 }]
               });
-            } catch (e) {}
+            } catch (e) {
+              console.error('[api/chat] Error sending fallback:', e);
+            }
           }
           
           try {
-            console.log('[api/chat] Finalizing stream...');
+            console.log('[api/chat] Finalizing stream after error...');
             controller.enqueue(encoder.encode('data: [DONE]\n\n'));
             controller.close();
           } catch (err) {
