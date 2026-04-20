@@ -117,16 +117,10 @@ export default async function handler(req: Request) {
                     categorias?: any[];
                 };
                 
-                // Si es categorias principales y no tiene price_list_url, usamos la maestra
-                // Ya no necesitamos buscar price_list_url acá porque la herramienta ya lo trae
-                // Pero lo mantenemos como fallback por si la herramienta falla silenciosamente
                 // Las herramientas ya traen todo lo necesario o su fallback interno.
-                const results = toolResults as { 
-                    success: boolean; 
-                    price_list_url?: string | null; 
-                    catalogs?: Array<{ categoria: string; servicios: any[]; price_list_url?: string | null }>;
-                    categorias?: any[];
-                };
+                // Usamos los resultados ya tipados arriba.
+                
+                // Normalizamos a un array de catálogos procesables
 
                 // Normalizamos a un array de catálogos procesables
                 const catalogsToProcess = Array.isArray(results.catalogs) ? results.catalogs : [results];
