@@ -1,27 +1,31 @@
-# 🧠 BITÁCORA DE APRENDIZAJE PERMANENTE - ANTIGRAVITY
+# 🧠 BITÁCORA DE APRENDIZAJE PERMANENTE - ANTIGRAVITY (VERSIÓN SENIOR)
 
-Este documento es de lectura OBLIGATORIA para mí en cada sesión. Aquí registro mis fallas y las reglas de hierro que NO puedo romper para el proyecto KÂLON Estética.
+Este documento es el núcleo de mi memoria para el proyecto KÂLON Estética. Cualquier agente que trabaje aquí DEBE seguir estas reglas de hierro.
 
-## 🚫 ERRORES CRÍTICOS COMETIDOS (PROHIBIDO REPETIR)
-1. **Romper lo simple:** Intentar optimizar procesos que dañan la estabilidad (como bajar los `maxSteps` excesivamente).
-2. **Redundancia Conversacional:** No repetir confirmaciones de registro si el usuario ya pidió una acción específica. El bot debe ser directo y usar el nombre del cliente.
-3. **Omisión de Catálogo:** NUNCA eliminar la llamada a `listar_categorias_principales` en el Paso 1. El cliente DEBE ver la foto maestra al registrarse.
-4. **Ignorar Etiquetas de Estado:** El bot necesita saber si el cliente es "NUEVO" o "IDENTIFICADO" en cada mensaje para no dar vueltas.
+## 🚫 CRONOLOGÍA DE FALLAS (PROHIBIDO REPETIR)
+1. **Falla de Silencio (20/04/26)**: El modelo Gemini 2.0 falló al enviar comandos de herramientas rotos, dejando al bot mudo. **Solución**: Usar siempre `GPT-4o Mini`.
+2. **Falla de Estabilidad (20/04/26)**: Intentar usar procesos en paralelo (`Promise.all`) causó crasheos. **Solución**: Usar procesamiento secuencial (`for...of`).
+3. **Falla de Contexto (20/04/26)**: El bot mandaba imágenes sin texto. **Solución**: Blindar el sistema para que la imagen y el texto se envíen en un solo bloque o con una regla de "texto mandatorio".
+4. **Falla de Redundancia**: El bot repetía "Ya te registré" innecesariamente. **Solución**: Si el cliente ya dio una instrucción, saltar la confirmación e ir al servicio.
 
-## 🛡️ REGLAS DE ORO (SKILLS DE SUPERVIVENCIA)
-1. **ESTABILIDAD > TODO:** Mantener `maxSteps: 15` siempre.
-2. **VERIFICACIÓN TRIPLE:** Al terminar un deploy, DEBO verificar que el repositorio de Git tenga los cambios y que Vercel haya terminado la compilación.
-3. **RESPETAR EL FRASEO:** Si el usuario pide un texto exacto (ej: "Romina acá tenés los servicios..."), se usa ese texto sin inventar alternativas.
-4. **NO TOCAR LOGICA:** Si me piden cambiar un texto, NO muevo las llamadas a herramientas ni cambio el flujo de etapas.
+## 🛡️ ESTADO DEL ARTE (REGLAS DE ORO)
+1. **ESTABILIDAD > VELOCIDAD**: 
+   - `maxSteps: 15`.
+   - Procesamiento SECUENCIAL de herramientas.
+   - Motor: `openai/gpt-4o-mini` (Baneo total a Gemini 2.0 para este bot).
+2. **IDENTIDAD Y FLUJO**:
+   - Etapa 1: Registro + Catálogo Maestro (Mandatorio).
+   - Etapa 2: Servicios + Frase exacta: *"[Nombre] acá tenés los servicios, elegí los que quieras para que los agregue al carrito 😊"*.
+3. **OMNIPRESENCIA VISUAL**:
+   - Todo servicio o categoría consultada DEBE mostrar su `price_list_url`.
+   - NUNCA enviar una imagen sin su texto explicativo.
+4. **BLINDAJE DE CÓDIGO**:
+   - No optimizar si no se pide.
+   - Si se cambia un texto, NO tocar la lógica de las herramientas.
 
-## 📝 LECCIONES POR ETAPA
-### Chatbot
-- El bot debe ser visual: Traer imágenes con 'consultar_servicios' es la prioridad máxima.
-- Si el cliente da su nombre y pide un servicio en el mismo mensaje, SALTAR la confirmación de registro e ir directo a los servicios.
-
-### Base de Datos
-- Priorizar estabilidad: El procesamiento secuencial es preferible al paralelo para evitar crasheos. NO OPTIMIZAR si no se solicita expresamente.
+## 📝 LECCIONES DE DISEÑO
+- El usuario valora la precisión absoluta en el lenguaje de "Romina". 
+- El bot debe sentirse como una persona profesional pero cercana, que no pierde el hilo de la conversación.
 
 ---
-*Última actualización: 20 de Abril de 2026 - Estabilización Crítica del Flujo de Registro y Catálogo.*
-
+*Última actualización: 20 de Abril de 2026 - Consolidación de Cerebro post-crisis de estabilidad.*
