@@ -59,11 +59,10 @@ export default async function handler(req: Request | any) {
       messages: convertToCoreMessages(messages),
       system: getSystemPrompt(leadId, argentinaTime),
       tools: buildTools(leadId, null, identificationId),
-      maxSteps: 8,
-      maxTokens: 500, // Límite seguro (evita error 402) pero suficiente para lógica compleja
-      onStepFinish: ({ toolCalls }) => {
-        // En el servidor podemos loguear los pasos internos
-        if (toolCalls?.length) console.log('[api/chat] Step tools:', toolCalls.map(t => t.toolName));
+      maxSteps: 10, // Un poco más para flujos complejos
+      maxTokens: 500,
+      onStepFinish: ({ toolCalls, toolResults }) => {
+        if (toolCalls?.length) console.log('[STEP] Herramientas usadas:', toolCalls.map(t => t.toolName));
       }
     });
 
@@ -79,6 +78,7 @@ export default async function handler(req: Request | any) {
         let fullAssistantMessage = "";
         let currentLeadId = leadId;
         let hasSentContent = false;
+        let toolResultsHistory: any[] = [];
 
         try {
           for await (const part of result.fullStream) {
@@ -159,8 +159,9 @@ export default async function handler(req: Request | any) {
           }
 
           if (!hasSentContent) {
-            console.warn('[api/chat] Stream terminó sin enviar contenido.');
-            send({ choices: [{ delta: { content: "¡Perfecto! ¿En qué más puedo ayudarte hoy? ✨" } }] });
+            console.warn('[api/chat] ALERTA: El stream terminó sin generar contenido ni herramientas.');
+            // En vez de un mensaje genérico, enviamos uno que pida reintentar si el modelo falló
+            send({ choices: [{ delta: { content: "¡Hola! Estoy procesando tu solicitud, ¿podrías decirme tu nombre para empezar? 😊" } }] });
           }
 
           // Guardado final del historial
