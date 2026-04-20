@@ -115,21 +115,23 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
             }),
             execute: async ({ categorias }) => {
                 try {
-                    const catalogs = [];
-                    for (const catName of categorias) {
-                        const { services, category } = await getServicesByCategory(catName);
-                        if (services.length > 0) {
-                            catalogs.push({
-                                categoria: category?.name || catName,
-                                servicios: services.map(s => ({
-                                    id: s.id,
-                                    nombre: s.title,
-                                    precio: s.price
-                                })),
-                                price_list_url: category?.price_list_url || null
-                            });
-                        }
-                    }
+                    // Ejecutar búsquedas en paralelo para máxima velocidad
+                    const results = await Promise.all(
+                        categorias.map(catName => getServicesByCategory(catName))
+                    );
+
+                    const catalogs = results
+                        .filter(r => r.services.length > 0)
+                        .map(r => ({
+                            categoria: r.category?.name || "Servicio",
+                            servicios: r.services.map(s => ({
+                                id: s.id,
+                                nombre: s.title,
+                                precio: s.price
+                            })),
+                            price_list_url: r.category?.price_list_url || null
+                        }));
+
                     return { success: true, catalogs };
                 } catch (err) {
                     console.error('[Tool:consultar_servicios] ERROR:', err);
