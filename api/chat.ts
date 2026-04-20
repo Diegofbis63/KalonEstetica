@@ -3,9 +3,9 @@ import { getKalonModel, getSystemPrompt } from './_services/ai.js';
 import { buildTools } from './_services/ai_tools.js';
 import { saveChatHistory } from './_services/db.js';
 
-export const config = {
-  maxDuration: 60,
-};
+export const runtime = 'edge';
+export const preferredRegion = 'iad1';
+export const maxDuration = 60;
 
 export default async function handler(req: Request) {
   if (req.method !== 'POST') {
@@ -17,7 +17,13 @@ export default async function handler(req: Request) {
     const leadId = identificationId || null;
 
     // Obtenemos la fecha actual en formato legible (Argentina)
-    const argentinaTime = new Date().toLocaleString("es-AR", { timeZone: "America/Argentina/Cordoba" });
+    let argentinaTime = new Date().toISOString();
+    try {
+      argentinaTime = new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Cordoba" });
+      console.log('[api/chat] Local time:', argentinaTime);
+    } catch (e) {
+      console.warn('[api/chat] LocalTime failed, using ISO');
+    }
 
     // Aumentamos maxSteps para permitir que la IA registre y luego liste servicios en un solo turno
     const result = await streamText({
@@ -161,6 +167,9 @@ export default async function handler(req: Request) {
 
   } catch (error: any) {
     console.error('[api/chat] Error Fatal:', error);
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    // Intentamos devolver el error detallado para diagnosticar
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    const stack = error instanceof Error ? error.stack : '';
+    return new Response(JSON.stringify({ error: errorMsg, stack }), { status: 500 });
   }
 }

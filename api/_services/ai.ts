@@ -17,8 +17,8 @@ export const getKalonModel = () => {
         },
     });
 
-    // Se cambia temporalmente a Gemini 2.0 Flash para mayor estabilidad y menor latencia en el procesamiento
-    return openrouter('google/gemini-2.0-flash-001');
+    // Se cambia a GPT-4o-mini para máxima compatibilidad de streaming
+    return openrouter('openai/gpt-4o-mini');
 };
 
 /**
