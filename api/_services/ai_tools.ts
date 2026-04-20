@@ -132,15 +132,17 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                                 servicios: services.map(s => ({
                                     id: s.id,
                                     nombre: s.title,
-                                    precio: s.price
+                                    precio: s.price,
+                                    image_url: s.image_url // Imagen específica del servicio
                                 })),
-                                price_list_url: category?.price_list_url || null
+                                price_list_url: category?.price_list_url || null // Imagen de la categoría
                             });
                         }
                     }
                     return { 
                         success: true, 
-                        catalogs
+                        catalogs,
+                        message: "Acá tenés el detalle de lo que me pediste. ¿Cuál de estos te gustaría elegir? 💎"
                     };
                 } catch (err) {
                     console.error('[Tool:consultar_servicios] ERROR:', err);
@@ -181,7 +183,8 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                             return {
                                 hora: d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }),
                                 staff_name: staffMember?.name || "Especialista",
-                                staff_id: s.staff_id
+                                staff_id: s.staff_id,
+                                label: `${d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} con ${staffMember?.name || "Especialista"}`
                             };
                         })
                     };

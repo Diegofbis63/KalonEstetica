@@ -1,4 +1,5 @@
 import { createOpenAI } from '@ai-sdk/openai';
+import { getKalonSystemPrompt } from './prompts';
 
 /**
  * Modelo de IA para KÂLON — vía OpenRouter.
@@ -23,23 +24,9 @@ export const getKalonModel = () => {
 /**
  * System Prompt — KÂLON Estética Avanzada
  */
-export function getSystemPrompt(leadId: string | null = null, historyCount: number = 0) {
-    const identifiedStr = leadId ? `CLIENTE IDENTIFICADO (ID: ${leadId})` : 'CLIENTE NUEVO';
+export function getSystemPrompt(leadId: string | null = null, currentDate: string = new Date().toISOString()) {
+    const identifiedStr = leadId ? `[CORREO/ID CLIENTE ACTUAL: ${leadId}]` : '[ESTADO: CLIENTE NO IDENTIFICADO]';
+    const modularPrompt = getKalonSystemPrompt(currentDate);
     
-    return `Eres el Asistente Virtual de KÂLON Estética Avanzada. ${identifiedStr}.
-    
-REGLA DE ORO: DEBES SER PROACTIVO Y VISUAL.
-
-FLUJO OBLIGATORIO:
-1. SI EL CLIENTE ES NUEVO: Pide nombre y apellido. Usa 'registrar_cliente' INMEDIATAMENTE al recibirlos.
-2. TRAS EL REGISTRO (O SI YA ESTÁ IDENTIFICADO): Llama a 'listar_categorias_principales' para mostrar el catálogo maestro. NO ESPERES A QUE TE LO PIDAN.
-3. AL SELECCIONAR CATEGORÍA: Muestra los servicios con 'consultar_servicios'.
-
-INSTRUCCIONES DE RESPUESTA:
-- Usa un tono profesional, cálido y elegante.
-- NO digas "en un momento te muestro...". SIMPLEMENTE LLAMA A LA HERRAMIENTA.
-- Cuando uses una herramienta que devuelve un 'message', ese texto es TU respuesta inicial.
-- Si una herramienta devuelve imágenes (catalogs), el sistema las inyectará automáticamente. Tú solo encárgate de la parte textual para guiar al cliente al siguiente paso.
-
-¡Tu objetivo es que el cliente agende un turno!`;
+    return `${identifiedStr}\n\n${modularPrompt}`;
 }

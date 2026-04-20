@@ -16,11 +16,14 @@ export default async function handler(req: Request) {
     const { messages, clientPhone, mediaUrl, message, identificationId } = await req.json();
     const leadId = identificationId || null;
 
+    // Obtenemos la fecha actual en formato legible (Argentina)
+    const argentinaTime = new Date().toLocaleString("es-AR", { timeZone: "America/Argentina/Cordoba" });
+
     // Aumentamos maxSteps para permitir que la IA registre y luego liste servicios en un solo turno
     const result = await streamText({
       model: getKalonModel(),
       messages: convertToCoreMessages(messages),
-      system: getSystemPrompt(leadId, messages.length),
+      system: getSystemPrompt(leadId, argentinaTime),
       tools: buildTools(leadId, null, identificationId),
       maxSteps: 10,
       onStepFinish: ({ text, toolCalls, toolResults }) => {
@@ -73,11 +76,23 @@ export default async function handler(req: Request) {
               const catalogs = Array.isArray(res.catalogs) ? res.catalogs : (res.id ? [res] : []);
               if (catalogs.length > 0) {
                 for (const cat of catalogs) {
-                  const savedUrl = cat.price_list_url || cat.main_catalog_url || cat.priceListUrl;
-                  if (savedUrl) {
-                    send({ media_url: savedUrl, choices: [{ delta: { content: "" } }] });
-                  } else if (cat.servicios || cat.categorias) {
-                    // Generación dinámica de imagen si no hay URL estática
+                  // 1. Imagen de la categoría (Price List)
+                  const catUrl = cat.price_list_url || cat.main_catalog_url || cat.priceListUrl;
+                  if (catUrl) {
+                    send({ media_url: catUrl, choices: [{ delta: { content: "" } }] });
+                  }
+
+                  // 2. Imágenes de servicios individuales si existen
+                  if (Array.isArray(cat.servicios)) {
+                    for (const srv of cat.servicios) {
+                      if (srv.image_url) {
+                        send({ media_url: srv.image_url, choices: [{ delta: { content: "" } }] });
+                      }
+                    }
+                  }
+
+                  // 3. Generación dinámica (Satori) si no hay URLs estáticas
+                  if (!catUrl && (cat.servicios || cat.categorias)) {
                     const title = (cat.categoria || cat.category_name || 'Nuestros Servicios');
                     const items = cat.servicios || cat.categorias || [];
                     if (items.length > 0) {
