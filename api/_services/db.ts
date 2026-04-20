@@ -19,7 +19,11 @@ if (!connectionString) {
 }
 
 // Inicialización diferida o protegida para evitar crashes en el Edge
-export const sql = connectionString ? neon(connectionString) : null as any;
+export const sql = connectionString ? neon(connectionString) : (() => {
+    console.warn("[db.ts] SQL connection NOT available. Returning empty runner.");
+    return async () => [];
+})() as any;
+
 export const db = connectionString ? drizzle(sql, { schema }) : null as any;
 
 /**
