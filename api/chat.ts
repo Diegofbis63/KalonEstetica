@@ -159,9 +159,8 @@ export default async function handler(req: Request | any) {
           }
 
           if (!hasSentContent) {
-            console.warn('[api/chat] ALERTA: El stream terminó sin generar contenido ni herramientas.');
-            // En vez de un mensaje genérico, enviamos uno que pida reintentar si el modelo falló
-            send({ choices: [{ delta: { content: "¡Hola! Estoy procesando tu solicitud, ¿podrías decirme tu nombre para empezar? 😊" } }] });
+            console.warn('[api/chat] ALERTA: Stream finalizado sin contenido. Generando respuesta proactiva.');
+            send({ choices: [{ delta: { content: "¡Hola! Estoy procesando tu solicitud. Por favor, dime tu nombre para que podamos empezar. 😊" } }] });
           }
 
           // Guardado final del historial

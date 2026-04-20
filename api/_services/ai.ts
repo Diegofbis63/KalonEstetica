@@ -17,9 +17,9 @@ export const getKalonModel = () => {
         },
     });
 
-    // Usamos el modelo FREE de Google para evitar errores de 402 (créditos)
-    // Este modelo es extremadamente rápido y capaz de seguir instrucciones si son claras.
-  return openrouter('google/gemini-2.0-flash-lite-preview-02-05:free');
+    // Usamos gpt-4o-mini para máxima estabilidad en el razonamiento de herramientas
+    // Es extremadamente económico y sigue el protocolo de forma más robusta que los modelos lite.
+  return openrouter('openai/gpt-4o-mini');
 };
 
 /**
