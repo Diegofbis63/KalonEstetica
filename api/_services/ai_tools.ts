@@ -31,7 +31,7 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                 nombre: z.string().describe('Nombre de pila del cliente'),
                 apellido: z.string().describe('Apellido del cliente'),
             }),
-            execute: async ({ nombre, apellido }: { nombre: string; apellido: string }) => {
+            execute: async ({ nombre, apellido }) => {
                 try {
                     const fullName = `${nombre} ${apellido}`.trim();
                     const contactInfo: ContactInfo = { 
@@ -106,7 +106,7 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
             parameters: z.object({
                 categorias: z.array(z.string()).describe('Lista de nombres de categorías o UUIDs')
             }),
-            execute: async ({ categorias }: { categorias: string[] }) => {
+            execute: async ({ categorias }) => {
                 if (!currentLeadId) {
                     return { success: false, error: 'Primero necesito tu nombre y apellido.' };
                 }
@@ -145,7 +145,7 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                 serviceIds: z.array(z.string()).describe('Lista de IDs de los servicios en el carrito'),
                 fecha: z.string().describe('Fecha en formato YYYY-MM-DD'),
             }),
-            execute: async ({ serviceIds, fecha }: { serviceIds: string[]; fecha: string }) => {
+            execute: async ({ serviceIds, fecha }) => {
                 if (!currentLeadId) {
                     return { disponible: false, error: 'Primero necesito tu nombre para ver disponibilidad.' };
                 }
@@ -224,7 +224,7 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                 serviceIds: z.array(z.string()).describe('Lista completa de IDs de servicios que deben quedar en el carrito'),
                 accion: z.enum(['agregar', 'quitar', 'reemplazar']).describe('Qué acción se está realizando')
             }),
-            execute: async ({ serviceIds, accion }: { serviceIds: string[]; accion: string }) => {
+            execute: async ({ serviceIds, accion }) => {
                 if (!currentLeadId) {
                     return { success: false, error: 'Primero necesito registrarte para manejar tu carrito.' };
                 }
@@ -261,7 +261,7 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                 serviceIds: z.array(z.string()).describe('IDs de los servicios elegidos'),
                 dateTimeIso: z.string().describe('Fecha y hora en ISO, ej: "2026-03-27T15:00:00"'),
             }),
-            execute: async ({ serviceIds, dateTimeIso }: { serviceIds: string[]; dateTimeIso: string }) => {
+            execute: async ({ serviceIds, dateTimeIso }) => {
                 if (!currentLeadId) {
                     return { success: false, error: 'Primero necesito tu nombre para agendar.', mensaje: null, total: 0, duracion: 0 };
                 }
