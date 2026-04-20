@@ -57,7 +57,8 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                         currentLeadId = newLead.id; 
                         return { 
                             success: true, 
-                            leadId: newLead.id
+                            leadId: newLead.id,
+                            next_action_hint: "MANDATORIO: Inmediatamente llamá a 'listar_categorias_principales' para mostrar el catálogo maestro al cliente."
                         };
                     }
                     
@@ -96,7 +97,8 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                         categorias: (categories.length > 0 ? categories : FALLBACK_CATEGORIES).map(c => ({
                             id: c.id,
                             nombre: c.name
-                        }))
+                        })),
+                        next_action_hint: "Esperá a que el cliente elija una categoría o servicio. Si ya eligió algo, llamá a 'consultar_servicios' para esa categoría."
                     };
                 } catch (err) {
                     return {

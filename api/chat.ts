@@ -136,8 +136,10 @@ export default async function handler(req: Request) {
                 const catalogsToProcess = Array.isArray(results.catalogs) ? results.catalogs : [results];
 
                 for (const cat of catalogsToProcess) {
-                    // Prioridad 1: Imagen pre-generada (URL guardada en DB)
-                    const savedUrl = cat.price_list_url;
+                    // Detectar URL de imagen (puede venir como price_list_url o main_catalog_url)
+                    const savedUrl = cat.price_list_url || cat.main_catalog_url;
+                    
+                    console.log(`[DEBUG chat] Procesando catálogo para tool ${toolName}. URL:`, savedUrl || 'Ninguna (usará Satori)');
                     
                     if (savedUrl) {
                         send({
