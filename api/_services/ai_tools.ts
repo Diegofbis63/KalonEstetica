@@ -35,7 +35,7 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
 
     return {
         registrar_cliente: tool({
-            description: 'PASO 1: Registra al cliente. Solo requiere nombre y apellido. USAR ESTA HERRAMIENTA SOLO UNA VEZ.',
+            description: 'ETAPA 1: Registra al cliente. Solo requiere nombre y apellido. USAR ESTA HERRAMIENTA SOLO UNA VEZ POR SESIÓN.',
             parameters: z.object({
                 nombre_completo: z.string().describe('Nombre y apellido del cliente (OBLIGATORIO)')
             }),
@@ -61,8 +61,8 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                         return { 
                             success: true, 
                             leadId: newLead.id,
-                            message: `¡Perfecto ${fullName.split(' ')[0]}! Ya te registré en nuestro sistema. 😊`,
-                            next_step: "Si ya sabes qué servicio buscas, usa 'consultar_servicios'. Si no, muestra el catálogo maestro con 'listar_categorias_principales'."
+                            message: `Registro exitoso para ${fullName}.`,
+                            next_step: "ETAPA 2: Llama a 'listar_categorias_principales' ahora."
                         };
                     }
                     
@@ -86,7 +86,7 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
         }),
 
         listar_categorias_principales: tool({
-            description: 'Muestra el Catálogo Maestro (todas las especialidades). Usar solo si el cliente pide ver todo o está indeciso.',
+            description: 'ETAPA 2: Muestra el Catálogo Maestro (todas las especialidades). Usar inmediatamente después del registro inicial.',
             parameters: z.object({}),
             execute: async () => {
                 console.log('[PASO 2] Cargando Catálogo');
@@ -104,7 +104,7 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                             id: c.id,
                             nombre: c.name
                         })),
-                        message: "Acá podés ver todas nuestras especialidades. ✨ ¿Sobre cuál te gustaría recibir más información o ver los precios?"
+                        message: "Catálogo cargado con éxito."
                     };
                 } catch (err) {
                     return {
@@ -142,7 +142,7 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                     return { 
                         success: true, 
                         catalogs,
-                        message: "Acá tenés el detalle de lo que me pediste. ¿Cuál de estos te gustaría elegir? 💎"
+                        message: "Servicios cargados con éxito."
                     };
                 } catch (err) {
                     console.error('[Tool:consultar_servicios] ERROR:', err);
