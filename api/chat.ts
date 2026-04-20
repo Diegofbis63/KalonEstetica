@@ -192,7 +192,7 @@ export default async function handler(req: Request) {
             try {
               send({
                 choices: [{
-                  delta: { content: "Disculpá, ocurrió un error momentáneo. Por favor intentá de nuevo. ✨" }
+                  delta: { content: "¡Ups! El sistema está reiniciando sus motores, por favor reintentá en un segundito. ✨" }
                 }]
               });
             } catch (e) {}
