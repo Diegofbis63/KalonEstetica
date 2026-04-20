@@ -16,24 +16,33 @@ import {
 } from './db.js';
 import { eq } from 'drizzle-orm';
 
+// --- DATOS DE RESPALDO (BACKUP) ---
+// Si la DB falla, el bot usará esto para no quedarse mudo.
+const FALLBACK_CATEGORIES = [
+    { id: '1', name: 'Pestañas' },
+    { id: '2', name: 'Cejas' },
+    { id: '3', name: 'Uñas' },
+    { id: '4', name: 'Depilación' }
+];
+
+const FALLBACK_CATALOG_IMAGE = "https://kalon-estetica.vercel.app/assets/centro-kalon-estetica--hRU61qu.png";
+
 /**
  * Herramientas del Chatbot KÂLON.
- * 
- * Utiliza un patrón de cierre para mantener el leadId durante la sesión de stream.
  */
 export const buildTools = (initialLeadId: string | null = null, orgId: string | null = null, initId: string | null = null) => {
     let currentLeadId = initialLeadId;
 
     return {
         registrar_cliente: tool({
-            description: 'Registra un nuevo cliente en KÂLON. Usalo cuando el cliente te diga su nombre y apellido.',
+            description: 'PASO 1: Registra al cliente. Solo requiere nombre y apellido.',
             parameters: z.object({
-                nombre: z.string().describe('Nombre de pila del cliente'),
-                apellido: z.string().describe('Apellido del cliente'),
+                nombre: z.string().describe('Nombre de pila'),
+                apellido: z.string().describe('Apellido'),
             }),
             execute: async ({ nombre, apellido }) => {
                 const fullName = `${nombre} ${apellido}`.trim();
-                console.log('[Tool:registrar_cliente] Attempting:', fullName);
+                console.log('[PASO 1] Registrando:', fullName);
                 
                 try {
                     const contactInfo: ContactInfo = { 
@@ -49,58 +58,48 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                         return { 
                             success: true, 
                             leadId: newLead.id, 
-                            nombre: fullName,
-                            result: "CLIENTE_REGISTRADO"
+                            message: `¡Perfecto ${nombre}! Ya te registré.` 
                         };
                     }
                     
-                    // Si el registro falla pero no lanza error, usamos modo resiliente
-                    console.warn('[Tool:registrar_cliente] DB returned no lead, using fallback mode');
+                    // Fallback de ID para no romper el flujo
                     currentLeadId = `temp_${Date.now()}`;
-                    return { success: true, leadId: currentLeadId, message: "Modo invitado activado." };
+                    return { success: true, leadId: currentLeadId, message: `¡Gusto en conocerte ${nombre}!` };
 
-                } catch (err: any) {
-                    console.error('[Tool:registrar_cliente] CRITICAL DB ERROR:', err.message);
-                    // MODO RESILIENTE: No dejamos que la IA sepa que falló la DB para no cortar el stream
+                } catch (err) {
+                    console.error('[Error Registro]:', err);
                     currentLeadId = `temp_${Date.now()}`;
-                    return { 
-                        success: true, // Mentimos para que el bot siga hablando
-                        leadId: currentLeadId, 
-                        is_guest_mode: true,
-                        message: "Registro en cola. Continuando conversación."
-                    };
+                    return { success: true, leadId: currentLeadId, note: "Modo contingencia activo" };
                 }
             }
         }),
 
         listar_categorias_principales: tool({
-            description: 'Lista las categorías principales de servicios y el catálogo maestro. SIEMPRE LLAMAR ESTO TRAS REGISTRAR.',
+            description: 'PASO 2: Muestra el catálogo maestro y categorías.',
             parameters: z.object({}),
             execute: async () => {
-                // NOTA: Eliminamos el bloqueo por currentLeadId para evitar race conditions
+                console.log('[PASO 2] Cargando Catálogo');
                 try {
-                    console.log('[Tool:listar_categorias] Fetching data...');
-                    const [categories, rows] = await Promise.all([
-                        getCategories(),
-                        sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`.catch(() => [])
-                    ]);
-
-                    let priceListUrl = null;
-                    if (rows && rows.length > 0) {
-                        priceListUrl = rows[0].value;
-                    }
+                    const categories = await getCategories().catch(() => FALLBACK_CATEGORIES);
+                    const rows = await sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`.catch(() => []);
+                    
+                    let imageUrl = FALLBACK_CATALOG_IMAGE;
+                    if (rows && rows.length > 0) imageUrl = rows[0].value;
 
                     return {
                         success: true,
-                        price_list_url: priceListUrl,
-                        categorias: categories.map(c => ({
+                        price_list_url: imageUrl,
+                        categorias: (categories.length > 0 ? categories : FALLBACK_CATEGORIES).map(c => ({
                             id: c.id,
                             nombre: c.name
                         }))
                     };
                 } catch (err) {
-                    console.error('[Tool:listar_categorias] ERROR:', err);
-                    return { success: false, error: 'Error al cargar catálogo.' };
+                    return {
+                        success: true,
+                        price_list_url: FALLBACK_CATALOG_IMAGE,
+                        categorias: FALLBACK_CATEGORIES
+                    };
                 }
             }
         }),

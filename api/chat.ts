@@ -120,16 +120,13 @@ export default async function handler(req: Request) {
                 // Si es categorias principales y no tiene price_list_url, usamos la maestra
                 // Ya no necesitamos buscar price_list_url acá porque la herramienta ya lo trae
                 // Pero lo mantenemos como fallback por si la herramienta falla silenciosamente
-                if (toolName === 'listar_categorias_principales' && !results.price_list_url) {
-                    try {
-                        const configResult = await db.execute(sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`);
-                        if (configResult && configResult.rows && configResult.rows.length > 0) {
-                          results.price_list_url = configResult.rows[0].value;
-                        }
-                    } catch {
-                        console.warn('[api/chat] Could not fetch backup master catalog URL');
-                    }
-                }
+                // Las herramientas ya traen todo lo necesario o su fallback interno.
+                const results = toolResults as { 
+                    success: boolean; 
+                    price_list_url?: string | null; 
+                    catalogs?: Array<{ categoria: string; servicios: any[]; price_list_url?: string | null }>;
+                    categorias?: any[];
+                };
 
                 // Normalizamos a un array de catálogos procesables
                 const catalogsToProcess = Array.isArray(results.catalogs) ? results.catalogs : [results];
