@@ -39,8 +39,10 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                         source: "web_chatbot",
                         initId: initId || null
                     };
+                    console.log('[Tool:registrar_cliente] Registering lead:', fullName);
                     const newLead = await createLead(orgId, fullName, contactInfo);
                     const leadData = newLead as { id: string } | null;
+                    console.log('[Tool:registrar_cliente] Lead created result:', JSON.stringify(leadData));
                     
                     if (!leadData || !leadData.id) {
                         return { success: false, error: 'Hubo un problemita guardando tus datos. ¿Podrías decirme tu nombre de nuevo? ✨' };
@@ -68,16 +70,19 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                     return { error: 'Primero necesito tu nombre y apellido para poder mostrarte nuestras especialidades.' };
                 }
                 try {
+                    console.log('[Tool:listar_categorias] Fetching categories and master catalog...');
                     const categories = await getCategories();
                     // Buscamos si hay una imagen de catálogo maestro configurada
                     let priceListUrl = null;
                     try {
-                        const config = await db.execute(sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`);
-                        if (config && config.rows && config.rows.length > 0) {
-                            priceListUrl = config.rows[0].value;
+                        // El cliente neon (sql) ya es un tagged template que retorna las filas directamente
+                        const rows = await sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`;
+                        console.log('[Tool:listar_categorias] DB config result:', JSON.stringify(rows));
+                        if (rows && rows.length > 0) {
+                            priceListUrl = rows[0].value;
                         }
                     } catch (e) {
-                        console.warn('[Tool:listar_categorias] No price list URL config found');
+                        console.warn('[Tool:listar_categorias] Error fetching master catalog:', e);
                     }
 
                     return {
