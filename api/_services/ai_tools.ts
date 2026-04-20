@@ -68,15 +68,17 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                     
                     // Fallback de ID para no romper el flujo
                     currentLeadId = `temp_${Date.now()}`;
-                    return { success: true, leadId: currentLeadId, message: `¡Gusto en conocerte ${nombre}!` };
+                    const firstName = fullName.split(' ')[0];
+                    return { success: true, leadId: currentLeadId, message: `¡Gusto en conocerte ${firstName}!` };
 
                 } catch (err) {
                     console.error('[Error Registro]:', err);
                     currentLeadId = `temp_${Date.now()}`;
+                    const firstName = fullName.split(' ')[0];
                     return { 
                         success: true, 
                         leadId: currentLeadId, 
-                        message: `¡Hola ${nombre}! Tuve un pequeño problema técnico al registrarte, pero igual podemos seguir adelante. ¿Qué servicio estás buscando hoy? ✨`,
+                        message: `¡Hola ${firstName}! Tuve un pequeño problema técnico al registrarte, pero igual podemos seguir adelante. ¿Qué servicio estás buscando hoy? ✨`,
                         note: "Modo contingencia activo" 
                     };
                 }
