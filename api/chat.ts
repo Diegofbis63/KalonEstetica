@@ -151,8 +151,8 @@ export default async function handler(req: Request | any) {
               // Diagnostic log for Vercel
               console.error('[Diagnostic] Status:', err.status, 'Message:', err.message);
 
-              if (err.status === 402 || (err.message && err.message.includes('credit'))) {
-                 send({ choices: [{ delta: { content: "¡Ups! Me quedé sin créditos momentáneamente. Por favor contactanos por WhatsApp al +54 9 11 1234-5678. 😊" } }] });
+              if (err.status === 402 || (err.message && (err.message.includes('credit') || err.message.includes('balance') || err.message.includes('insufficient')))) {
+                 send({ choices: [{ delta: { content: "¡Hola! Estoy teniendo un ajuste técnico con mi motor de inteligencia. Por favor, contactanos por WhatsApp al +54 9 11 3654-4865 para que te atendamos personalmente. ✨" } }] });
                  hasSentContent = true;
               }
             }

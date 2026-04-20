@@ -17,9 +17,9 @@ export const getKalonModel = () => {
         },
     });
 
-    // Usamos gpt-4o-mini para máxima estabilidad en el razonamiento de herramientas
-    // Es extremadamente económico y sigue el protocolo de forma más robusta que los modelos lite.
-  return openrouter('openai/gpt-4o-mini');
+    // Volvemos al modelo gratuito para evitar errores de crédito (402).
+    // Usamos el flash-lite-preview que es rápido y soporta tools en modo gratuito.
+  return openrouter('google/gemini-2.0-flash-lite-preview-02-05:free');
 };
 
 /**
