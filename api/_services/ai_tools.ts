@@ -57,8 +57,7 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                         currentLeadId = newLead.id; 
                         return { 
                             success: true, 
-                            leadId: newLead.id, 
-                            message: `¡Perfecto ${nombre}! Ya te registré.` 
+                            leadId: newLead.id
                         };
                     }
                     
