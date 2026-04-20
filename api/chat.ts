@@ -56,7 +56,7 @@ export default async function handler(req: Request) {
         content: m.content
       })),
       tools: aiTools,
-      maxSteps: 10, // Aumentado para dar margen de maniobra al registro
+      maxSteps: 15, // Restaurado a 15 (ESTABLE)
       maxTokens: 1000, 
       abortSignal: abortCtrl.signal,
     });
