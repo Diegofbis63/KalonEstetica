@@ -11,9 +11,21 @@ export default async function handler(req: Request) {
   if (req.method !== 'POST') {
     return new Response('Method Not Allowed', { status: 405 });
   }
-
   try {
-    const { messages, clientPhone, mediaUrl, message, identificationId } = await req.json();
+    // Intentamos obtener el cuerpo de la petición de forma robusta (Edge vs Node)
+    let body;
+    try {
+      if (typeof req.json === 'function') {
+        body = await req.json();
+      } else {
+        body = (req as any).body;
+      }
+    } catch (e) {
+      console.error('[api/chat] Error parsing body:', e);
+      body = (req as any).body || {};
+    }
+
+    const { messages, clientPhone, mediaUrl, message, identificationId } = body;
     const leadId = identificationId || null;
 
     // Obtenemos la fecha actual en formato legible (Argentina)
