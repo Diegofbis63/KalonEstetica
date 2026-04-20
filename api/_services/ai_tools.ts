@@ -48,7 +48,7 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                 try {
                     // Generar un identificador único para el teléfono si no lo tenemos para evitar errores UNIQUE
                     // Usamos el identificationId o un timestamp para que sea trazable pero único
-                    const tempPhone = `anon_${identificationId || Date.now()}`;
+                    const tempPhone = `anon_${initId || Date.now()}`;
                     
                     const contactInfo: ContactInfo = { 
                         phone: tempPhone, 
