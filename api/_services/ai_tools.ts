@@ -35,18 +35,23 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
 
     return {
         registrar_cliente: tool({
-            description: 'PASO 1: Registra al cliente. Solo requiere nombre y apellido.',
+            description: 'PASO 1: Registra al cliente. Solo requiere nombre y apellido. USAR ESTA HERRAMIENTA SOLO UNA VEZ POR SESIÓN.',
             parameters: z.object({
-                nombre: z.string().describe('Nombre de pila'),
-                apellido: z.string().describe('Apellido'),
+                nombre: z.string().optional().describe('Nombre de pila'),
+                apellido: z.string().optional().describe('Apellido'),
+                nombre_completo: z.string().optional().describe('Nombre y apellido juntos si los dio así')
             }),
-            execute: async ({ nombre, apellido }) => {
-                const fullName = `${nombre} ${apellido}`.trim();
+            execute: async ({ nombre, apellido, nombre_completo }) => {
+                const fullName = nombre_completo || `${nombre || ''} ${apellido || ''}`.trim() || 'Cliente Nuevo';
                 console.log('[PASO 1] Registrando:', fullName);
                 
                 try {
+                    // Generar un identificador único para el teléfono si no lo tenemos para evitar errores UNIQUE
+                    // Usamos el identificationId o un timestamp para que sea trazable pero único
+                    const tempPhone = `anon_${identificationId || Date.now()}`;
+                    
                     const contactInfo: ContactInfo = { 
-                        phone: "Pendiente", 
+                        phone: tempPhone, 
                         source: "chatbot",
                         initId: initId || null
                     };
@@ -58,7 +63,8 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                         return { 
                             success: true, 
                             leadId: newLead.id,
-                            message: `¡Perfecto ${nombre}! Ya te registré en nuestro sistema. 😊`
+                            message: `¡Perfecto ${fullName.split(' ')[0]}! Ya te registré en nuestro sistema. 😊`,
+                            next_step: "Muestra el catálogo maestro inmediatamente usando la herramienta 'listar_categorias_principales'."
                         };
                     }
                     

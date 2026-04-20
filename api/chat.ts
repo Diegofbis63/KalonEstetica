@@ -95,7 +95,7 @@ export async function POST(req: Request) {
                       }));
                       const host = req.headers.get('host') || 'kalon-estetica.vercel.app';
                       const protocol = host.includes('localhost') ? 'http' : 'https';
-                      const satoriUrl = `${protocol}://${host}/api/chat/satori-image?title=${encodeURIComponent(title)}&data=${btoa(JSON.stringify(menuData))}`;
+                      const satoriUrl = `${protocol}://${host}/api/satori-image?title=${encodeURIComponent(title)}&data=${Buffer.from(JSON.stringify(menuData)).toString('base64')}`;
                       send({ media_url: satoriUrl, choices: [{ delta: { content: "" } }] });
                       hasSentContent = true;
                     }
