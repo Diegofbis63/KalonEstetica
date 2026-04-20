@@ -9,7 +9,8 @@ export const config = {
 
 export const maxDuration = 60;
 
-export default async function handler(req: Request) {
+// EL ERROR ERA ESTE: En Next.js App Router, las rutas API deben exportar la función con el nombre del método (POST)
+export async function POST(req: Request) {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204 });
   }
@@ -89,28 +90,29 @@ export default async function handler(req: Request) {
                 send({ leadId: results.leadId });
               }
 
-              // Imágenes / Catálogos
+              // Imágenes / Catálogos - FIX: Validación de iterable
               const catalogs = Array.isArray(results.catalogs) ? results.catalogs : (results.id ? [results] : []);
-              for (const cat of catalogs) {
-                const savedUrl = cat.price_list_url || cat.main_catalog_url || cat.priceListUrl;
-                if (savedUrl) {
-                  send({ media_url: savedUrl, choices: [{ delta: { content: "" } }] });
-                  hasSentContent = true;
-                } else if (cat.servicios || cat.categorias) {
-                  // Fallback Satori (si no hay imagen directa)
-                  const title = (cat.categoria || cat.category_name || 'Nuestros Servicios');
-                  const items = cat.servicios || cat.categorias || [];
-                  if (items.length > 0) {
-                    const menuData = items.map((i: any) => ({
-                      label: i.nombre || i.label || i.title || 'Servicio',
-                      price: i.precio || i.price ? (String(i.precio || i.price).startsWith('$') ? (i.precio || i.price) : `$${i.precio || i.price}`) : undefined
-                    }));
-                    const encodedData = Buffer.from(JSON.stringify(menuData)).toString('base64');
-                    const host = req.headers.get('host') || 'kalon-estetica.vercel.app';
-                    const protocol = host.includes('localhost') ? 'http' : 'https';
-                    const satoriUrl = `${protocol}://${host}/api/satori-image?title=${encodeURIComponent(title)}&data=${encodedData}`;
-                    send({ media_url: satoriUrl, choices: [{ delta: { content: "" } }] });
+              if (catalogs && catalogs.length > 0) {
+                for (const cat of catalogs) {
+                  const savedUrl = cat.price_list_url || cat.main_catalog_url || cat.priceListUrl;
+                  if (savedUrl) {
+                    send({ media_url: savedUrl, choices: [{ delta: { content: "" } }] });
                     hasSentContent = true;
+                  } else if (cat.servicios || cat.categorias) {
+                    const title = (cat.categoria || cat.category_name || 'Nuestros Servicios');
+                    const items = cat.servicios || cat.categorias || [];
+                    if (items.length > 0) {
+                      const menuData = items.map((i: any) => ({
+                        label: i.nombre || i.label || i.title || 'Servicio',
+                        price: i.precio || i.price ? (String(i.precio || i.price).startsWith('$') ? (i.precio || i.price) : `$${i.precio || i.price}`) : undefined
+                      }));
+                      const encodedData = Buffer.from(JSON.stringify(menuData)).toString('base64');
+                      const host = req.headers.get('host') || 'kalon-estetica.vercel.app';
+                      const protocol = host.includes('localhost') ? 'http' : 'https';
+                      const satoriUrl = `${protocol}://${host}/api/satori-image?title=${encodeURIComponent(title)}&data=${encodedData}`;
+                      send({ media_url: satoriUrl, choices: [{ delta: { content: "" } }] });
+                      hasSentContent = true;
+                    }
                   }
                 }
               }
