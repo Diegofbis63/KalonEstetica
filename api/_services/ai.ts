@@ -1,5 +1,5 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import { getKalonSystemPrompt } from './prompts';
+import { getKalonSystemPrompt } from './prompts.js';
 
 /**
  * Modelo de IA para KÂLON — vía OpenRouter.

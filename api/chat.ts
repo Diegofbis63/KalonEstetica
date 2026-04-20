@@ -1,7 +1,7 @@
 import { streamText, convertToCoreMessages } from 'ai';
-import { getKalonModel, getSystemPrompt } from './_services/ai';
-import { buildTools } from './_services/ai_tools';
-import { saveChatHistory } from './_services/db';
+import { getKalonModel, getSystemPrompt } from './_services/ai.js';
+import { buildTools } from './_services/ai_tools.js';
+import { saveChatHistory } from './_services/db.js';
 
 export const config = {
   maxDuration: 60,
