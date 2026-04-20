@@ -183,29 +183,38 @@ export async function getChatHistory(leadId: string) {
     );
 }
 
-export async function createLead(orgId: string | null, name: string, contactInfo: ContactInfo = { phone: 'N/A', source: 'chatbot' }) {
-    if (!db) throw new Error("DB not initialized");
-    console.log(`[db.ts] Creating a new lead for: ${name}`);
+export async function createLead(orgId: string | null, name: string, contactInfo: ContactInfo) {
+    if (!db) {
+        console.error("[db.ts] NO DATABASE CONNECTION in createLead");
+        return null;
+    }
     
-    // Aseguramos que contact_info siempre tenga la estructura mínima requerida por el constraint NOT NULL
-    const finalContact = {
-        ...contactInfo,
-        source: contactInfo.source || 'chatbot'
-    };
-
-    const results = await withTimeout(
-        db.insert(schema.leads).values({
-            organization_id: orgId || null,
-            client_name: name,
-            contact_info: finalContact,
-            status: 'new',
-            is_bot_enabled: true,
-            chat_history: []
-        }).returning({ id: schema.leads.id }),
-        8000, []
-    );
+    console.log(`[db.ts] Creating lead: ${name}. Contact structure check:`, !!contactInfo);
     
-    return results[0] || null;
+    try {
+        const results = await withTimeout(
+            db.insert(schema.leads).values({
+                organization_id: orgId || null,
+                client_name: name,
+                contact_info: {
+                    phone: contactInfo?.phone || "Pendiente",
+                    source: contactInfo?.source || "chatbot",
+                    initId: contactInfo?.initId || null
+                },
+                status: 'new',
+                is_bot_enabled: true,
+                chat_history: []
+            }).returning({ id: schema.leads.id }),
+            8000, []
+        );
+        
+        const lead = results[0] || null;
+        if (lead) console.log(`[db.ts] Success! Lead ID: ${lead.id}`);
+        return lead;
+    } catch (e: any) {
+        console.error(`[db.ts] FAILED TO INSERT LEAD:`, e.message);
+        throw e;
+    }
 }
 
 // --- UPDATES ---
