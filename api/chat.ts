@@ -60,7 +60,7 @@ export default async function handler(req: Request | any) {
       system: getSystemPrompt(leadId, argentinaTime),
       tools: buildTools(leadId, null, identificationId),
       maxSteps: 8,
-      maxTokens: 400, // Limite ultra-bajo para evitar errores 402 de OpenRouter
+      maxTokens: 200, // Limite ultra-bajo para evitar errores 402 de OpenRouter
       onStepFinish: ({ toolCalls }) => {
         // En el servidor podemos loguear los pasos internos
         if (toolCalls?.length) console.log('[api/chat] Step tools:', toolCalls.map(t => t.toolName));
@@ -147,6 +147,10 @@ export default async function handler(req: Request | any) {
             if (part.type === 'error') {
               console.error('[api/chat] Error en parte del stream:', part.error);
               const err = part.error as any;
+              
+              // Diagnostic log for Vercel
+              console.error('[Diagnostic] Status:', err.status, 'Message:', err.message);
+
               if (err.status === 402 || (err.message && err.message.includes('credit'))) {
                  send({ choices: [{ delta: { content: "¡Ups! Me quedé sin créditos momentáneamente. Por favor contactanos por WhatsApp al +54 9 11 1234-5678. 😊" } }] });
                  hasSentContent = true;

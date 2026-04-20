@@ -18,7 +18,8 @@ export const getKalonModel = () => {
     });
 
     // Se cambia a GPT-4o-mini para máxima compatibilidad de streaming
-    return openrouter('openai/gpt-4o-mini');
+    // Cambiado a un modelo FREE para evitar bloqueos por reserva de créditos bajos
+  return openrouter('google/gemini-2.0-flash-lite-preview-02-05:free');
 };
 
 /**

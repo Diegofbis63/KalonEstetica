@@ -10,15 +10,15 @@ const openrouter = createOpenAI({
     apiKey: process.env.OPENROUTER_API_KEY,
 });
 
-const model = openrouter('google/gemini-2.0-flash-001');
+const model = openrouter('openai/gpt-4o-mini');
 
 const tools = {
     registrar_cliente: {
         description: 'Registra al cliente.',
         parameters: z.object({
-            nombre: z.string().optional(),
-            apellido: z.string().optional(),
-            nombre_completo: z.string().optional()
+            nombre: z.string(),
+            apellido: z.string(),
+            nombre_completo: z.string()
         }),
         execute: async (args) => {
             console.log('Tool Executing with:', args);
@@ -35,7 +35,7 @@ async function test() {
         messages: [{ role: 'user', content: 'Soy Gisella Frustia' }],
         tools: tools as any,
         maxSteps: 5,
-        maxTokens: 500,
+        maxTokens: 200,
     });
 
     let hasSent = false;
