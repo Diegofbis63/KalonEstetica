@@ -44,6 +44,7 @@ export default async function handler(req: Request) {
       system: getSystemPrompt(leadId, argentinaTime),
       tools: buildTools(leadId, null, identificationId),
       maxSteps: 10,
+      maxTokens: 1000,
       onStepFinish: ({ text, toolCalls, toolResults }) => {
         // En el servidor podemos loguear los pasos internos
         if (toolCalls?.length) console.log('[api/chat] Step tools:', toolCalls.map(t => t.toolName));
