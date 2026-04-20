@@ -94,7 +94,8 @@ export default async function handler(req: Request) {
 
             if (part.type === 'tool-result') {
               const { toolName, result: toolResults } = part;
-              const results = toolResults as any;
+              const results = toolResults as Record<string, unknown>;
+              hasSentContent = true; 
               
               // 1. Mensajes inyectados (si existen)
               if (results.message) {
@@ -118,8 +119,8 @@ export default async function handler(req: Request) {
               if (toolName === 'listar_categorias_principales' || toolName === 'consultar_servicios') {
                 const catalogsToProcess = Array.isArray(results.catalogs) ? results.catalogs : [results];
 
-                for (const cat of catalogsToProcess) {
-                  const savedUrl = cat.price_list_url || cat.main_catalog_url || cat.priceListUrl;
+                for (const cat of (catalogsToProcess as Record<string, unknown>[])) {
+                  const savedUrl = (cat.price_list_url || cat.main_catalog_url || cat.priceListUrl) as string | undefined;
                   
                   if (savedUrl) {
                     send({

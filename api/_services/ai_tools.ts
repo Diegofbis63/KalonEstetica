@@ -51,13 +51,14 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                         initId: initId || null
                     };
                     
-                    const newLead = await createLead(orgId, fullName, contactInfo);
+                    const newLead = (await createLead(orgId, fullName, contactInfo)) as any;
                     
                     if (newLead && newLead.id) {
                         currentLeadId = newLead.id; 
                         return { 
                             success: true, 
-                            leadId: newLead.id
+                            leadId: newLead.id,
+                            message: `¡Perfecto ${nombre}! Ya te registré en nuestro sistema. 😊`
                         };
                     }
                     
@@ -96,7 +97,8 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                         categorias: (categories.length > 0 ? categories : FALLBACK_CATEGORIES).map(c => ({
                             id: c.id,
                             nombre: c.name
-                        }))
+                        })),
+                        message: "Acá podés ver todas nuestras especialidades. ✨ ¿Sobre cuál te gustaría recibir más información o ver los precios?"
                     };
                 } catch (err) {
                     return {
