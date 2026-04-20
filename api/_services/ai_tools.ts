@@ -58,6 +58,7 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                         return { 
                             success: true, 
                             leadId: newLead.id,
+                            message: `¡Perfecto ${args.nombre}! Ya te registré en nuestro sistema. 😊`,
                             next_action_hint: "MANDATORIO: Inmediatamente llamá a 'listar_categorias_principales' para mostrar el catálogo maestro al cliente."
                         };
                     }
@@ -98,6 +99,7 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                             id: c.id,
                             nombre: c.name
                         })),
+                        message: "Acá podés ver todas nuestras especialidades. ✨ ¿Sobre cuál te gustaría recibir más información o ver los precios?",
                         next_action_hint: "Esperá a que el cliente elija una categoría o servicio. Si ya eligió algo, llamá a 'consultar_servicios' para esa categoría."
                     };
                 } catch (err) {
@@ -132,7 +134,11 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                             });
                         }
                     }
-                    return { success: true, catalogs };
+                    return { 
+                        success: true, 
+                        catalogs,
+                        message: "¡Excelente elección! 🌸 Acá tenés los detalles y precios de estos servicios. ¿Te gustaría sumar alguno al carrito para agendar?"
+                    };
                 } catch (err) {
                     console.error('[Tool:consultar_servicios] ERROR:', err);
                     return { success: false, error: 'Error cargando servicios.' };
