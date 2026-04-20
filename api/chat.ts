@@ -135,7 +135,7 @@ export default async function handler(req: Request) {
                 // Normalizamos a un array de catálogos procesables
                 const catalogsToProcess = Array.isArray(results.catalogs) ? results.catalogs : [results];
 
-                for (const cat of catalogsToProcess) {
+                for (const cat of catalogsToProcess as any[]) {
                     // Detectar URL de imagen (puede venir como price_list_url o main_catalog_url)
                     const savedUrl = cat.price_list_url || cat.main_catalog_url;
                     
