@@ -21,7 +21,7 @@ import { eq } from 'drizzle-orm';
  * 
  * Utiliza un patrón de cierre para mantener el leadId durante la sesión de stream.
  */
-export const buildTools = (initialLeadId: string | null, orgId: string | null, initId?: string | null) => {
+export const buildTools = (initialLeadId: string | null = null, orgId: string | null = null, initId: string | null = null) => {
     let currentLeadId = initialLeadId;
 
     return {
@@ -35,54 +35,46 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                 try {
                     const fullName = `${nombre} ${apellido}`.trim();
                     const contactInfo: ContactInfo = { 
-                        phone: "Sin teléfono", 
-                        source: "web_chatbot",
+                        phone: "N/A", 
+                        source: "chatbot",
                         initId: initId || null
                     };
                     console.log('[Tool:registrar_cliente] Registering lead:', fullName);
                     const newLead = await createLead(orgId, fullName, contactInfo);
-                    const leadData = newLead as { id: string } | null;
-                    console.log('[Tool:registrar_cliente] Lead created result:', JSON.stringify(leadData));
                     
-                    if (!leadData || !leadData.id) {
-                        return { success: false, error: 'Hubo un problemita guardando tus datos. ¿Podrías decirme tu nombre de nuevo? ✨' };
+                    if (!newLead || !newLead.id) {
+                        return { success: false, error: 'Requerido nombre y apellido para registro.' };
                     }
 
-                    currentLeadId = leadData.id; 
+                    currentLeadId = newLead.id; 
                     return { 
                         success: true, 
-                        leadId: leadData.id, 
+                        leadId: newLead.id, 
                         nombre: fullName,
                         result: "CLIENTE_REGISTRADO_EXITOSAMENTE"
                     };
                 } catch (err) {
                     console.error('[Tool:registrar_cliente] ERROR:', err);
-                    return { success: false, error: 'No se pudo registrar al cliente por un error técnico. Intentá de nuevo.' };
+                    return { success: false, error: 'Error de registro técnico.' };
                 }
             }
         }),
 
         listar_categorias_principales: tool({
-            description: 'Lista las categorías principales de servicios para uso interno. REQUIERE IDENTIFICACIÓN PREVIA.',
+            description: 'Lista las categorías principales de servicios y el catálogo maestro. SIEMPRE LLAMAR ESTO TRAS REGISTRAR.',
             parameters: z.object({}),
             execute: async () => {
-                if (!currentLeadId) {
-                    return { error: 'Primero necesito tu nombre y apellido para poder mostrarte nuestras especialidades.' };
-                }
+                // NOTA: Eliminamos el bloqueo por currentLeadId para evitar race conditions
                 try {
-                    console.log('[Tool:listar_categorias] Fetching categories and master catalog...');
-                    const categories = await getCategories();
-                    // Buscamos si hay una imagen de catálogo maestro configurada
+                    console.log('[Tool:listar_categorias] Fetching data...');
+                    const [categories, rows] = await Promise.all([
+                        getCategories(),
+                        sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`.catch(() => [])
+                    ]);
+
                     let priceListUrl = null;
-                    try {
-                        // El cliente neon (sql) ya es un tagged template que retorna las filas directamente
-                        const rows = await sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`;
-                        console.log('[Tool:listar_categorias] DB config result:', JSON.stringify(rows));
-                        if (rows && rows.length > 0) {
-                            priceListUrl = rows[0].value;
-                        }
-                    } catch (e) {
-                        console.warn('[Tool:listar_categorias] Error fetching master catalog:', e);
+                    if (rows && rows.length > 0) {
+                        priceListUrl = rows[0].value;
                     }
 
                     return {
@@ -90,26 +82,22 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                         price_list_url: priceListUrl,
                         categorias: categories.map(c => ({
                             id: c.id,
-                            nombre: c.name,
-                            hint: "Menciona el nombre para ver servicios"
+                            nombre: c.name
                         }))
                     };
                 } catch (err) {
                     console.error('[Tool:listar_categorias] ERROR:', err);
-                    return { success: false, error: 'No se pudieron cargar las categorías.', price_list_url: null, categorias: [] };
+                    return { success: false, error: 'Error al cargar catálogo.' };
                 }
             }
         }),
 
         consultar_servicios: tool({
-            description: 'Obtiene detalles y catálogo visual de servicios. SIEMPRE pasá un array de categorías si el cliente pide varias cosas (ej: ["pestañas", "depilación"]).',
+            description: 'Obtiene detalles y catálogo visual de servicios. SIEMPRE pasá un array de categorías.',
             parameters: z.object({
                 categorias: z.array(z.string()).describe('Lista de nombres de categorías o UUIDs')
             }),
             execute: async ({ categorias }) => {
-                if (!currentLeadId) {
-                    return { success: false, error: 'Primero necesito tu nombre y apellido.' };
-                }
                 try {
                     const catalogs = [];
                     for (const catName of categorias) {
@@ -126,11 +114,6 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                             });
                         }
                     }
-
-                    if (catalogs.length === 0) {
-                        return { success: false, error: 'No encontré servicios para esas categorías.', catalogs: [] };
-                    }
-
                     return { success: true, catalogs };
                 } catch (err) {
                     console.error('[Tool:consultar_servicios] ERROR:', err);
@@ -140,117 +123,43 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
         }),
 
         consultar_disponibilidad: tool({
-            description: 'Busca horarios disponibles basándose en los servicios elegidos. REQUIERE IDENTIFICACIÓN.',
+            description: 'Busca horarios disponibles basándose en los servicios elegidos.',
             parameters: z.object({
                 serviceIds: z.array(z.string()).describe('Lista de IDs de los servicios en el carrito'),
                 fecha: z.string().describe('Fecha en formato YYYY-MM-DD'),
             }),
             execute: async ({ serviceIds, fecha }) => {
-                if (!currentLeadId) {
-                    return { disponible: false, error: 'Primero necesito tu nombre para ver disponibilidad.' };
-                }
+                if (!currentLeadId) return { disponible: false, error: 'ID de lead perdido. Identificate de nuevo.' };
                 try {
                     const services = await getActiveServices();
                     const selected = services.filter(s => serviceIds.includes(s.id));
-                    
-                    if (selected.length === 0) {
-                        return { disponible: false, error: 'No seleccionaste servicios válidos.' };
-                    }
-
                     const totalDuration = selected.reduce((acc, s) => acc + (s.duration_min || 30), 0);
-                    
-                    // Lógica de Combos: Obtenemos todas las categorías únicas involucradas
-                    const uniqueCategories = [...new Set(selected.map(s => s.category_id))];
-                    const primaryCategoryId = uniqueCategories[0] || '';
+                    const primaryCategoryId = selected[0]?.category_id || '';
 
                     const start = new Date(fecha + "T00:00:00");
                     const end = new Date(start);
                     end.setDate(end.getDate() + 1);
 
-                    // Buscamos disponibilidad basándonos en la duración total
-                    // (Nota: Esto asume que el local maneja turnos secuenciales o que la función de DB resuelve el solapamiento)
                     const [slots, allStaff] = await Promise.all([
                         getAvailableSlotsFromDB(primaryCategoryId, start, end, totalDuration),
                         getAllStaff()
                     ]);
                     
-                    if (!slots || slots.length === 0) {
-                        return { disponible: false, mensaje: 'No hay horarios disponibles para esa fecha.', fecha, horarios: [], error: null };
-                    }
-
                     return {
-                        disponible: true,
+                        disponible: !!slots?.length,
                         fecha,
-                        horarios: slots.slice(0, 8).map(s => {
+                        horarios: (slots || []).slice(0, 8).map(s => {
                             const d = new Date(s.slot_time);
                             const staffMember = allStaff.find(st => st.id === s.staff_id);
                             return {
                                 hora: d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }),
                                 staff_name: staffMember?.name || "Especialista",
-                                staff_role: staffMember?.role || "Staff",
-                                staff_id: s.staff_id,
-                                total_duration: totalDuration
+                                staff_id: s.staff_id
                             };
-                        }),
-                        mensaje: uniqueCategories.length > 1 ? `Coordinando disponibilidad para ${uniqueCategories.length} especialidades...` : null
+                        })
                     };
                 } catch (err) {
-                    console.error('[Tool:consultar_disponibilidad] ERROR:', err);
-                    return { disponible: false, error: 'Error buscando disponibilidad.', mensaje: null, fecha: null, horarios: [] };
-                }
-            }
-        }),
-
-        listar_cuerpo_profesional: tool({
-            description: 'Lista a los profesionales que trabajan en el local, sus nombres y roles. Usalo para que el cliente sepa quiénes lo atenderán.',
-            parameters: z.object({}),
-            execute: async () => {
-                try {
-                    const staff = await getAllStaff();
-                    return staff.map(s => ({
-                        nombre: s.name,
-                        rol: s.role
-                    }));
-                } catch (err) {
-                    console.error('[Tool:listar_cuerpo_profesional] ERROR:', err);
-                    return { error: 'No se pudo obtener la lista de profesionales.' };
-                }
-            }
-        }),
-
-        modificar_carrito: tool({
-            description: 'Agrega o quita servicios del carrito del cliente. Usalo cada vez que el cliente elija un servicio de la imagen.',
-            parameters: z.object({
-                serviceIds: z.array(z.string()).describe('Lista completa de IDs de servicios que deben quedar en el carrito'),
-                accion: z.enum(['agregar', 'quitar', 'reemplazar']).describe('Qué acción se está realizando')
-            }),
-            execute: async ({ serviceIds, accion }) => {
-                if (!currentLeadId) {
-                    return { success: false, error: 'Primero necesito registrarte para manejar tu carrito.' };
-                }
-                try {
-                    const services = await getActiveServices();
-                    const selected = services.filter(s => serviceIds.includes(s.id));
-                    
-                    const newState = {
-                        selectedServiceIds: serviceIds,
-                        clientName: null, // Se puede expandir
-                        stage: 'selecting_services'
-                    };
-
-                    await db.update(schema.leads)
-                        .set({ current_state: newState, updated_at: new Date() })
-                        .where(eq(schema.leads.id, currentLeadId));
-
-                    return { 
-                        success: true, 
-                        total_items: selected.length,
-                        servicios: selected.map(s => s.title),
-                        mensaje: `Carrito actualizado (${accion}). Tenés ${selected.length} servicios seleccionados.`
-                    };
-                } catch (err) {
-                    console.error('[Tool:modificar_carrito] ERROR:', err);
-                    return { success: false, error: 'No se pudo actualizar el carrito.' };
+                    return { disponible: false, error: 'Error de disponibilidad.' };
                 }
             }
         }),
@@ -262,9 +171,7 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                 dateTimeIso: z.string().describe('Fecha y hora en ISO, ej: "2026-03-27T15:00:00"'),
             }),
             execute: async ({ serviceIds, dateTimeIso }) => {
-                if (!currentLeadId) {
-                    return { success: false, error: 'Primero necesito tu nombre para agendar.', mensaje: null, total: 0, duracion: 0 };
-                }
+                if (!currentLeadId) return { success: false, error: 'Sesión expirada.' };
                 try {
                     const [activeServices, allCategories] = await Promise.all([
                         getActiveServices(),
@@ -272,10 +179,6 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                     ]);
                     
                     const selected = activeServices.filter(s => serviceIds.includes(s.id));
-                    if (selected.length === 0) {
-                        return { success: false, error: 'No se encontraron los servicios seleccionados.', mensaje: null, total: 0, duracion: 0 };
-                    }
-
                     const totalPrice = selected.reduce((sum, s) => sum + Number(s.price || 0), 0);
                     const totalDuration = selected.reduce((sum, s) => sum + Number(s.duration_min || 30), 0);
                     const catIds = [...new Set(selected.map(s => s.category_id))];
@@ -283,21 +186,14 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
 
                     await createAppointment(currentLeadId, orgId, dateTimeIso, catNames, totalPrice, totalDuration, selected);
                     
-                    // Limpiar carrito después de agendar
-                    await db.update(schema.leads)
-                        .set({ current_state: null, updated_at: new Date() })
-                        .where(eq(schema.leads.id, currentLeadId));
-
                     return {
                         success: true,
                         mensaje: `Turno confirmado para ${catNames}`,
                         total: totalPrice,
-                        duracion: totalDuration,
-                        error: null as string | null
+                        duracion: totalDuration
                     };
                 } catch (err) {
-                    console.error('[Tool:agendar_turno] ERROR:', err);
-                    return { success: false, error: 'Error guardando el turno.', mensaje: null, total: 0, duracion: 0 };
+                    return { success: false, error: 'Error guardando el turno.' };
                 }
             }
         })
