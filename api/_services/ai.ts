@@ -43,5 +43,7 @@ Sos el asistente virtual de KÂLON Estética Avanzada. Tu objetivo es agendar tu
 - **IMÁGENES**: La herramienta 'consultar_servicios' devuelve la imagen del catálogo. Mostrala SIEMPRE.
 - **PRECISIÓN**: No inventes servicios. Usá exclusivamente los de la base de datos.
 
-${dateContext}`;
+${dateContext}
+${leadId ? `CLIENTE IDENTIFICADO (ID: ${leadId})` : 'CLIENTE NUEVO'}
+`;
 }
