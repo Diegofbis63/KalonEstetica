@@ -38,16 +38,17 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                         source: "web_chatbot",
                         initId: initId || null
                     };
-                    const newLead = await createLead(orgId, fullName, contactInfo) as any;
+                    const newLead = await createLead(orgId, fullName, contactInfo);
+                    const leadData = newLead as { id: string } | null;
                     
-                    if (!newLead) {
+                    if (!leadData || !leadData.id) {
                         return { success: false, error: 'Hubo un problemita guardando tus datos. ¿Podrías decirme tu nombre de nuevo? ✨' };
                     }
 
-                    currentLeadId = newLead.id; 
+                    currentLeadId = leadData.id; 
                     return { 
                         success: true, 
-                        leadId: newLead.id, 
+                        leadId: leadData.id, 
                         nombre: fullName,
                         result: "CLIENTE_REGISTRADO_EXITOSAMENTE"
                     };
@@ -67,50 +68,67 @@ export const buildTools = (initialLeadId: string | null, orgId: string | null, i
                 }
                 try {
                     const categories = await getCategories();
-                    return categories.map(c => ({
-                        id: c.id,
-                        nombre: c.name,
-                        hint: "Menciona el nombre para ver servicios"
-                    }));
+                    // Buscamos si hay una imagen de catálogo maestro configurada
+                    let priceListUrl = null;
+                    try {
+                        const config = await db.execute(sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`);
+                        if (config && config.rows && config.rows.length > 0) {
+                            priceListUrl = config.rows[0].value;
+                        }
+                    } catch (e) {
+                        console.warn('[Tool:listar_categorias] No price list URL config found');
+                    }
+
+                    return {
+                        success: true,
+                        price_list_url: priceListUrl,
+                        categorias: categories.map(c => ({
+                            id: c.id,
+                            nombre: c.name,
+                            hint: "Menciona el nombre para ver servicios"
+                        }))
+                    };
                 } catch (err) {
                     console.error('[Tool:listar_categorias] ERROR:', err);
-                    return { error: 'No se pudieron cargar las categorías.' };
+                    return { success: false, error: 'No se pudieron cargar las categorías.', price_list_url: null, categorias: [] };
                 }
             }
         }),
 
         consultar_servicios: tool({
-            description: 'Obtiene detalles de servicios internos. REQUIERE IDENTIFICACIÓN PREVIA.',
+            description: 'Obtiene detalles y catálogo visual de servicios. SIEMPRE pasá un array de categorías si el cliente pide varias cosas (ej: ["pestañas", "depilación"]).',
             parameters: z.object({
-                categoriaNombre: z.string().describe('Nombre de la categoría (ej: "Depilación", "Pestañas"). También acepta UUID.')
+                categorias: z.array(z.string()).describe('Lista de nombres de categorías o UUIDs')
             }),
-            execute: async ({ categoriaNombre }: { categoriaNombre: string }) => {
+            execute: async ({ categorias }: { categorias: string[] }) => {
                 if (!currentLeadId) {
-                    return { success: false, error: 'Primero necesito tu nombre y apellido.', servicios: [] };
+                    return { success: false, error: 'Primero necesito tu nombre y apellido.' };
                 }
                 try {
-                    const { services, category } = await getServicesByCategory(categoriaNombre);
-                    
-                    if (services.length === 0) {
-                        return { 
-                            success: false,
-                            error: `Categoría "${categoriaNombre}" no encontrada.`, 
-                            servicios: []
-                        };
+                    const catalogs = [];
+                    for (const catName of categorias) {
+                        const { services, category } = await getServicesByCategory(catName);
+                        if (services.length > 0) {
+                            catalogs.push({
+                                categoria: category?.name || catName,
+                                servicios: services.map(s => ({
+                                    id: s.id,
+                                    nombre: s.title,
+                                    precio: s.price
+                                })),
+                                price_list_url: category?.price_list_url || null
+                            });
+                        }
                     }
 
-                    return {
-                        success: true,
-                        servicios: services.map(s => ({
-                            id: s.id,
-                            nombre: s.title,
-                            precio: s.price
-                        })),
-                        price_list_url: category?.price_list_url || null
-                    };
+                    if (catalogs.length === 0) {
+                        return { success: false, error: 'No encontré servicios para esas categorías.', catalogs: [] };
+                    }
+
+                    return { success: true, catalogs };
                 } catch (err) {
                     console.error('[Tool:consultar_servicios] ERROR:', err);
-                    return { success: false, error: 'Error cargando servicios.', servicios: [] };
+                    return { success: false, error: 'Error cargando servicios.' };
                 }
             }
         }),
