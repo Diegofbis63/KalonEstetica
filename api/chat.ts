@@ -11,8 +11,9 @@ export default async function handler(req: Request | any) {
   if (req.method !== 'POST') {
     return new Response('Method Not Allowed', { status: 405 });
   }
+
   try {
-    // Parser de Body Universal (Edge / Node / Streams)
+    // Parser de Body Universal
     let body: any;
     try {
       if (typeof req.json === 'function') {
@@ -20,21 +21,8 @@ export default async function handler(req: Request | any) {
       } else if ((req as any).body && typeof (req as any).body === 'object') {
         body = (req as any).body;
       } else {
-        // Fallback para Node.js puro donde el body es un stream
-        const chunks = [];
-        const reader = (req as any).body?.getReader?.();
-        if (reader) {
-          let done = false;
-          while (!done) {
-            const { value, done: Done } = await reader.read();
-            if (value) chunks.push(value);
-            done = Done;
-          }
-          const raw = new TextDecoder().decode(new Uint8Array(chunks.flatMap(c => Array.from(c))));
-          body = JSON.parse(raw);
-        } else {
-          body = {};
-        }
+        const text = await req.text();
+        body = JSON.parse(text || '{}');
       }
     } catch (e) {
       console.error('[api/chat] Error parsing body:', e);
@@ -44,7 +32,6 @@ export default async function handler(req: Request | any) {
     const { messages = [], identificationId } = body;
     const leadId = identificationId || null;
 
-    // Obtenemos la fecha actual en formato legible (Argentina)
     let argentinaTime = new Date().toISOString();
     try {
       argentinaTime = new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Cordoba" });
@@ -53,23 +40,23 @@ export default async function handler(req: Request | any) {
       console.warn('[api/chat] LocalTime failed, using ISO');
     }
 
-    console.log('[api/chat] Incoming messages count:', messages?.length);
-    console.log('[api/chat] Using model: google/gemini-2.0-flash-lite-preview-02-05:free');
+    console.log('[api/chat] Incoming messages:', messages?.length);
+    console.log('[api/chat] User leadId:', leadId);
 
-    try {
-      const result = await streamText({
-        model: getKalonModel(),
-        messages: convertToCoreMessages(messages),
-        system: getSystemPrompt(leadId, argentinaTime),
-        tools: buildTools(leadId, null, identificationId),
-        maxSteps: 10,
-        maxTokens: 500,
-      });
+    // 1. Iniciamos el stream de texto con el modelo configurado
+    const result = await streamText({
+      model: getKalonModel(),
+      messages: convertToCoreMessages(messages),
+      system: getSystemPrompt(leadId, argentinaTime),
+      tools: buildTools(leadId, null, identificationId),
+      maxSteps: 10,
+      maxTokens: 1000,
+    });
 
-      console.log('[api/chat] streamText result initialized successfully');
+    console.log('[api/chat] streamText initialized');
 
-      const encoder = new TextEncoder();
-      const stream = new ReadableStream({
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
       async start(controller) {
         const send = (data: any) => {
           try {
@@ -80,24 +67,26 @@ export default async function handler(req: Request | any) {
         let fullAssistantMessage = "";
         let currentLeadId = leadId;
         let hasSentContent = false;
-        let toolResultsHistory: any[] = [];
 
         try {
           for await (const part of result.fullStream) {
-            // DEBUG: Log verbose para Vercel
-            console.log(`[api/chat] Part type: ${part.type}`);
+            console.log(`[api/chat] Part: ${part.type}`);
 
             if (part.type === 'error') {
-              console.error('[api/chat] Error en parte del stream:', JSON.stringify(part.error));
+              console.error('[api/chat] Stream part error:', part.error);
+              const err = part.error as any;
+              if (err.status === 402 || (err.message && err.message.includes('credit'))) {
+                send({ choices: [{ delta: { content: "¡Hola! Estoy teniendo un ajuste técnico. Por favor, contactanos por WhatsApp al +54 9 11 3654-4865. ✨" } }] });
+                hasSentContent = true;
+              }
             }
 
             if (part.type === 'tool-call') {
-              console.log(`[TOOL CALL] ${part.toolName}`);
-              hasSentContent = true; // Si hay una llamada a herramienta, el bot ya está actuando.
+              hasSentContent = true;
+              console.log(`[TOOL] ${part.toolName}`);
             }
 
             if (part.type === 'text-delta') {
-              console.log(`[TEXT DELTA] ${part.textDelta}`);
               fullAssistantMessage += part.textDelta;
               hasSentContent = true;
               send({ choices: [{ delta: { content: part.textDelta } }] });
@@ -105,89 +94,31 @@ export default async function handler(req: Request | any) {
 
             if (part.type === 'tool-result') {
               const res = part.result as any;
-              hasSentContent = true; 
-              
-              // Si la herramienta devuelve un ID de lead, lo sincronizamos al front
-              if (part.toolName === 'registrar_cliente' && res.leadId) {
+              if (res.leadId) {
                 currentLeadId = res.leadId;
-                send({ leadId: res.leadId });
-              }
-
-              // Manejo de catálogos e imágenes
-              const catalogs = Array.isArray(res.catalogs) 
-                ? res.catalogs 
-                : (res.id || res.price_list_url || res.categorias ? [res] : []);
-              
-              if (catalogs.length > 0) {
-                for (const cat of catalogs) {
-                  // 1. Imagen de la categoría (Price List)
-                  const catUrl = cat.price_list_url || cat.main_catalog_url || cat.priceListUrl;
-                  if (catUrl) {
-                    send({ media_url: catUrl, choices: [{ delta: { content: "" } }] });
-                  }
-
-                  // 2. Imágenes de servicios individuales si existen
-                  if (Array.isArray(cat.servicios)) {
-                    for (const srv of cat.servicios) {
-                      if (srv.image_url) {
-                        send({ media_url: srv.image_url, choices: [{ delta: { content: "" } }] });
-                      }
-                    }
-                  }
-
-                  // 3. Generación dinámica (Satori) si no hay URLs estáticas
-                  if (!catUrl && (cat.servicios || cat.categorias)) {
-                    const title = (cat.categoria || cat.category_name || 'Nuestros Servicios');
-                    const items = cat.servicios || cat.categorias || [];
-                    if (items.length > 0) {
-                      const menuData = items.map((i: any) => ({
-                        label: i.nombre || i.label || i.title || 'Servicio',
-                        price: i.precio || i.price ? (String(i.precio || i.price).startsWith('$') ? (i.precio || i.price) : `$${i.precio || i.price}`) : undefined
-                      }));
-                      const menuDataStr = JSON.stringify(menuData);
-                      const base64Data = btoa(encodeURIComponent(menuDataStr).replace(/%([0-9A-F]{2})/g, (match, p1) => String.fromCharCode(parseInt(p1, 16))));
-                      const host = (typeof req.headers.get === 'function' ? req.headers.get('host') : (req.headers as any).host) || 'kalon-estetica.vercel.app';
-                      const protocol = host.includes('localhost') ? 'http' : 'https';
-                      const satoriUrl = `${protocol}://${host}/api/satori-image?title=${encodeURIComponent(title)}&data=${base64Data}`;
-                      send({ media_url: satoriUrl, choices: [{ delta: { content: "" } }] });
-                    }
-                  }
-                }
-              }
-            }
-
-            if (part.type === 'error') {
-              console.error('[api/chat] Error en parte del stream:', part.error);
-              const err = part.error as any;
-              
-              // Diagnostic log for Vercel
-              console.error('[Diagnostic] Status:', err.status, 'Message:', err.message);
-
-              if (err.status === 402 || (err.message && (err.message.includes('credit') || err.message.includes('balance') || err.message.includes('insufficient')))) {
-                 send({ choices: [{ delta: { content: "¡Hola! Estoy teniendo un ajuste técnico con mi motor de inteligencia. Por favor, contactanos por WhatsApp al +54 9 11 3654-4865 para que te atendamos personalmente. ✨" } }] });
-                 hasSentContent = true;
+                send({ metadata: { leadId: res.leadId } });
               }
             }
           }
 
           if (!hasSentContent) {
-            console.warn('[api/chat] ALERTA: Stream finalizado sin contenido. Check prompt/tools.');
-            send({ choices: [{ delta: { content: "¡Hola! ✨ Soy tu asistente de Kâlon. Un gusto saludarte. ¿Me podrías decir tu nombre para comenzar con tu asesoría personalizada?" } }] });
+            console.warn('[api/chat] Empty stream');
+            send({ choices: [{ delta: { content: "¡Hola! ✨ Soy tu asistente de Kâlon. ¿Me podrías decir tu nombre para comenzar?" } }] });
           }
 
-          // Guardado final del historial
+          // Guardar historial
           if (fullAssistantMessage && currentLeadId) {
             await saveChatHistory(currentLeadId, [
               ...messages,
               { role: 'assistant', content: fullAssistantMessage }
-            ]).catch(e => console.error('[api/chat] Error DB:', e));
+            ]).catch(e => console.error('[api/chat] Save failed:', e));
           }
 
           send('[DONE]');
         } catch (error: any) {
-          console.error('[api/chat] Error en bucle del stream:', error);
+          console.error('[api/chat] Loop error:', error);
           if (!hasSentContent) {
-            send({ choices: [{ delta: { content: "Tuve un pequeño problema técnico, pero ya estoy de vuelta. ¿Podrías repetirme eso? 😊" } }] });
+            send({ choices: [{ delta: { content: "Hubo un error momentáneo. ¿Podrías intentar de nuevo? 😊" } }] });
           }
           send('[DONE]');
         } finally {
@@ -205,10 +136,7 @@ export default async function handler(req: Request | any) {
     });
 
   } catch (error: any) {
-    console.error('[api/chat] Error Fatal:', error);
-    // Intentamos devolver el error detallado para diagnosticar
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    const stack = error instanceof Error ? error.stack : '';
-    return new Response(JSON.stringify({ error: errorMsg, stack }), { status: 500 });
+    console.error('[api/chat] Global Error:', error);
+    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 }
