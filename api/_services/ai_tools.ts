@@ -62,7 +62,7 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                             id: c.id,
                             nombre: c.name
                         })),
-                        instruction: "Dile al cliente que ya lo registraste y muéstrale el catálogo maestro que acabas de recibir."
+                        instruction: "Responde exclusivamente con un mensaje de bienvenida cálido para el cliente. NO menciones herramientas ni muestres sintaxis de código."
                     };
                 } catch (err) {
                     console.error('[ATOMIC Error]:', err);
