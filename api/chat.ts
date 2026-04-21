@@ -55,6 +55,7 @@ export default async function handler(req: Request | any) {
       tools: buildTools(leadId, null, identificationId),
       maxSteps: 10,
       maxTokens: 1000, 
+      temperature: 0,
     });
 
     console.log('[api/chat] streamText initialized');
