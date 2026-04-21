@@ -41,12 +41,16 @@ export default async function handler(req: Request | any) {
     }
 
     console.log('[api/chat] Incoming messages:', messages?.length);
-    console.log('[api/chat] User leadId:', leadId);
+    
+    const coreMessages = messages.map((m: any) => ({
+      role: m.role === 'assistant' ? 'assistant' : 'user',
+      content: String(m.content || ''),
+    })).filter((m: any) => m.content.trim() !== '');
 
     // 1. Iniciamos el stream de texto con el modelo configurado
     const result = await streamText({
       model: getKalonModel(),
-      messages: convertToCoreMessages(messages),
+      messages: coreMessages,
       system: getSystemPrompt(leadId, argentinaTime),
       tools: buildTools(leadId, null, identificationId),
       maxSteps: 10,
