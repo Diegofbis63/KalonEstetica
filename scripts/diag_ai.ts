@@ -10,41 +10,43 @@ const openrouter = createOpenAI({
     apiKey: process.env.OPENROUTER_API_KEY,
 });
 
-const model = openrouter('openai/gpt-4o-mini');
+const model = openrouter('google/gemini-2.0-flash-001');
 
 const tools = {
-    registrar_cliente: {
-        description: 'Registra al cliente.',
+    registrar_e_iniciar_catalogo: {
+        description: 'Registra al cliente Y muestra el catálogo principal.',
         parameters: z.object({
-            nombre: z.string(),
-            apellido: z.string(),
             nombre_completo: z.string()
         }),
-        execute: async (args) => {
-            console.log('Tool Executing with:', args);
-            return { success: true, leadId: 'test-id', message: '¡Perfecto! Ya te registré.' };
+        execute: async (args: any) => {
+            console.log('Tool ATOMIC Executing with:', args);
+            return { 
+                success: true, 
+                leadId: 'test-id-123', 
+                price_list_url: 'https://kalon-estetica.vercel.app/assets/centro-kalon-estetica--hRU61qu.png',
+                categorias: [{id: '1', nombre: 'Cejas'}]
+            };
         }
     }
 };
 
 async function test() {
-    console.log('--- TESTING AI STREAM ---');
+    console.log('--- TESTING GEMINI 2.0 + PROTOCOL V6 ---');
     const result = streamText({
         model,
-        system: 'Pide nombre y usa registrar_cliente',
-        messages: [{ role: 'user', content: 'Soy Gisella Frustia' }],
+        system: 'Protocolo KÂLON V6: Si el usuario da su nombre, usa registrar_e_iniciar_catalogo.',
+        messages: [{ role: 'user', content: 'Hola, soy Francisco' }],
         tools: tools as any,
         maxSteps: 5,
-        maxTokens: 200,
     });
 
     let hasSent = false;
     for await (const part of result.fullStream) {
         console.log('PART TYPE:', part.type);
-        if (part.type === 'error') console.error('ERROR DATA:', JSON.stringify(part.error, null, 2));
-        if (part.type === 'tool-result') console.log('TOOL RESULT DATA:', JSON.stringify(part, null, 2));
+        if (part.type === 'error') console.error('ERROR:', JSON.stringify(part.error, null, 2));
+        if (part.type === 'tool-call') console.log('CALLING:', part.toolName);
+        if (part.type === 'tool-result') console.log('RESULT RECEIVED');
         if (part.type === 'text-delta') hasSent = true;
-        if (part.type === 'tool-result') hasSent = true;
     }
     console.log('Has sent content:', hasSent);
 }

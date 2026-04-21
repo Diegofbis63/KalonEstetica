@@ -2,11 +2,11 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { getKalonSystemPrompt } from './prompts.js';
 
 /**
- * Modelo de IA para KÂLON — vía OpenRouter.
+ * Modelo de IA para KÂLON — vía OpenRouter (Gemini 2.0).
  */
 export const getKalonModel = () => {
     const rawKey = process.env.OPENROUTER_API_KEY;
-    if (!rawKey) throw new Error("Falta API Key.");
+    if (!rawKey) throw new Error("Falta OPENROUTER_API_KEY.");
 
     const openrouter = createOpenAI({
         baseURL: 'https://openrouter.ai/api/v1',
@@ -17,8 +17,8 @@ export const getKalonModel = () => {
         },
     });
 
-    // Usamos Llama 3.3 70B (Free) que es extremadamente capaz con herramientas y gratuito.
-    return openrouter('meta-llama/llama-3.3-70b-instruct:free');
+    // Volvemos a Gemini 2.0 Flash vía OpenRouter como solicitó el usuario.
+    return openrouter('google/gemini-2.0-flash-001');
 };
 
 /**

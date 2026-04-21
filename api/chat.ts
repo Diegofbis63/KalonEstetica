@@ -98,9 +98,13 @@ export default async function handler(req: Request | any) {
 
             if (part.type === 'tool-result') {
               const res = part.result as any;
+              // Extraer y enviar metadatos de forma plana para el frontend
               if (res.leadId) {
                 currentLeadId = res.leadId;
-                send({ metadata: { leadId: res.leadId } });
+                send({ leadId: res.leadId });
+              }
+              if (res.price_list_url || res.image_url) {
+                send({ media_url: res.price_list_url || res.image_url });
               }
             }
           }

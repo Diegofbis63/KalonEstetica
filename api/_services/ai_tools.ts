@@ -34,58 +34,51 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
     let currentLeadId = initialLeadId;
 
     return {
-        registrar_cliente: tool({
-            description: 'ETAPA 1: Registra al cliente. Solo requiere nombre y apellido. USAR ESTA HERRAMIENTA SOLO UNA VEZ POR SESIÓN.',
+        registrar_e_iniciar_catalogo: tool({
+            description: 'ETAPA INICIAL: Registra al cliente Y muestra el catálogo principal en un solo paso. USAR CUANDO EL USUARIO DA SU NOMBRE.',
             parameters: z.object({
-                nombre_completo: z.string().describe('Nombre y apellido del cliente (OBLIGATORIO)')
+                nombre_completo: z.string().describe('Nombre y apellido del cliente')
             }),
             execute: async ({ nombre_completo }) => {
-                const fullName = nombre_completo || 'Cliente Nuevo';
-                console.log('[TOOL:registrar_cliente] Iniciando para:', fullName, 'InitId:', initId);
-                
+                console.log('[ATOMIC] Registro + Catalogo para:', nombre_completo);
                 try {
-                    // Generar un identificador único para el teléfono si no lo tenemos para evitar errores UNIQUE
-                    // Usamos el identificationId o un timestamp para que sea trazable pero único
+                    // 1. Registro
                     const tempPhone = `anon_${initId || Date.now()}`;
-                    
-                    const contactInfo: ContactInfo = { 
-                        phone: tempPhone, 
-                        source: "chatbot",
-                        initId: initId || null
-                    };
-                    
-                    const newLead = (await createLead(orgId, fullName, contactInfo)) as any;
-                    
-                    if (newLead && newLead.id) {
-                        currentLeadId = newLead.id; 
-                        return { 
-                            success: true, 
-                            leadId: newLead.id,
-                            next_step: "ETAPA 2: Llama a 'listar_categorias_principales' ahora."
-                        };
-                    }
-                    
-                    // Fallback de ID para no romper el flujo
-                    currentLeadId = `temp_${Date.now()}`;
-                    const firstName = fullName.split(' ')[0];
-                    return { success: true, leadId: currentLeadId };
+                    const contactInfo: ContactInfo = { phone: tempPhone, source: "chatbot", initId: initId || null };
+                    const newLead = await createLead(orgId, nombre_completo, contactInfo) as any;
+                    currentLeadId = newLead?.id || `temp_${Date.now()}`;
 
-                } catch (err) {
-                    console.error('[Error Registro]:', err);
-                    currentLeadId = `temp_${Date.now()}`;
-                    const firstName = fullName.split(' ')[0];
-                    return { 
-                        success: true, 
-                        leadId: currentLeadId, 
-                        message: `¡Hola ${firstName}! Tuve un pequeño problema técnico al registrarte, pero igual podemos seguir adelante. ¿Qué servicio estás buscando hoy? ✨`,
-                        note: "Modo contingencia activo" 
+                    // 2. Catalogo
+                    const categories = await getCategories().catch(() => FALLBACK_CATEGORIES);
+                    const rows = await sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`.catch(() => []);
+                    const imageUrl = (rows && rows.length > 0) ? rows[0].value : FALLBACK_CATALOG_IMAGE;
+
+                    return {
+                        success: true,
+                        leadId: currentLeadId,
+                        client_name: nombre_completo,
+                        price_list_url: imageUrl,
+                        categorias: (categories.length > 0 ? categories : FALLBACK_CATEGORIES).map(c => ({
+                            id: c.id,
+                            nombre: c.name
+                        })),
+                        instruction: "Dile al cliente que ya lo registraste y muéstrale el catálogo maestro que acabas de recibir."
                     };
+                } catch (err) {
+                    console.error('[ATOMIC Error]:', err);
+                    return { success: false, error: "Error en proceso atómico" };
                 }
             }
         }),
 
+        registrar_cliente: tool({
+            description: 'DEPRECATED: Usar registrar_e_iniciar_catalogo en su lugar.',
+            parameters: z.object({ nombre_completo: z.string() }),
+            execute: async ({ nombre_completo }) => ({ success: true, message: "Usar la otra herramienta" })
+        }),
+
         listar_categorias_principales: tool({
-            description: 'ETAPA 2: Muestra el Catálogo Maestro (todas las especialidades). Usar inmediatamente después del registro inicial.',
+            description: 'Muestra el Catálogo Maestro. Útil si el usuario pide ver servicios de nuevo.',
             parameters: z.object({}),
             execute: async () => {
                 console.log('[PASO 2] Cargando Catálogo');
