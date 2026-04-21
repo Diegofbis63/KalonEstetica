@@ -17,9 +17,8 @@ export const getKalonModel = () => {
         },
     });
 
-    // Volvemos al modelo gratuito para evitar errores de crédito (402).
-    // Usamos el flash-lite-preview que es rápido y soporta tools en modo gratuito.
-  return openrouter('google/gemini-2.0-flash-lite-preview-02-05:free');
+    // Usamos Llama 3.3 70B (Free) que es extremadamente capaz con herramientas y gratuito.
+  return openrouter('meta-llama/llama-3.3-70b-instruct:free');
 };
 
 /**
