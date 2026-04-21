@@ -54,7 +54,7 @@ export default async function handler(req: Request | any) {
       system: getSystemPrompt(leadId, argentinaTime),
       tools: buildTools(leadId, null, identificationId),
       maxSteps: 10,
-      maxTokens: 400, // Ajustado a 400 para evitar errores de crédito en OpenRouter
+      maxTokens: 1000, 
     });
 
     console.log('[api/chat] streamText initialized');
