@@ -17,8 +17,8 @@ export const getKalonModel = () => {
         },
     });
 
-    // Usamos Llama 3.3 70B (Free) que es extremadamente capaz con herramientas y gratuito.
-  return openrouter('meta-llama/llama-3.3-70b-instruct:free');
+    // Usamos Gemini 2.0 Flash Lite (Free) - Rápido, gratuito y excelente para tools.
+    return openrouter('google/gemini-2.0-flash-lite-preview-02-05:free');
 };
 
 /**

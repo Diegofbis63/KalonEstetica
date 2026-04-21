@@ -85,7 +85,10 @@ export default async function handler(req: Request | any) {
             // DEBUG: Log verbose para Vercel
             console.log(`[api/chat] Part type: ${part.type}`);
 
-            if (part.type === 'tool-call') console.log(`[TOOL CALL] ${part.toolName}`);
+            if (part.type === 'tool-call') {
+              console.log(`[TOOL CALL] ${part.toolName}`);
+              hasSentContent = true; // Si hay una llamada a herramienta, el bot ya está actuando.
+            }
 
             if (part.type === 'text-delta') {
               console.log(`[TEXT DELTA] ${part.textDelta}`);
@@ -162,8 +165,8 @@ export default async function handler(req: Request | any) {
           }
 
           if (!hasSentContent) {
-            console.warn('[api/chat] ALERTA: Stream finalizado sin contenido. Check mode/tools.');
-            send({ choices: [{ delta: { content: "¡Hola! Soy Kâlon, tu asistente premium. ✨ Un gusto recibirte. Por favor, dime tu nombre para que podamos empezar con tu asesoría personalizada. 😊" } }] });
+            console.warn('[api/chat] ALERTA: Stream finalizado sin contenido. Check prompt/tools.');
+            send({ choices: [{ delta: { content: "¡Hola! ✨ Soy tu asistente de Kâlon. Un gusto saludarte. ¿Me podrías decir tu nombre para comenzar con tu asesoría personalizada?" } }] });
           }
 
           // Guardado final del historial
