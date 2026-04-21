@@ -107,11 +107,15 @@ export default async function handler(req: Request | any) {
               }
 
               // 2. Extraer TODAS las URLs de medios (Recursivo para colecciones)
+              const sentUrls = new Set<string>();
               const extractMedia = (obj: any) => {
                 if (!obj) return;
                 if (typeof obj === 'string') {
                   if (obj.startsWith('http') && (obj.match(/\.(jpeg|jpg|gif|png|webp)/i) || obj.includes('supabase'))) {
-                    send({ media_url: obj });
+                    if (!sentUrls.has(obj)) {
+                      sentUrls.add(obj);
+                      send({ media_url: obj });
+                    }
                   }
                   return;
                 }
@@ -120,11 +124,16 @@ export default async function handler(req: Request | any) {
                   return;
                 }
                 if (typeof obj === 'object') {
-                  if (obj.price_list_url) send({ media_url: obj.price_list_url });
-                  if (obj.image_url) send({ media_url: obj.image_url });
+                  // Prioridad a campos conocidos
+                  if (obj.price_list_url) extractMedia(obj.price_list_url);
+                  if (obj.image_url) extractMedia(obj.image_url);
                   
-                  // Crawl properties
-                  Object.values(obj).forEach(extractMedia);
+                  // Crawl resto de propiedades (evitando ciclos básicos si los hubiera)
+                  Object.keys(obj).forEach(key => {
+                    if (key !== 'price_list_url' && key !== 'image_url') {
+                      extractMedia(obj[key]);
+                    }
+                  });
                 }
               };
               
