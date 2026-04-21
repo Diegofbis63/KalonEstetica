@@ -99,14 +99,36 @@ export default async function handler(req: Request | any) {
 
             if (part.type === 'tool-result') {
               const res = part.result as any;
-              // Extraer y enviar metadatos de forma plana para el frontend
+              
+              // 1. Extraer Lead ID si existe
               if (res.leadId) {
                 currentLeadId = res.leadId;
                 send({ leadId: res.leadId });
               }
-              if (res.price_list_url || res.image_url) {
-                send({ media_url: res.price_list_url || res.image_url });
-              }
+
+              // 2. Extraer TODAS las URLs de medios (Recursivo para colecciones)
+              const extractMedia = (obj: any) => {
+                if (!obj) return;
+                if (typeof obj === 'string') {
+                  if (obj.startsWith('http') && (obj.match(/\.(jpeg|jpg|gif|png|webp)/i) || obj.includes('supabase'))) {
+                    send({ media_url: obj });
+                  }
+                  return;
+                }
+                if (Array.isArray(obj)) {
+                  obj.forEach(extractMedia);
+                  return;
+                }
+                if (typeof obj === 'object') {
+                  if (obj.price_list_url) send({ media_url: obj.price_list_url });
+                  if (obj.image_url) send({ media_url: obj.image_url });
+                  
+                  // Crawl properties
+                  Object.values(obj).forEach(extractMedia);
+                }
+              };
+              
+              extractMedia(res);
             }
           }
 

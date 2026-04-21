@@ -26,30 +26,85 @@ const tools = {
                 price_list_url: 'https://kalon-estetica.vercel.app/assets/centro-kalon-estetica--hRU61qu.png',
                 categorias: [{id: '1', nombre: 'Cejas'}]
             };
+function getKalonSystemPrompt(date: string) {
+    return `Protocolo KÂLON V6. Fecha: ${date}. Si el usuario da su nombre, usa registrar_e_iniciar_catalogo. Si pide una categoría, usa mostrar_servicios_categoria.`;
+}
+
+function buildTools() {
+    return {
+        registrar_e_iniciar_catalogo: {
+            description: 'Registra al cliente Y muestra el catálogo principal.',
+            parameters: z.object({
+                nombre_completo: z.string()
+            }),
+            execute: async (args: any) => {
+                return { 
+                    success: true, 
+                    leadId: 'test-id-123', 
+                    price_list_url: 'https://kalon-estetica.vercel.app/assets/centro-kalon-estetica--hRU61qu.png',
+                    categorias: [{id: '1', nombre: 'Cejas'}, {id: '2', nombre: 'Uñas'}]
+                };
+            }
+        },
+        mostrar_servicios_categoria: {
+            description: 'Muestra los servicios de una categoría específica.',
+            parameters: z.object({
+                categoria_id: z.string()
+            }),
+            execute: async (args: any) => {
+                return {
+                    success: true,
+                    servicios: [{id: '101', nombre: 'Manicura Rusa', precio: 500}]
+                };
+            }
         }
-    }
-};
+    };
+}
 
 async function test() {
     console.log('--- TESTING GEMINI 2.0 + PROTOCOL V6 ---');
-    const result = streamText({
-        model,
-        system: 'Protocolo KÂLON V6: Si el usuario da su nombre, usa registrar_e_iniciar_catalogo.',
-        messages: [{ role: 'user', content: 'Hola, soy Francisco' }],
-        tools: tools as any,
-        maxSteps: 5,
-        maxTokens: 1000,
+    const result = await streamText({
+      model: openrouter('google/gemini-2.0-flash-001'),
+      system: getKalonSystemPrompt(new Date().toISOString()),
+      messages: [
+        { role: 'user', content: 'Hola, soy Francisco' }
+      ],
+      tools: buildTools(),
+      maxTokens: 1000,
+      temperature: 0,
     });
 
-    let hasSent = false;
+    console.log('--- STAGE 1: REGISTRATION ---');
     for await (const part of result.fullStream) {
-        console.log('PART TYPE:', part.type);
-        if (part.type === 'error') console.error('ERROR:', JSON.stringify(part.error, null, 2));
-        if (part.type === 'tool-call') console.log('CALLING:', part.toolName);
-        if (part.type === 'tool-result') console.log('RESULT RECEIVED');
-        if (part.type === 'text-delta') hasSent = true;
+      if (part.type === 'tool-result') {
+        console.log('TOOL RESULT:', JSON.stringify(part.result, null, 2));
+      }
+      if (part.type === 'text-delta') {
+        process.stdout.write(part.textDelta);
+      }
     }
-    console.log('Has sent content:', hasSent);
+    console.log('\n\n--- STAGE 2: CATEGORY EXPLORATION ---');
+    const result2 = await streamText({
+      model: openrouter('google/gemini-2.0-flash-001'),
+      system: getKalonSystemPrompt(new Date().toISOString()),
+      messages: [
+        { role: 'user', content: 'Hola, soy Francisco' },
+        { role: 'assistant', content: '¡Hola Francisco! Ya te registré. Acá tenés nuestro catálogo: [Imagen]' },
+        { role: 'user', content: 'Quiero ver los servicios de Uñas' }
+      ],
+      tools: buildTools(),
+      maxTokens: 1000,
+      temperature: 0,
+    });
+
+    for await (const part of result2.fullStream) {
+      if (part.type === 'tool-result') {
+        console.log('TOOL RESULT:', JSON.stringify(part.result, null, 2));
+      }
+      if (part.type === 'text-delta') {
+        process.stdout.write(part.textDelta);
+      }
+    }
 }
 
 test();
