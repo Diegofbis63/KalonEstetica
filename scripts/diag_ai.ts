@@ -38,6 +38,7 @@ async function test() {
         messages: [{ role: 'user', content: 'Hola, soy Francisco' }],
         tools: tools as any,
         maxSteps: 5,
+        maxTokens: 400,
     });
 
     let hasSent = false;

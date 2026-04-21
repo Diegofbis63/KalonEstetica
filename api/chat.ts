@@ -54,7 +54,7 @@ export default async function handler(req: Request | any) {
       system: getSystemPrompt(leadId, argentinaTime),
       tools: buildTools(leadId, null, identificationId),
       maxSteps: 10,
-      maxTokens: 1000,
+      maxTokens: 400, // Ajustado a 400 para evitar errores de crédito en OpenRouter
     });
 
     console.log('[api/chat] streamText initialized');
@@ -73,7 +73,7 @@ export default async function handler(req: Request | any) {
         let hasSentContent = false;
 
         try {
-          for await (const part of result.fullStream) {
+          for await (const part of result.fullStream as any) {
             console.log(`[api/chat] Part: ${part.type}`);
 
             if (part.type === 'error') {
