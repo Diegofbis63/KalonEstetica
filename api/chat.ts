@@ -53,21 +53,23 @@ export default async function handler(req: Request | any) {
       console.warn('[api/chat] LocalTime failed, using ISO');
     }
 
-    // Aumentamos maxSteps para permitir que la IA registre y luego liste servicios en un solo turno
-    const result = await streamText({
-      model: getKalonModel(),
-      messages: convertToCoreMessages(messages),
-      system: getSystemPrompt(leadId, argentinaTime),
-      tools: buildTools(leadId, null, identificationId),
-      maxSteps: 10, // Un poco más para flujos complejos
-      maxTokens: 500,
-      onStepFinish: ({ toolCalls, toolResults }) => {
-        if (toolCalls?.length) console.log('[STEP] Herramientas usadas:', toolCalls.map(t => t.toolName));
-      }
-    });
+    console.log('[api/chat] Incoming messages count:', messages?.length);
+    console.log('[api/chat] Using model: google/gemini-2.0-flash-lite-preview-02-05:free');
 
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
+    try {
+      const result = await streamText({
+        model: getKalonModel(),
+        messages: convertToCoreMessages(messages),
+        system: getSystemPrompt(leadId, argentinaTime),
+        tools: buildTools(leadId, null, identificationId),
+        maxSteps: 10,
+        maxTokens: 500,
+      });
+
+      console.log('[api/chat] streamText result initialized successfully');
+
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
       async start(controller) {
         const send = (data: any) => {
           try {
@@ -84,6 +86,10 @@ export default async function handler(req: Request | any) {
           for await (const part of result.fullStream) {
             // DEBUG: Log verbose para Vercel
             console.log(`[api/chat] Part type: ${part.type}`);
+
+            if (part.type === 'error') {
+              console.error('[api/chat] Error en parte del stream:', JSON.stringify(part.error));
+            }
 
             if (part.type === 'tool-call') {
               console.log(`[TOOL CALL] ${part.toolName}`);
