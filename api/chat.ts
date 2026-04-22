@@ -136,9 +136,19 @@ export default async function handler(req: Request | any) {
                   return;
                 }
                 if (typeof obj === 'object') {
-                  // Prioridad a campos conocidos
-                  if (obj.price_list_url) extractMedia(obj.price_list_url);
-                  if (obj.image_url) extractMedia(obj.image_url);
+                  // Prioridad a campos conocidos, aceptarlos aunque no pasen el filtro regex de extensión
+                  if (typeof obj.price_list_url === 'string' && obj.price_list_url.startsWith('http')) {
+                    if (!sentUrls.has(obj.price_list_url)) {
+                      sentUrls.add(obj.price_list_url);
+                      send({ media_url: obj.price_list_url });
+                    }
+                  }
+                  if (typeof obj.image_url === 'string' && obj.image_url.startsWith('http')) {
+                    if (!sentUrls.has(obj.image_url)) {
+                      sentUrls.add(obj.image_url);
+                      send({ media_url: obj.image_url });
+                    }
+                  }
                   
                   // Crawl resto de propiedades (evitando ciclos básicos si los hubiera)
                   Object.keys(obj).forEach(key => {

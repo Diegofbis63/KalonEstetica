@@ -58,11 +58,11 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                         leadId: currentLeadId,
                         client_name: nombre_completo,
                         price_list_url: imageUrl,
-                        categorias: (categories.length > 0 ? categories : FALLBACK_CATEGORIES).map(c => ({
+                        categorias_para_filtro_interno_NO_MENCIONAR: (categories.length > 0 ? categories : FALLBACK_CATEGORIES).map(c => ({
                             id: c.id,
                             nombre: c.name
                         })),
-                        instruction: "Responde exclusivamente con un mensaje de bienvenida cálido para el cliente. NO menciones herramientas ni muestres sintaxis de código."
+                        instruction: "IMPORTANTE: Responde ÚNICAMENTE con un saludo cálido. La imagen del catálogo ya se envió automáticamente, por lo que ESTÁ ESTRICTAMENTE PROHIBIDO listar o enumerar los servicios por escrito."
                     };
                 } catch (err) {
                     console.error('[ATOMIC Error]:', err);
