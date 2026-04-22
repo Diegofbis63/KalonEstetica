@@ -9,6 +9,7 @@ export function requireAuth(req: VercelRequest, res: VercelResponse) {
     const token = cookies.nova_token;
 
     if (!token) {
+        console.log("[Auth] No nova_token found in cookies");
         res.status(401).json({ error: 'No autenticado' });
         return null;
     }
@@ -16,7 +17,8 @@ export function requireAuth(req: VercelRequest, res: VercelResponse) {
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         return decoded;
-    } catch (e) {
+    } catch (e: any) {
+        console.log(`[Auth] JWT Verification failed: ${e.message}`);
         res.status(401).json({ error: 'Token inválido' });
         return null;
     }
