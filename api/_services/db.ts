@@ -200,6 +200,7 @@ export async function createLead(orgId: string | null, name: string, contactInfo
             db.insert(schema.leads).values({
                 organization_id: orgId || null,
                 client_name: name,
+                phone: contactInfo?.phone || null,
                 contact_info: {
                     phone: contactInfo?.phone || "Pendiente",
                     source: contactInfo?.source || "chatbot",
@@ -212,7 +213,7 @@ export async function createLead(orgId: string | null, name: string, contactInfo
             8000, []
         );
         
-        const lead = results[0] || null;
+        const lead = results && results[0] ? results[0] : null;
         if (lead) console.log(`[db.ts] Success! Lead ID: ${lead.id}`);
         return lead;
     } catch (e: any) {

@@ -29,8 +29,8 @@ export default async function handler(req: Request | any) {
       body = {};
     }
 
-    const { messages = [], identificationId } = body;
-    const leadId = identificationId || null;
+    const { messages = [], identificationId, leadId: bodyLeadId, initId } = body;
+    const leadId = bodyLeadId || identificationId || null;
 
     let argentinaTime = new Date().toISOString();
     try {
@@ -48,11 +48,18 @@ export default async function handler(req: Request | any) {
     })).filter((m: any) => m.content.trim() !== '');
 
     // 1. Iniciamos el stream de texto con el modelo configurado
+    let finalSystemPrompt = getSystemPrompt(leadId, argentinaTime);
+    
+    // Fuerza bruta para Etapa 1 si no hay Lead ID
+    if (!leadId) {
+      finalSystemPrompt += "\n\n[INSTRUCCIÓN PRIORITARIA]: El cliente NO está identificado. Si el usuario se presenta o da su nombre, DEBÉS llamar a 'registrar_e_iniciar_catalogo' antes de cualquier otra palabra.";
+    }
+
     const result = await streamText({
       model: getKalonModel(),
       messages: coreMessages,
-      system: getSystemPrompt(leadId, argentinaTime),
-      tools: buildTools(leadId, null, identificationId),
+      system: finalSystemPrompt,
+      tools: buildTools(leadId, null, initId || identificationId),
       maxSteps: 10,
       maxTokens: 1000, 
       temperature: 0,

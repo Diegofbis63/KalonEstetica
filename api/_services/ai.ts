@@ -25,7 +25,10 @@ export const getKalonModel = () => {
  * System Prompt — KÂLON Estética Avanzada
  */
 export function getSystemPrompt(leadId: string | null = null, currentDate: string = new Date().toISOString()) {
-    const identifiedStr = leadId ? `[CORREO/ID CLIENTE ACTUAL: ${leadId}]` : '[ESTADO: CLIENTE NO IDENTIFICADO]';
+    // Normalizar leadId para evitar que strings como "null" o "undefined" pasen como identificados
+    const normalizedLeadId = (leadId === 'null' || leadId === 'undefined' || !leadId) ? null : leadId;
+    
+    const identifiedStr = normalizedLeadId ? `[CORREO/ID CLIENTE ACTUAL: ${normalizedLeadId}]` : '[ESTADO: CLIENTE NO IDENTIFICADO]';
     const modularPrompt = getKalonSystemPrompt(currentDate);
     
     return `${identifiedStr}\n\n${modularPrompt}`;

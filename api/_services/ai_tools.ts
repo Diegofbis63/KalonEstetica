@@ -132,11 +132,13 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                     }
                     return { 
                         success: true, 
-                        catalogs
+                        total_categories: catalogs.length,
+                        catalogs,
+                        instruction: "Presentá estos servicios al cliente con entusiasmo. Si hay imágenes (image_url), menciónalas. NO repitas información técnica innecesaria."
                     };
                 } catch (err) {
                     console.error('[Tool:consultar_servicios] ERROR:', err);
-                    return { success: false, error: 'Error cargando servicios.' };
+                    return { success: false, error: 'Hubo un error al recuperar el catálogo. Por favor, intenta de nuevo.' };
                 }
             }
         }),
