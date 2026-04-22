@@ -25,7 +25,7 @@ const FALLBACK_CATEGORIES = [
     { id: '4', name: 'Depilación' }
 ];
 
-const FALLBACK_CATALOG_IMAGE = "https://kalon-estetica.vercel.app/assets/centro-kalon-estetica--hRU61qu.png";
+const FALLBACK_CATALOG_IMAGE = "https://kalon-estetica.vercel.app/template_chatbot.png";
 
 /**
  * Herramientas del Chatbot KÂLON.

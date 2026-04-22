@@ -13,8 +13,8 @@ const STAGE_1_LOCKED = `
 - **PASOS:**
   1. Detectar intención de registro/presentación.
   2. Llamar Herramienta.
-  3. USAR el leadId y las categorías del resultado para redactar la bienvenida.
-  4. Listar las categorías devueltas (Pestañas, Uñas, etc.) EXACTAMENTE como vienen en el resultado.
+  3. USAR el leadId para saber que el registro fue exitoso.
+  4. ESTÁ ESTRICTAMENTE PROHIBIDO listar o enumerar los servicios/categorías por escrito. La imagen del catálogo ya se envía automáticamente al usuario. Solo dale una bienvenida cálida y directa.
 `;
 
 const STAGE_2_EN_DESARROLLO = `
