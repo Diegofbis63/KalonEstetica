@@ -213,7 +213,7 @@ export async function createLead(orgId: string | null, name: string, contactInfo
                 is_bot_enabled: true,
                 chat_history: []
             }).returning({ id: schema.leads.id }),
-            8000, []
+            15000, [] // Tolerancia prolongada (15s) para absorver Cold Starts del Pooler
         );
         
         const lead = results && results[0] ? results[0] : null;

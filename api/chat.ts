@@ -7,6 +7,8 @@ export const config = {
   runtime: 'edge',
 };
 
+export const maxDuration = 60; // Permite flujos de chatbot y llamadas a BD más largas sin timeout
+
 export default async function handler(req: Request | any) {
   if (req.method !== 'POST') {
     return new Response('Method Not Allowed', { status: 405 });
@@ -30,7 +32,10 @@ export default async function handler(req: Request | any) {
     }
 
     const { messages = [], identificationId, leadId: bodyLeadId, initId } = body;
-    const leadId = bodyLeadId || identificationId || null;
+    const rawLeadId = bodyLeadId || identificationId;
+    // Sanitización robusta del uuid para evitar fantasmas
+    const leadId = (rawLeadId && typeof rawLeadId === 'string' && rawLeadId.length > 5 && rawLeadId !== 'null' && rawLeadId !== 'undefined') ? rawLeadId : null;
+    const safeInitId = initId && typeof initId === 'string' ? initId : null;
 
     let argentinaTime = new Date().toISOString();
     try {
