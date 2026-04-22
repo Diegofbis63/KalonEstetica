@@ -246,13 +246,20 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
   });
 
   const deleteLead = useMutation({
-    mutationFn: (id: string) => fetch(`/api/leads/chat?leadId=${id}`, { method: 'DELETE' }),
+    mutationFn: async (id: string) => {
+        const res = await fetch(`/api/clients?id=${id}`, { method: 'DELETE' });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || 'Failed to delete');
+        }
+        return res.json();
+    },
     onSuccess: () => {
         setDeleteConfirmOpen(false);
         queryClient.invalidateQueries({ queryKey: ['dashboard'] });
         toast.success("Lead eliminado");
     },
-    onError: () => toast.error("Error al eliminar lead")
+    onError: (err: Error) => toast.error(err.message || "Error al eliminar lead")
   });
 
 
