@@ -12,7 +12,7 @@ export interface ContactInfo {
     initId?: string | null;
 }
 
-const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+const connectionString = (process.env.DATABASE_URL || process.env.POSTGRES_URL)?.trim();
 
 if (connectionString) {
     try {
