@@ -19,7 +19,10 @@ const STAGE_1_LOCKED = `
 
 const STAGE_2_EN_DESARROLLO = `
 ### [MODULO 2: EXPLORACIÓN DE SERVICIOS]
-- Si el usuario muestra interés en una categoría, mostrá los servicios específicos con su nombre, PRECIO y descripción.
+- **ESTADO:** El usuario ha sido registrado y desea saber sobre un servicio o categoría (Ej: Pestañas, Uñas).
+- **ACCIÓN:** Llama OBLIGATORIAMENTE a "consultar_servicios" pasando el nombre de la categoría. 
+- **PRESENTACIÓN:** Una vez obtenida la respuesta de la herramienta, mostrá los servicios con su nombre, PRECIO y descripción.
+- **MOTIVACIÓN:** Sé entusiasta. Si la herramienta devuelve un link de imagen (price_list_url o image_url), invitalo a verla.
 `;
 
 const STAGE_3_PENDIENTE = `
