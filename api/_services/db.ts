@@ -14,8 +14,11 @@ export interface ContactInfo {
 
 const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 
-if (!connectionString) {
-    console.error("[db.ts] CRITICAL: Database connection string is missing!");
+if (connectionString) {
+    try {
+        const host = new URL(connectionString).hostname;
+        console.log(`[db.ts] Connecting to host: ${host}`);
+    } catch(e) {}
 }
 
 // Inicialización diferida o protegida para evitar crashes en el Edge
