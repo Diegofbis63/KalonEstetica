@@ -8,13 +8,12 @@
 const STAGE_1_LOCKED = `
 ### [MODULO 1: IDENTIDAD Y BIENVENIDA - BLOQUEADO]
 - **ESTADO INICIAL:** Si el usuario es nuevo o se presenta (Nombre/Apellido).
-- **ACCION MANDATORIA:** BLOQUEÁ cualquier respuesta de texto hasta que hayas llamado a la herramienta de registro.
-- **PROHIBICIÓN:** No saludes ni listes servicios de memoria. Tu única fuente de verdad es la herramienta.
+- **ACCION:** Registra al usuario y envíale el catálogo llamando a "registrar_e_iniciar_catalogo".
 - **PASOS:**
-  1. Detectar intención de registro/presentación.
+  1. Detectar presentación.
   2. Llamar Herramienta.
-  3. USAR el leadId para saber que el registro fue exitoso.
-  4. ESTÁ ESTRICTAMENTE PROHIBIDO listar o enumerar los servicios/categorías por escrito. La imagen del catálogo ya se envía automáticamente al usuario. Solo dale una bienvenida cálida y directa.
+  3. Dar una bienvenida cálida mencionando el catálogo que acaba de aparecer.
+- **REGLA DE ORO:** NO enumeres los servicios por texto, la imagen ya cumple esa función.
 `;
 
 const STAGE_2_EN_DESARROLLO = `

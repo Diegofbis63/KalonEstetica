@@ -58,7 +58,7 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                         leadId: currentLeadId,
                         client_name: nombre_completo,
                         price_list_url: imageUrl,
-                        instruction: "IMPORTANTE: Responde ÚNICAMENTE con un saludo y bienvenida. La imagen con el catálogo de servicios YA SE ENVIÓ en la pantalla del usuario. No tienes que hacer NADA MÁS. DALE LA BIENVENIDA Y ESPERA SU RESPUESTA."
+                        instruction: "IMPORTANTE: La imagen del catálogo YA se envió visualmente. SOLO dale la bienvenida al cliente por su nombre y dile que puede consultar por cualquier servicio."
                     };
                 } catch (err) {
                     console.error('[ATOMIC Error]:', err);
