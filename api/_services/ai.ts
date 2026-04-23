@@ -17,8 +17,8 @@ export const getKalonModel = () => {
         },
     });
 
-    // Volvemos a Gemini 2.0 Flash vía OpenRouter como solicitó el usuario.
-    return openrouter('google/gemini-2.0-flash-001');
+    // Cambiamos a Claude 3.5 Sonnet que es mucho más robusto siguiendo herramientas.
+    return openrouter('anthropic/claude-3.5-sonnet');
 };
 
 /**

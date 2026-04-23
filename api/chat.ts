@@ -1,13 +1,10 @@
 import { streamText, convertToCoreMessages } from 'ai';
 import { getKalonModel, getSystemPrompt } from './_services/ai.js';
 import { buildTools } from './_services/ai_tools.js';
-import { saveChatHistory } from './_services/db.js';
+import { saveChatHistory, createLead, sql, getCategories } from './_services/db.js';
 
-export const config = {
-  runtime: 'edge',
-};
-
-export const maxDuration = 60; // Permite flujos de chatbot y llamadas a BD más largas sin timeout
+export const runtime = 'edge';
+export const maxDuration = 60;
 
 export default async function handler(req: Request | any) {
   if (req.method !== 'POST') {
@@ -55,16 +52,75 @@ export default async function handler(req: Request | any) {
     // 1. Iniciamos el stream de texto con el modelo configurado
     let finalSystemPrompt = getSystemPrompt(leadId, argentinaTime);
     
-    // Fuerza bruta para Etapa 1 si no hay Lead ID
-    if (!leadId) {
-      finalSystemPrompt += "\n\n[INSTRUCCIÓN PRIORITARIA]: El cliente NO está identificado. Si el usuario se presenta o da su nombre, DEBÉS llamar a 'registrar_e_iniciar_catalogo' antes de cualquier otra palabra.";
+    // 1. DETERMINISTIC DISPATCHER (ESTRUCTURA TIPO N8N/WORKFLOW)
+    // Si no hay leadId y el último mensaje parece un nombre, forzamos la ejecución
+    // resolviendo el evento COMPLETAMENTE en backend, Bypaseando la IA 100% como un nodo n8n.
+    const lastUserMessage = coreMessages.filter((m: any) => m.role === 'user').pop();
+    const isNewOrAnonymous = !leadId || leadId.startsWith('temp_') || leadId.startsWith('anon_');
+    if (isNewOrAnonymous && lastUserMessage) {
+        const text = lastUserMessage.content.trim();
+        const isGreeting = ['hola', 'buenas', 'buen dia', 'buenas tardes', 'holis', 'como estas'].includes(text.toLowerCase());
+        const isNamePattern = text.length > 2 && !isGreeting;
+        
+        if (isNamePattern && coreMessages.length <= 5) {
+             console.log('[api/chat] DETERMINISTIC DISPATCHER: Triggered for:', text);
+             
+             // A) Lógica de Registro (Atomic)
+             const tempPhone = `anon_${safeInitId || Date.now()}`;
+             const newLead = await createLead(null, text, { phone: tempPhone, source: "chatbot", initId: safeInitId }).catch(() => null) as any;
+             const newLeadId = newLead?.id || leadId || `temp_${Date.now()}`;
+
+             // B) Lógica de Catálogo Multi-Imagen (Soporte Base64)
+             const [configRows, categories] = await Promise.all([
+                 sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`.catch(() => []),
+                 getCategories().catch(() => [])
+             ]);
+             
+             const mainImageUrl = (configRows && configRows.length > 0) ? configRows[0].value : 'https://aayqjixylnnjofnujlnv.supabase.co/storage/v1/object/public/kalon-catalog/catalog-default.jpg';
+             
+             const assistantMsg = `¡Un gusto conocerte, ${text}! ✨ Te dejo nuestro catálogo arriba para que lo mires. Contame, ¿qué servicio o tratamiento te interesa?`;
+
+             // C) Guardado Histórico
+             await saveChatHistory(newLeadId, [
+                ...messages,
+                { role: 'assistant', content: assistantMsg }
+             ]).catch(e => console.error('[api/chat] Save failed:', e));
+
+             // D) Retorno Mock Stream con TODAS las imágenes (incluyendo Base64)
+             const encoder = new TextEncoder();
+             const fakeStream = new ReadableStream({
+                start(controller) {
+                    const send = (data: any) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+                    send({ leadId: newLeadId });
+                    
+                    // Enviamos el catálogo principal
+                    send({ media_url: mainImageUrl });
+                    
+                    // Enviamos las imágenes de las categorías (Base64 o URL)
+                    categories.forEach((cat: any) => {
+                        const img = cat.price_list_url || cat.image_url;
+                        if (img && img.length > 20) { // Evitar vacíos o placeholders cortos
+                            send({ media_url: img });
+                        }
+                    });
+
+                    send({ choices: [{ delta: { content: assistantMsg } }] });
+                    controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                    controller.close();
+                }
+             });
+
+             return new Response(fakeStream, {
+                headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' },
+             });
+        }
     }
 
     const result = await streamText({
       model: getKalonModel(),
       messages: coreMessages,
       system: finalSystemPrompt,
-      tools: buildTools(leadId, null, initId || identificationId),
+      tools: buildTools(leadId, null, safeInitId || identificationId), // Usamos safeInitId
       maxSteps: 10,
       maxTokens: 1000, 
       temperature: 0,
@@ -123,7 +179,9 @@ export default async function handler(req: Request | any) {
               const extractMedia = (obj: any) => {
                 if (!obj) return;
                 if (typeof obj === 'string') {
-                  if (obj.startsWith('http') && (obj.match(/\.(jpeg|jpg|gif|png|webp)/i) || obj.includes('supabase'))) {
+                  const isUrl = obj.startsWith('http');
+                  const isBase64 = obj.startsWith('data:image');
+                  if ((isUrl && (obj.match(/\.(jpeg|jpg|gif|png|webp)/i) || obj.includes('supabase'))) || isBase64) {
                     if (!sentUrls.has(obj)) {
                       sentUrls.add(obj);
                       send({ media_url: obj });
@@ -164,8 +222,8 @@ export default async function handler(req: Request | any) {
           }
 
           if (!hasSentContent) {
-            console.warn('[api/chat] Empty stream');
-            send({ choices: [{ delta: { content: "¡Hola! ✨ Soy tu asistente de Kâlon. ¿Me podrías decir tu nombre para comenzar?" } }] });
+            console.warn('[api/chat] Empty stream - Forcing instruction');
+            send({ choices: [{ delta: { content: "¡Un gusto! ✨ Por favor, decime tu nombre para que pueda mostrarte nuestro catálogo y ayudarte con tu reserva." } }] });
           }
 
           // Guardar historial
@@ -176,13 +234,13 @@ export default async function handler(req: Request | any) {
             ]).catch(e => console.error('[api/chat] Save failed:', e));
           }
 
-          send('[DONE]');
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
         } catch (error: any) {
           console.error('[api/chat] Loop error:', error);
           if (!hasSentContent) {
             send({ choices: [{ delta: { content: "Hubo un error momentáneo. ¿Podrías intentar de nuevo? 😊" } }] });
           }
-          send('[DONE]');
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
         } finally {
           controller.close();
         }

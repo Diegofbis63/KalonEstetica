@@ -7,14 +7,14 @@
 
 const STAGE_1_LOCKED = `
 ### [MODULO 1: IDENTIDAD Y BIENVENIDA - BLOQUEADO]
-- **ESTADO INICIAL:** Si el usuario es nuevo o se presenta (Nombre/Apellido).
-- **ACCION OBLIGATORIA:** NO saludes con texto primero. DEBÉS llamar INMEDIATAMENTE a la herramienta "registrar_e_iniciar_catalogo".
-- **POR QUÉ:** La herramienta es la única que puede enviar la imagen del catálogo. Si hablás sin llamarla, el cliente no verá nada.
-- **PASOS:**
+- **ESTADO INICIAL:** El usuario se presenta o da su nombre (ej: "Hola soy Maria").
+- **ORDEN CRÍTICA:** DEBÉS LLAMAR a "registrar_e_iniciar_catalogo" en tu PRIMERA respuesta.
+- **FLUJO:** 
   1. Detectar nombre.
-  2. Ejecutar "registrar_e_iniciar_catalogo".
-  3. DESPUÉS de ejecutarla, podés responder con un saludo cálido.
-- **REGLA DE ORO:** NO enumeres servicios. La imagen es lo único que importa aquí.
+  2. Generar llamada a herramienta.
+  3. En la misma respuesta, dar una bienvenida cálida mencionando el catálogo enviado.
+- **PROHIBICIÓN:** Prohibido responder ÚNICAMENTE con texto sin llamar a la herramienta. La herramienta es la que inyecta el catálogo visual.
+- **REGLA DE ORO:** NO enumeres los servicios por texto, la imagen ya los muestra.
 `;
 
 const STAGE_2_EN_DESARROLLO = `

@@ -49,8 +49,10 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                     currentLeadId = newLead?.id || `temp_${Date.now()}`;
 
                     // 2. Catalogo
-                    const categories = await getCategories().catch(() => FALLBACK_CATEGORIES);
-                    const rows = await sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`.catch(() => []);
+                    const [categories, rows] = await Promise.all([
+                        getCategories().catch(() => FALLBACK_CATEGORIES),
+                        sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`.catch(() => [])
+                    ]);
                     const imageUrl = (rows && rows.length > 0) ? rows[0].value : FALLBACK_CATALOG_IMAGE;
 
                     return {
@@ -58,7 +60,8 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                         leadId: currentLeadId,
                         client_name: nombre_completo,
                         price_list_url: imageUrl,
-                        instruction: "IMPORTANTE: La imagen del catálogo YA se envió visualmente. SOLO dale la bienvenida al cliente por su nombre y dile que puede consultar por cualquier servicio."
+                        category_previews: categories.map((c: any) => c.price_list_url || c.image_url).filter(Boolean),
+                        instruction: "IMPORTANTE: El catálogo y las imágenes de categorías YA se enviaron visualmente. SOLO dale la bienvenida al cliente por su nombre y dile que puede consultar por cualquier servicio."
                     };
                 } catch (err) {
                     console.error('[ATOMIC Error]:', err);
