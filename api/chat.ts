@@ -3,7 +3,7 @@ import { getKalonModel, getSystemPrompt } from './_services/ai.js';
 import { buildTools } from './_services/ai_tools.js';
 import { saveChatHistory, createLead, sql, getCategories } from './_services/db.js';
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 export default async function handler(req: Request | any) {
@@ -63,55 +63,72 @@ export default async function handler(req: Request | any) {
         const isNamePattern = text.length > 2 && !isGreeting;
         
         if (isNamePattern && coreMessages.length <= 5) {
-             console.log('[api/chat] DETERMINISTIC DISPATCHER: Triggered for:', text);
+             console.log('[api/chat] DETERMINISTIC DISPATCHER: Iniciando interceptación para:', text);
              
-             // A) Lógica de Registro (Atomic)
-             const tempPhone = `anon_${safeInitId || Date.now()}`;
-             const newLead = await createLead(null, text, { phone: tempPhone, source: "chatbot", initId: safeInitId }).catch(() => null) as any;
-             const newLeadId = newLead?.id || leadId || `temp_${Date.now()}`;
-
-             // B) Lógica de Catálogo Multi-Imagen (Soporte Base64)
+             // A) Obtener Configuración e Imágenes (En paralelo para velocidad)
+             console.log('[api/chat] Dispatcher: Obteniendo imágenes y categorías...');
              const [configRows, categories] = await Promise.all([
                  sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`.catch(() => []),
                  getCategories().catch(() => [])
-             ]);
+             ]).catch(e => {
+                 console.error('[api/chat] Error en fetch inicial del dispatcher:', e);
+                 return [[], []];
+             });
              
              const mainImageUrl = (configRows && configRows.length > 0) ? configRows[0].value : 'https://aayqjixylnnjofnujlnv.supabase.co/storage/v1/object/public/kalon-catalog/catalog-default.jpg';
-             
              const assistantMsg = `¡Un gusto conocerte, ${text}! ✨ Te dejo nuestro catálogo arriba para que lo mires. Contame, ¿qué servicio o tratamiento te interesa?`;
 
-             // C) Guardado Histórico
-             await saveChatHistory(newLeadId, [
+             // B) Lógica de Registro (Intentamos que sea lo más rápido posible)
+             console.log('[api/chat] Dispatcher: Registrando lead...');
+             const tempPhone = `anon_${safeInitId || Date.now()}`;
+             const newLead = await createLead(null, text, { phone: tempPhone, source: "chatbot", initId: safeInitId }).catch(e => {
+                 console.error('[api/chat] Error creando lead en dispatcher:', e);
+                 return null;
+             }) as any;
+             const newLeadId = newLead?.id || leadId || `temp_${Date.now()}`;
+
+             // C) Guardado Histórico (No bloqueante para la respuesta visual)
+             saveChatHistory(newLeadId, [
                 ...messages,
                 { role: 'assistant', content: assistantMsg }
              ]).catch(e => console.error('[api/chat] Save failed:', e));
 
-             // D) Retorno Mock Stream con TODAS las imágenes (incluyendo Base64)
+             // D) Retorno de Stream INMEDIATO
+             console.log('[api/chat] Dispatcher: Enviando respuesta al cliente...');
              const encoder = new TextEncoder();
              const fakeStream = new ReadableStream({
                 start(controller) {
                     const send = (data: any) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
-                    send({ leadId: newLeadId });
                     
-                    // Enviamos el catálogo principal
-                    send({ media_url: mainImageUrl });
-                    
-                    // Enviamos las imágenes de las categorías (Base64 o URL)
-                    categories.forEach((cat: any) => {
-                        const img = cat.price_list_url || cat.image_url;
-                        if (img && img.length > 20) { // Evitar vacíos o placeholders cortos
-                            send({ media_url: img });
-                        }
-                    });
+                    try {
+                        send({ leadId: newLeadId });
+                        send({ media_url: mainImageUrl });
+                        
+                        // Enviamos las imágenes de las categorías
+                        categories.forEach((cat: any) => {
+                            const img = cat.price_list_url || cat.image_url;
+                            if (img && img.length > 20) {
+                                send({ media_url: img });
+                            }
+                        });
 
-                    send({ choices: [{ delta: { content: assistantMsg } }] });
-                    controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-                    controller.close();
+                        send({ choices: [{ delta: { content: assistantMsg } }] });
+                        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                    } catch (e) {
+                        console.error('[api/chat] Error en stream del dispatcher:', e);
+                    } finally {
+                        controller.close();
+                    }
                 }
              });
 
              return new Response(fakeStream, {
-                headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' },
+                headers: { 
+                    'Content-Type': 'text/event-stream', 
+                    'Cache-Control': 'no-cache', 
+                    'Connection': 'keep-alive',
+                    'X-Accel-Buffering': 'no' // Importante para evitar buffering en Vercel/Nginx
+                },
              });
         }
     }
