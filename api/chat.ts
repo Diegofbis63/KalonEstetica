@@ -53,68 +53,65 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const mainImageUrl = configRows?.[0]?.value || 'https://aayqjixylnnjofnujlnv.supabase.co/storage/v1/object/public/kalon-catalog/catalog-default.jpg';
             const assistantMsg = `¡Un gusto conocerte, ${text}! ✨ Te dejo nuestro catálogo arriba. Contame, ¿qué servicio o tratamiento te interesa hoy?`;
 
+        // --- PRE-PROCESAMIENTO ---
+        let activeLeadId: string | number | null = leadId;
+        if (identificationId && String(identificationId).length > 10 && !leadId) {
+            const existingLead = await findLeadByInitId(String(identificationId)).catch(() => null);
+            if (existingLead) {
+                activeLeadId = existingLead.id;
+                console.log(`[api/chat] Lead recuperado por initId: ${activeLeadId}`);
+            }
+        }
+
+        // Obtener categorías para matching
+        const categories = await getCategories().catch(() => []) as Array<{ id: string | number, name: string, price_list_url?: string }>;
+        const normalizedText = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        
+        // --- 1. PRIORIDAD: DETECCIÓN DE CATEGORÍAS (Etapa 2) ---
+        const matchedCats = categories.filter((c) => {
+            const catName = c.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            return normalizedText.includes(catName) || 
+                   catName.includes(normalizedText) || 
+                   (catName.length > 4 && normalizedText.includes(catName.substring(0, catName.length - 1)));
+        });
+
+        if (matchedCats.length > 0) {
+            console.log(`[api/chat] FLOW: Match con categorías [${matchedCats.map(c => c.name).join(', ')}]`);
+            res.setHeader('Content-Type', 'text/event-stream');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('X-Accel-Buffering', 'no');
+            if (activeLeadId) res.write(`data: ${JSON.stringify({ leadId: activeLeadId })}\n\n`);
+
+            let fullAssistantMsg = `¡Claro! Acá tenés la info de lo que me pediste:\n\n`;
+            for (const cat of matchedCats) {
+                if (cat.price_list_url) res.write(`data: ${JSON.stringify({ media_url: cat.price_list_url })}\n\n`);
+                const { services } = await getServicesByCategory(String(cat.id)).catch(() => ({ services: [] }));
+                if (services.length > 0) {
+                    fullAssistantMsg += `✨ **${cat.name}**:\n` + 
+                                      services.map((s: { title: string; price: number | string | null }) => `• ${s.title}: $${s.price}`).join('\n') + '\n\n';
+                }
+            }
+            fullAssistantMsg += `¿Te gustaría agendar un turno para alguno de estos servicios?`;
+            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: fullAssistantMsg } }] })}\n\n`);
+            res.write('data: [DONE]\n\n');
+            return res.end();
+        }
+
+        // --- 2. IDENTIFICACIÓN DE USUARIO (Etapa 1) ---
+        if (!activeLeadId && !isGreeting && text.length >= 2) {
+            console.log('[api/chat] FLOW: Identificando usuario...');
+            const mainImageUrl = "https://ijltsqfshvunmngvbeue.supabase.co/storage/v1/object/public/kalon-services/CATALOGO%20KALON.png";
+            const assistantMsg = `¡Un gusto conocerte, ${text}! ✨ Te dejo nuestro catálogo arriba. Contame, ¿qué servicio o tratamiento te interesa hoy?`;
             const tempPhone = `anon_${identificationId || Date.now()}`;
             const newLead = await createLead(null, text, { phone: tempPhone, source: "chatbot", initId: identificationId }).catch(() => null) as { id: string | number } | null;
             const newLeadId = newLead?.id || `temp_${Date.now()}`;
 
-            console.log(`[api/chat] FLOW: Lead creado ID=${newLeadId}. Enviando respuesta...`);
-
-            // Para respuestas con imágenes y leadId, usamos un JSON estándar pero enriquecido
-            // El frontend kalon-chat.ts sabe parsear media_url
             res.setHeader('Content-Type', 'text/event-stream');
-            res.setHeader('Cache-Control', 'no-cache');
-            res.setHeader('X-Accel-Buffering', 'no');
-
             res.write(`data: ${JSON.stringify({ leadId: newLeadId })}\n\n`);
             res.write(`data: ${JSON.stringify({ media_url: mainImageUrl })}\n\n`);
             res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: assistantMsg } }] })}\n\n`);
             res.write('data: [DONE]\n\n');
             return res.end();
-        }
-
-        // C) Match directo de Categoría (Si ya tenemos leadId)
-        if (leadId) {
-            console.log('[api/chat] STAGE 2: Buscando match de categorías...');
-            const categories = await getCategories().catch(() => []) as Array<{ id: string | number, name: string, price_list_url?: string }>;
-            
-            // Normalizamos el texto del usuario para un match más robusto
-            const normalizedText = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            
-            const matchedCats = categories.filter((c) => {
-                const catName = c.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                // Match por nombre de categoría o si el nombre está contenido (ej: "pestañas" match con "Pestañas y Cejas")
-                return normalizedText.includes(catName) || catName.includes(normalizedText) || 
-                       (catName.length > 4 && normalizedText.includes(catName.substring(0, catName.length - 1))); // Manejo básico de plurales
-            });
-
-            if (matchedCats.length > 0) {
-                console.log(`[api/chat] STAGE 2: Match con ${matchedCats.length} categorías: ${matchedCats.map(c => c.name).join(', ')}`);
-                
-                res.setHeader('Content-Type', 'text/event-stream');
-                res.setHeader('Cache-Control', 'no-cache');
-                res.setHeader('X-Accel-Buffering', 'no');
-                res.write(`data: ${JSON.stringify({ leadId })}\n\n`);
-
-                let fullAssistantMsg = `¡Claro! Acá tenés la info de lo que me pediste:\n\n`;
-
-                for (const cat of matchedCats) {
-                    if (cat.price_list_url) {
-                        res.write(`data: ${JSON.stringify({ media_url: cat.price_list_url })}\n\n`);
-                    }
-                    const { services } = await getServicesByCategory(String(cat.id)).catch(() => ({ services: [] }));
-                    if (services.length > 0) {
-                        fullAssistantMsg += `✨ **${cat.name}**:\n` + 
-                                          services.map((s: { title: string; price: number | string | null }) => `• ${s.title}: $${s.price}`).join('\n') + '\n\n';
-                    }
-                }
-
-                fullAssistantMsg += `¿Te gustaría agendar un turno para alguno de estos servicios?`;
-                
-                res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: fullAssistantMsg } }] })}\n\n`);
-                res.write('data: [DONE]\n\n');
-                return res.end();
-            }
-            console.log('[api/chat] STAGE 2: No hubo match determinístico. Pasando a AI...');
         }
 
         // --- 2. INTELIGENCIA ARTIFICIAL (OpenRouter) ---
@@ -137,7 +134,7 @@ Responde de forma concisa y ayuda al cliente con sus dudas sobre tratamientos.`;
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('X-Accel-Buffering', 'no');
-        res.write(`data: ${JSON.stringify({ leadId: leadId || 'temp' })}\n\n`);
+        res.write(`data: ${JSON.stringify({ leadId: activeLeadId || 'temp' })}\n\n`);
 
         for await (const chunk of stream) {
             const content = chunk.choices[0]?.delta?.content || '';
