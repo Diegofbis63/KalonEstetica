@@ -67,11 +67,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
             res.write(`data: ${JSON.stringify({ leadId: newLeadId })}\n\n`);
             res.write(`data: ${JSON.stringify({ media_url: mainImageUrl })}\n\n`);
-            if (categories.length > 0) {
-                categories.slice(0, 3).forEach((c: any) => {
-                    if (c.price_list_url) res.write(`data: ${JSON.stringify({ media_url: c.price_list_url })}\n\n`);
-                });
-            }
             res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: assistantMsg } }] })}\n\n`);
             res.write('data: [DONE]\n\n');
             return res.end();
