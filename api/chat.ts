@@ -20,14 +20,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-    console.log('[api/chat] --- NUEVA SOLICITUD RECIBIDA ---');
-
     try {
-        const { messages = [], leadId, identificationId } = req.body;
+        const { messages = [], leadId, identificationId } = req.body as { 
+            messages: Array<{ role: string; content: string }>;
+            leadId?: string | number;
+            identificationId?: string;
+        };
         const lastMessage = messages[messages.length - 1];
         const text = lastMessage?.content?.trim() || '';
-
-        console.log(`[api/chat] Body: LeadId=${leadId} | IdentId=${identificationId} | Text="${text}"`);
 
         // --- 1. FLUJO DETERMINÍSTICO (Prioridad: Velocidad y Entrega de Catálogo) ---
 
@@ -54,7 +54,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const assistantMsg = `¡Un gusto conocerte, ${text}! ✨ Te dejo nuestro catálogo arriba. Contame, ¿qué servicio o tratamiento te interesa hoy?`;
 
             const tempPhone = `anon_${identificationId || Date.now()}`;
-            const newLead = await createLead(null, text, { phone: tempPhone, source: "chatbot", initId: identificationId }).catch(() => null) as any;
+            const newLead = await createLead(null, text, { phone: tempPhone, source: "chatbot", initId: identificationId }).catch(() => null) as { id: string | number } | null;
             const newLeadId = newLead?.id || `temp_${Date.now()}`;
 
             console.log(`[api/chat] FLOW: Lead creado ID=${newLeadId}. Enviando respuesta...`);
@@ -74,8 +74,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         // C) Match directo de Categoría (Si ya tenemos leadId)
         if (leadId) {
-             const categories = await getCategories().catch(() => []);
-             const matchedCat = categories.find((c: any) => 
+             const categories = await getCategories().catch(() => []) as Array<{ id: string | number, name: string, price_list_url?: string }>;
+             const matchedCat = categories.find((c) => 
                  text.toLowerCase().includes(c.name.toLowerCase())
              );
 
@@ -106,7 +106,7 @@ Responde de forma concisa y ayuda al cliente con sus dudas sobre tratamientos.`;
             model: 'google/gemini-2.0-flash-001',
             messages: [
                 { role: 'system', content: systemPrompt },
-                ...messages.map((m: any) => ({ role: m.role, content: m.content }))
+                ...messages.map((m) => ({ role: m.role as "system" | "user" | "assistant", content: m.content }))
             ],
             stream: true,
         });
@@ -126,10 +126,11 @@ Responde de forma concisa y ayuda al cliente con sus dudas sobre tratamientos.`;
         res.write('data: [DONE]\n\n');
         return res.end();
 
-    } catch (e: any) {
-        console.error('[api/chat] CRITICAL ERROR:', e);
+    } catch (e: unknown) {
+        const error = e as Error;
+        console.error('[api/chat] CRITICAL ERROR:', error.message);
         if (!res.headersSent) {
-            return res.status(500).json({ error: e.message });
+            return res.status(500).json({ error: error.message });
         }
         res.end();
     }
