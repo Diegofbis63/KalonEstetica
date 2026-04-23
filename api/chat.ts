@@ -92,7 +92,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         // C) REGISTRO DE USUARIO (Etapa 1)
         if (!activeLeadId && !isGreeting && text.length >= 2) {
-            console.log('[api/chat] IDENTIFICANDO NUEVO LEAD...');
+            console.log('[api/chat] FLOW: Registrando nuevo lead...');
+            
+            // Recuperamos la imagen del catálogo desde la configuración del negocio
+            const configRows = await sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`.catch(() => []);
+            const mainImageUrl = configRows?.[0]?.value || 'https://ijltsqfshvunmngvbeue.supabase.co/storage/v1/object/public/kalon-services/CATALOGO%20KALON.png';
+
             const tempPhone = `anon_${Date.now()}`;
             const newLead = await createLead(null, text, { 
                 phone: tempPhone, 
@@ -101,8 +106,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }).catch(() => null);
             
             const finalLeadId = newLead?.id || `temp_${Date.now()}`;
-            const mainImageUrl = "https://ijltsqfshvunmngvbeue.supabase.co/storage/v1/object/public/kalon-services/CATALOGO%20KALON.png";
-            const assistantMsg = `¡Un gusto conocerte, **${text}**! ✨\n\nTe dejo arriba nuestro **Catálogo Maestro** con todas nuestras especialidades.\n\n¿En qué tratamiento estás interesada/o hoy? Decime el nombre y te paso los precios y detalles.`;
+            const assistantMsg = `¡Un gusto conocerte, ${text}! ✨ Te dejo nuestro catálogo arriba. Contame, ¿qué servicio o tratamiento te interesa hoy?`;
 
             res.setHeader('Content-Type', 'text/event-stream');
             res.write(`data: ${JSON.stringify({ leadId: finalLeadId })}\n\n`);
