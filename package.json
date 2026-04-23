@@ -69,6 +69,7 @@
     "jspdf-autotable": "^5.0.7",
     "lucide-react": "^0.462.0",
     "next-themes": "^0.3.0",
+    "openai": "^6.34.0",
     "pg": "^8.20.0",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
@@ -118,5 +119,3 @@
     "vitest": "^3.2.4"
   }
 }
-
-
