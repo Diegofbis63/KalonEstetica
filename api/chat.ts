@@ -83,7 +83,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                  console.log(`[api/chat] FLOW: Match con categoría ${matchedCat.name}`);
                  const { services } = await getServicesByCategory(String(matchedCat.id)).catch(() => ({ services: [] }));
                  const assistantMsg = `¡Excelente elección! En **${matchedCat.name}** tenemos estos servicios. ¿Cuál te gustaría realizarte?\n\n` + 
-                                    services.map((s: { name: string; price: number | string }) => `• ${s.name}: $${s.price}`).join('\n');
+                                    services.map((s: { title: string; price: number | string | null }) => `• ${s.title}: $${s.price}`).join('\n');
                  
                  res.setHeader('Content-Type', 'text/event-stream');
                  res.write(`data: ${JSON.stringify({ leadId })}\n\n`);
