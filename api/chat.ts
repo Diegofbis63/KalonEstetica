@@ -74,24 +74,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         // C) Match directo de Categoría (Si ya tenemos leadId)
         if (leadId) {
-             const categories = await getCategories().catch(() => []) as Array<{ id: string | number, name: string, price_list_url?: string }>;
-             const matchedCat = categories.find((c) => 
-                 text.toLowerCase().includes(c.name.toLowerCase())
-             );
+            console.log('[api/chat] STAGE 2: Buscando match de categorías...');
+            const categories = await getCategories().catch(() => []) as Array<{ id: string | number, name: string, price_list_url?: string }>;
+            
+            // Normalizamos el texto del usuario para un match más robusto
+            const normalizedText = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            
+            const matchedCats = categories.filter((c) => {
+                const catName = c.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                // Match por nombre de categoría o si el nombre está contenido (ej: "pestañas" match con "Pestañas y Cejas")
+                return normalizedText.includes(catName) || catName.includes(normalizedText) || 
+                       (catName.length > 4 && normalizedText.includes(catName.substring(0, catName.length - 1))); // Manejo básico de plurales
+            });
 
-             if (matchedCat) {
-                 console.log(`[api/chat] FLOW: Match con categoría ${matchedCat.name}`);
-                 const { services } = await getServicesByCategory(String(matchedCat.id)).catch(() => ({ services: [] }));
-                 const assistantMsg = `¡Excelente elección! En **${matchedCat.name}** tenemos estos servicios. ¿Cuál te gustaría realizarte?\n\n` + 
-                                    services.map((s: { title: string; price: number | string | null }) => `• ${s.title}: $${s.price}`).join('\n');
-                 
-                 res.setHeader('Content-Type', 'text/event-stream');
-                 res.write(`data: ${JSON.stringify({ leadId })}\n\n`);
-                 if (matchedCat.price_list_url) res.write(`data: ${JSON.stringify({ media_url: matchedCat.price_list_url })}\n\n`);
-                 res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: assistantMsg } }] })}\n\n`);
-                 res.write('data: [DONE]\n\n');
-                 return res.end();
-             }
+            if (matchedCats.length > 0) {
+                console.log(`[api/chat] STAGE 2: Match con ${matchedCats.length} categorías: ${matchedCats.map(c => c.name).join(', ')}`);
+                
+                res.setHeader('Content-Type', 'text/event-stream');
+                res.setHeader('Cache-Control', 'no-cache');
+                res.setHeader('X-Accel-Buffering', 'no');
+                res.write(`data: ${JSON.stringify({ leadId })}\n\n`);
+
+                let fullAssistantMsg = `¡Claro! Acá tenés la info de lo que me pediste:\n\n`;
+
+                for (const cat of matchedCats) {
+                    if (cat.price_list_url) {
+                        res.write(`data: ${JSON.stringify({ media_url: cat.price_list_url })}\n\n`);
+                    }
+                    const { services } = await getServicesByCategory(String(cat.id)).catch(() => ({ services: [] }));
+                    if (services.length > 0) {
+                        fullAssistantMsg += `✨ **${cat.name}**:\n` + 
+                                          services.map((s: { title: string; price: number | string | null }) => `• ${s.title}: $${s.price}`).join('\n') + '\n\n';
+                    }
+                }
+
+                fullAssistantMsg += `¿Te gustaría agendar un turno para alguno de estos servicios?`;
+                
+                res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: fullAssistantMsg } }] })}\n\n`);
+                res.write('data: [DONE]\n\n');
+                return res.end();
+            }
+            console.log('[api/chat] STAGE 2: No hubo match determinístico. Pasando a AI...');
         }
 
         // --- 2. INTELIGENCIA ARTIFICIAL (OpenRouter) ---
