@@ -108,7 +108,7 @@ Ya te presentaste y el cliente ya vio el catálogo.
 Responde de forma concisa y ayuda al cliente con sus dudas sobre tratamientos.`;
 
         const stream = await openai.chat.completions.create({
-            model: 'anthropic/claude-3.5-sonnet',
+            model: 'google/gemini-2.0-flash-001',
             messages: [
                 { role: 'system', content: systemPrompt },
                 ...messages.map((m: any) => ({ role: m.role, content: m.content }))
