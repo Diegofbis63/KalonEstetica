@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { createLead, sql, getCategories, getServicesByCategory, findLeadByInitId } from './_services/db.js';
-import type { VercelRequest, VercelResponse } from '@vercel node';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export const config = {
   maxDuration: 60,
