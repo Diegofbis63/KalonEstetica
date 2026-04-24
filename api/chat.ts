@@ -42,126 +42,105 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
         }
 
-        // --- 2. LÓGICA DETERMINÍSTICA (ETAPAS) ---
+        // --- 2. CLASIFICACIÓN DE INTENCIÓN (IA) ---
+        const categories = await getCategories().catch(() => []) as Array<{ id: string | number, name: string, price_list_url?: string }>;
+        const catList = categories.map(c => `${c.id}: ${c.name}`).join(', ');
 
-        // A) SALUDO INICIAL (Etapa 0)
-        if (isGreeting && !activeLeadId) {
+        const classificationPrompt = `Analiza el mensaje del usuario para KÂLON Estética.
+        Categorías disponibles: [${catList}]
+        Estado actual del Lead: ${activeLeadId ? 'Identificado' : 'No Identificado'}
+        
+        Responde ÚNICAMENTE un objeto JSON con:
+        {
+          "intent": "SALUDO" | "REGISTRO" | "CONSULTA_SERVICIO" | "TURNO" | "OTRO",
+          "detected_categories": [ids_de_categorias_detectadas],
+          "detected_name": "nombre si es registro",
+          "is_negation": true/false
+        }
+        
+        Mensaje: "${text}"`;
+
+        const classificationResponse = await openai.chat.completions.create({
+            model: 'google/gemini-2.0-flash-001',
+            messages: [{ role: 'system', content: classificationPrompt }],
+            response_format: { type: 'json_object' }
+        }).catch(() => null);
+
+        const classification = JSON.parse(classificationResponse?.choices[0]?.message?.content || '{}');
+        const { intent, detected_categories = [], detected_name, is_negation } = classification;
+
+        console.log(`[api/chat] INTENT: ${intent} | Cats: ${detected_categories} | Name: ${detected_name}`);
+
+        // --- 3. EJECUCIÓN DE ETAPAS ---
+
+        // A) SALUDO (Etapa 0)
+        if (intent === 'SALUDO' && !activeLeadId) {
             res.setHeader('Content-Type', 'text/event-stream');
             res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: "¡Hola! Bienvenida/o a KÂLON Estética ✨. Soy tu asistente virtual. Para empezar, ¿me decís tu nombre y apellido? 😊" } }] })}\n\n`);
             res.write('data: [DONE]\n\n');
             return res.end();
         }
 
-        // B) DETECCIÓN DE CATEGORÍAS (Etapa 2)
-        const categories = await getCategories().catch(() => []) as Array<{ id: string | number, name: string, price_list_url?: string }>;
-        const normalizedText = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        
-        const matchedWithPos = categories.map(c => {
-            const catName = c.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            const pos = normalizedText.indexOf(catName);
-            return { cat: c, pos };
-        }).filter(item => item.pos !== -1).sort((a, b) => a.pos - b.pos);
-
-        let finalMatchedCats = matchedWithPos.map(item => item.cat);
-
-        // B2) DETECCIÓN DE SERVICIOS ESPECÍFICOS (Etapa 3) con tolerancia a errores
-        const allServices = await sql`SELECT category_id, title FROM services WHERE active = true`.catch(() => []);
-        const serviceMatches = allServices.filter(s => {
-            const sTitle = s.title.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            // Tolerancia a errores: "pierda" -> "pierna", etc.
-            return normalizedText.includes(sTitle) || 
-                   sTitle.includes(normalizedText) ||
-                   (sTitle.includes('pierna') && normalizedText.includes('pierda'));
-        });
-
-        if (finalMatchedCats.length === 0 && serviceMatches.length > 0) {
-            const uniqueCatIds = [...new Set(serviceMatches.map(s => s.category_id))];
-            finalMatchedCats = categories.filter(c => uniqueCatIds.includes(c.id));
-            console.log(`[api/chat] Etapa 3: Match por Servicios -> Categorías: [${finalMatchedCats.map(c => c.name).join(', ')}]`);
-        }
-
-        const isServiceRequest = finalMatchedCats.length > 0 || serviceMatches.length > 0;
-
-        // --- C) REGISTRO O FLUJO DETERMINÍSTICO ---
-
-        // Si es una solicitud de servicio exitosa
-        if (finalMatchedCats.length > 0) {
+        // B) CONSULTA DE SERVICIO (Etapa 2 y 3)
+        if (intent === 'CONSULTA_SERVICIO' && !is_negation && detected_categories.length > 0) {
             res.setHeader('Content-Type', 'text/event-stream');
             res.setHeader('Cache-Control', 'no-cache');
             res.setHeader('X-Accel-Buffering', 'no');
 
             if (activeLeadId) res.write(`data: ${JSON.stringify({ leadId: activeLeadId })}\n\n`);
 
-            for (const cat of finalMatchedCats) {
-                if (cat.price_list_url) {
-                    res.write(`data: ${JSON.stringify({ media_url: cat.price_list_url })}\n\n`);
-                }
+            const matchedCats = categories.filter(c => detected_categories.includes(c.id) || detected_categories.includes(String(c.id)));
+            for (const cat of matchedCats) {
+                if (cat.price_list_url) res.write(`data: ${JSON.stringify({ media_url: cat.price_list_url })}\n\n`);
             }
 
-            const catNames = finalMatchedCats.map(c => `**${c.name}**`).join(' y ');
-            const assistantMsg = `¡Excelente elección! Acá tenés la info de ${catNames} que incluye lo que me pediste. ✨\n\n¿Te gustaría reservar un turno para empezar?`;
+            const catNames = matchedCats.map(c => `**${c.name}**`).join(' y ');
+            const assistantMsg = `¡Excelente elección! Acá tenés la info de ${catNames} que me pediste. ✨\n\n¿Te gustaría reservar un turno para empezar?`;
             
             res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: assistantMsg } }] })}\n\n`);
             res.write('data: [DONE]\n\n');
             return res.end();
         }
 
-        // BLOQUEO DE ETAPA 1: Si parece un servicio pero no detectamos el lead, PREGUNTAMOS EL NOMBRE
-        if (isServiceRequest && !activeLeadId) {
-            res.setHeader('Content-Type', 'text/event-stream');
-            const askNameMsg = `¡Hola! Veo que te interesa info sobre nuestros servicios. ✨ Antes de pasarte los detalles, ¿me podrías decir tu nombre y apellido? 😊`;
-            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: askNameMsg } }] })}\n\n`);
-            res.write('data: [DONE]\n\n');
-            return res.end();
-        }
-
-        // REGISTRO DE USUARIO (Etapa 1) - Solo si NO es una solicitud de servicio
-        if (!activeLeadId && !isGreeting && text.length >= 2 && !isServiceRequest) {
+        // C) REGISTRO (Etapa 1)
+        if (!activeLeadId && intent === 'REGISTRO' && detected_name && detected_categories.length === 0) {
             console.log('[api/chat] FLOW: Registrando nuevo lead...');
             const configRows = await sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`.catch(() => []);
             const mainImageUrl = configRows?.[0]?.value || 'https://ijltsqfshvunmngvbeue.supabase.co/storage/v1/object/public/kalon-services/CATALOGO%20KALON.png';
 
-            const tempPhone = `anon_${Date.now()}`;
-            const newLead = await createLead(null, text, { 
-                phone: tempPhone, 
+            const newLead = await createLead(null, detected_name, { 
+                phone: `anon_${Date.now()}`, 
                 source: "chatbot_web", 
                 initId: String(identificationId || '') 
             }).catch(() => null);
             
             const finalLeadId = newLead?.id || `temp_${Date.now()}`;
-            const assistantMsg = `¡Un gusto conocerte, ${text}! ✨ Te dejo nuestro catálogo arriba. Contame, ¿qué servicio o tratamiento te interesa hoy?`;
-
             res.setHeader('Content-Type', 'text/event-stream');
             res.write(`data: ${JSON.stringify({ leadId: finalLeadId })}\n\n`);
             res.write(`data: ${JSON.stringify({ media_url: mainImageUrl })}\n\n`);
-            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: assistantMsg } }] })}\n\n`);
+            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: `¡Un gusto conocerte, ${detected_name}! ✨ Te dejo nuestro catálogo arriba. Contame, ¿qué servicio o tratamiento te interesa hoy?` } }] })}\n\n`);
             res.write('data: [DONE]\n\n');
             return res.end();
         }
 
-        // --- 3. INTELIGENCIA ARTIFICIAL (Fallback) ---
+        // D) FALLBACK A IA
         console.log('[api/chat] AI FALLBACK: Gemini 2.0 Flash');
-        const systemPrompt = `Eres la asistente virtual experta de Kâlon Estética. Amable y profesional. Ayuda al cliente con sus dudas sobre servicios.`;
-
         const stream = await openai.chat.completions.create({
             model: 'google/gemini-2.0-flash-001',
             messages: [
-                { role: 'system', content: systemPrompt },
+                { role: 'system', content: `Eres la asistente de Kâlon Estética. Cliente: ${activeLeadId ? 'Identificado' : 'No identificado'}. Sé amable y concisa.` },
                 ...messages.map((m) => ({ role: m.role as any, content: m.content }))
             ],
             stream: true,
         });
 
         res.setHeader('Content-Type', 'text/event-stream');
-        res.write(`data: ${JSON.stringify({ leadId: activeLeadId || 'temp' })}\n\n`);
+        if (activeLeadId) res.write(`data: ${JSON.stringify({ leadId: activeLeadId })}\n\n`);
 
         for await (const chunk of stream) {
             const content = chunk.choices[0]?.delta?.content || '';
-            if (content) {
-                res.write(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`);
-            }
+            if (content) res.write(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`);
         }
-
         res.write('data: [DONE]\n\n');
         return res.end();
 
