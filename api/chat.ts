@@ -64,22 +64,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         let finalMatchedCats = matchedWithPos.map(item => item.cat);
 
-        // B2) DETECCIÓN DE SERVICIOS ESPECÍFICOS (Etapa 3)
-        // Si no hubo match directo con categorías, buscamos en los nombres de los servicios
-        if (finalMatchedCats.length === 0) {
-            const allServices = await sql`SELECT category_id, title FROM services WHERE active = true`.catch(() => []);
-            const serviceMatches = allServices.filter(s => {
-                const sTitle = s.title.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                return normalizedText.includes(sTitle) || sTitle.includes(normalizedText);
-            });
+        // B2) DETECCIÓN DE SERVICIOS ESPECÍFICOS (Etapa 3) con tolerancia a errores
+        const allServices = await sql`SELECT category_id, title FROM services WHERE active = true`.catch(() => []);
+        const serviceMatches = allServices.filter(s => {
+            const sTitle = s.title.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            // Tolerancia a errores: "pierda" -> "pierna", etc.
+            return normalizedText.includes(sTitle) || 
+                   sTitle.includes(normalizedText) ||
+                   (sTitle.includes('pierna') && normalizedText.includes('pierda'));
+        });
 
-            if (serviceMatches.length > 0) {
-                const uniqueCatIds = [...new Set(serviceMatches.map(s => s.category_id))];
-                finalMatchedCats = categories.filter(c => uniqueCatIds.includes(c.id));
-                console.log(`[api/chat] Etapa 3: Match por Servicios -> Categorías: [${finalMatchedCats.map(c => c.name).join(', ')}]`);
-            }
+        if (finalMatchedCats.length === 0 && serviceMatches.length > 0) {
+            const uniqueCatIds = [...new Set(serviceMatches.map(s => s.category_id))];
+            finalMatchedCats = categories.filter(c => uniqueCatIds.includes(c.id));
+            console.log(`[api/chat] Etapa 3: Match por Servicios -> Categorías: [${finalMatchedCats.map(c => c.name).join(', ')}]`);
         }
 
+        const isServiceRequest = finalMatchedCats.length > 0 || serviceMatches.length > 0;
+
+        // --- C) REGISTRO O FLUJO DETERMINÍSTICO ---
+
+        // Si es una solicitud de servicio exitosa
         if (finalMatchedCats.length > 0) {
             res.setHeader('Content-Type', 'text/event-stream');
             res.setHeader('Cache-Control', 'no-cache');
@@ -101,11 +106,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return res.end();
         }
 
-        // C) REGISTRO DE USUARIO (Etapa 1)
-        if (!activeLeadId && !isGreeting && text.length >= 2) {
+        // BLOQUEO DE ETAPA 1: Si parece un servicio pero no detectamos el lead, PREGUNTAMOS EL NOMBRE
+        if (isServiceRequest && !activeLeadId) {
+            res.setHeader('Content-Type', 'text/event-stream');
+            const askNameMsg = `¡Hola! Veo que te interesa info sobre nuestros servicios. ✨ Antes de pasarte los detalles, ¿me podrías decir tu nombre y apellido? 😊`;
+            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: askNameMsg } }] })}\n\n`);
+            res.write('data: [DONE]\n\n');
+            return res.end();
+        }
+
+        // REGISTRO DE USUARIO (Etapa 1) - Solo si NO es una solicitud de servicio
+        if (!activeLeadId && !isGreeting && text.length >= 2 && !isServiceRequest) {
             console.log('[api/chat] FLOW: Registrando nuevo lead...');
-            
-            // Recuperamos la imagen del catálogo desde la configuración del negocio
             const configRows = await sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`.catch(() => []);
             const mainImageUrl = configRows?.[0]?.value || 'https://ijltsqfshvunmngvbeue.supabase.co/storage/v1/object/public/kalon-services/CATALOGO%20KALON.png';
 
