@@ -53,39 +53,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // B) DETECCIÓN DE CATEGORÍAS (Prioridad: Etapa 2)
-        // Buscamos siempre categorías para evitar que el bot pida el nombre si el usuario ya pidió un servicio
         const categories = await getCategories().catch(() => []) as Array<{ id: string | number, name: string, price_list_url?: string }>;
         const normalizedText = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         
-        const matchedCats = categories.filter((c) => {
+        // Encontramos las categorías y guardamos su posición en el texto para respetar el orden del usuario
+        const matchedWithPos = categories.map(c => {
             const catName = c.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            return normalizedText.includes(catName) || 
-                   catName.includes(normalizedText) || 
-                   (catName.length > 4 && normalizedText.includes(catName.substring(0, catName.length - 1)));
-        });
+            const pos = normalizedText.indexOf(catName);
+            return { cat: c, pos };
+        }).filter(item => item.pos !== -1).sort((a, b) => a.pos - b.pos);
 
-        if (matchedCats.length > 0) {
-            console.log(`[api/chat] MATCH CATEGORÍA: [${matchedCats.map(c => c.name).join(', ')}]`);
+        if (matchedWithPos.length > 0) {
+            const matchedCats = matchedWithPos.map(item => item.cat);
+            console.log(`[api/chat] MATCH CATEGORÍA (Ordenado): [${matchedCats.map(c => c.name).join(', ')}]`);
+            
             res.setHeader('Content-Type', 'text/event-stream');
             res.setHeader('Cache-Control', 'no-cache');
             res.setHeader('X-Accel-Buffering', 'no');
 
             if (activeLeadId) res.write(`data: ${JSON.stringify({ leadId: activeLeadId })}\n\n`);
 
-            let fullAssistantMsg = `¡Claro! Acá tenés la info de lo que me pediste:\n\n`;
+            // Enviamos las imágenes de las categorías en el orden solicitado
             for (const cat of matchedCats) {
                 if (cat.price_list_url) {
                     res.write(`data: ${JSON.stringify({ media_url: cat.price_list_url })}\n\n`);
                 }
-                const { services } = await getServicesByCategory(String(cat.id)).catch(() => ({ services: [] }));
-                if (services.length > 0) {
-                    fullAssistantMsg += `✨ **${cat.name}**:\n` + 
-                                      services.map((s: { title: string; price: number | string | null }) => `• ${s.title}: $${s.price}`).join('\n') + '\n\n';
-                }
             }
-            fullAssistantMsg += `¿Te gustaría agendar un turno para alguno de estos servicios?`;
+
+            // Mensaje de texto simplificado (sin lista de precios, ya está en la imagen)
+            const catNames = matchedCats.map(c => `**${c.name}**`).join(' y ');
+            const assistantMsg = `¡Claro! Acá tenés la info de ${catNames} que me pediste. ✨\n\n¿Te gustaría agendar un turno para alguno de estos servicios?`;
             
-            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: fullAssistantMsg } }] })}\n\n`);
+            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: assistantMsg } }] })}\n\n`);
             res.write('data: [DONE]\n\n');
             return res.end();
         }
