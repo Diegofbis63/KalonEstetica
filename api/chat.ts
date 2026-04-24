@@ -52,37 +52,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return res.end();
         }
 
-        // B) DETECCIÓN DE CATEGORÍAS (Prioridad: Etapa 2)
+        // B) DETECCIÓN DE CATEGORÍAS (Etapa 2)
         const categories = await getCategories().catch(() => []) as Array<{ id: string | number, name: string, price_list_url?: string }>;
         const normalizedText = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         
-        // Encontramos las categorías y guardamos su posición en el texto para respetar el orden del usuario
         const matchedWithPos = categories.map(c => {
             const catName = c.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
             const pos = normalizedText.indexOf(catName);
             return { cat: c, pos };
         }).filter(item => item.pos !== -1).sort((a, b) => a.pos - b.pos);
 
-        if (matchedWithPos.length > 0) {
-            const matchedCats = matchedWithPos.map(item => item.cat);
-            console.log(`[api/chat] MATCH CATEGORÍA (Ordenado): [${matchedCats.map(c => c.name).join(', ')}]`);
-            
+        let finalMatchedCats = matchedWithPos.map(item => item.cat);
+
+        // B2) DETECCIÓN DE SERVICIOS ESPECÍFICOS (Etapa 3)
+        // Si no hubo match directo con categorías, buscamos en los nombres de los servicios
+        if (finalMatchedCats.length === 0) {
+            const allServices = await sql`SELECT category_id, title FROM services WHERE active = true`.catch(() => []);
+            const serviceMatches = allServices.filter(s => {
+                const sTitle = s.title.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                return normalizedText.includes(sTitle) || sTitle.includes(normalizedText);
+            });
+
+            if (serviceMatches.length > 0) {
+                const uniqueCatIds = [...new Set(serviceMatches.map(s => s.category_id))];
+                finalMatchedCats = categories.filter(c => uniqueCatIds.includes(c.id));
+                console.log(`[api/chat] Etapa 3: Match por Servicios -> Categorías: [${finalMatchedCats.map(c => c.name).join(', ')}]`);
+            }
+        }
+
+        if (finalMatchedCats.length > 0) {
             res.setHeader('Content-Type', 'text/event-stream');
             res.setHeader('Cache-Control', 'no-cache');
             res.setHeader('X-Accel-Buffering', 'no');
 
             if (activeLeadId) res.write(`data: ${JSON.stringify({ leadId: activeLeadId })}\n\n`);
 
-            // Enviamos las imágenes de las categorías en el orden solicitado
-            for (const cat of matchedCats) {
+            for (const cat of finalMatchedCats) {
                 if (cat.price_list_url) {
                     res.write(`data: ${JSON.stringify({ media_url: cat.price_list_url })}\n\n`);
                 }
             }
 
-            // Mensaje de texto simplificado (sin lista de precios, ya está en la imagen)
-            const catNames = matchedCats.map(c => `**${c.name}**`).join(' y ');
-            const assistantMsg = `¡Claro! Acá tenés la info de ${catNames} que me pediste. ✨\n\n¿Te gustaría agendar un turno para alguno de estos servicios?`;
+            const catNames = finalMatchedCats.map(c => `**${c.name}**`).join(' y ');
+            const assistantMsg = `¡Excelente elección! Acá tenés la info de ${catNames} que incluye lo que me pediste. ✨\n\n¿Te gustaría reservar un turno para empezar?`;
             
             res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: assistantMsg } }] })}\n\n`);
             res.write('data: [DONE]\n\n');
