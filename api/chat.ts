@@ -82,6 +82,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // B) CONSULTA DE SERVICIO (Etapa 2 y 3)
+        let assistantContext = "";
         if (intent === 'CONSULTA_SERVICIO' && !is_negation && detected_categories.length > 0) {
             res.setHeader('Content-Type', 'text/event-stream');
             res.setHeader('Cache-Control', 'no-cache');
@@ -95,11 +96,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
 
             const catNames = matchedCats.map(c => `**${c.name}**`).join(' y ');
-            const assistantMsg = `¡Excelente elección! Acá tenés la info de ${catNames} que me pediste. ✨\n\n¿Te gustaría reservar un turno para empezar?`;
-            
-            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: assistantMsg } }] })}\n\n`);
-            res.write('data: [DONE]\n\n');
-            return res.end();
+            assistantContext = `El usuario solicitó información sobre: ${catNames}. Ya le enviamos las imágenes de los precios correspondientes.`;
+            // NO cortamos el flujo aquí (eliminado return), dejamos que la IA dé el toque final humano (Etapa 3)
         }
 
         // C) REGISTRO (Etapa 1)
@@ -118,23 +116,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             res.setHeader('Content-Type', 'text/event-stream');
             res.write(`data: ${JSON.stringify({ leadId: finalLeadId })}\n\n`);
             res.write(`data: ${JSON.stringify({ media_url: mainImageUrl })}\n\n`);
-            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: `¡Un gusto conocerte, ${detected_name}! ✨ Te dejo nuestro catálogo arriba. Contame, ¿qué servicio o tratamiento te interesa hoy?` } }] })}\n\n`);
+            
+            // Aquí sí podemos terminar porque el registro es un flujo cerrado de bienvenida
+            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: `¡Un gusto conocerte, ${detected_name}! ✨ Te dejo nuestro catálogo arriba para que lo veas. Contame, ¿qué servicio o tratamiento te interesa hoy?` } }] })}\n\n`);
             res.write('data: [DONE]\n\n');
             return res.end();
         }
 
-        // D) FALLBACK A IA
-        console.log('[api/chat] AI FALLBACK: Gemini 2.0 Flash');
+        // D) IA (Etapa 3 / Fallback)
+        console.log('[api/chat] ETAPA 3 / IA FALLBACK');
         const stream = await openai.chat.completions.create({
             model: 'google/gemini-2.0-flash-001',
             messages: [
-                { role: 'system', content: `Eres la asistente de Kâlon Estética. Cliente: ${activeLeadId ? 'Identificado' : 'No identificado'}. Sé amable y concisa.` },
+                { 
+                    role: 'system', 
+                    content: `Eres la asistente de Kâlon Estética. 
+                    Cliente: ${activeLeadId ? 'Identificado' : 'No identificado'}. 
+                    Contexto Actual: ${assistantContext || 'Conversación general'}.
+                    Si el contexto indica que ya enviamos imágenes, confirma que viste su pedido específico y pregunta si quiere agendar o tiene dudas. 
+                    Sé muy amable y profesional.` 
+                },
                 ...messages.map((m) => ({ role: m.role as any, content: m.content }))
             ],
             stream: true,
         });
 
-        res.setHeader('Content-Type', 'text/event-stream');
+        if (!res.headersSent) {
+            res.setHeader('Content-Type', 'text/event-stream');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('X-Accel-Buffering', 'no');
+        }
+        
         if (activeLeadId) res.write(`data: ${JSON.stringify({ leadId: activeLeadId })}\n\n`);
 
         for await (const chunk of stream) {
