@@ -129,17 +129,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         // D) IA (Etapa 3 / Fallback)
         // Solo llegamos aquí si el usuario ya está registrado o si no es un registro puro
-        console.log('[api/chat] ETAPA 3 / IA FALLBACK');
+        console.log('[api/chat] ETAPA 3 / IA CONVERSACIONAL');
+        
+        // Obtenemos el nombre real del lead para evitar confusiones de identidad
+        const currentLeadName = leadByInitId?.first_name || detected_name || 'cliente';
+
         const stream = await openai.chat.completions.create({
             model: 'google/gemini-2.0-flash-001',
             messages: [
                 { 
                     role: 'system', 
-                    content: `Eres la asistente de Kâlon Estética. 
-                    Cliente: ${activeLeadId ? 'Identificado' : 'No identificado'}. 
-                    Contexto Actual: ${assistantContext || 'Conversación general'}.
-                    Si el contexto indica que ya enviamos imágenes, confirma que viste su pedido específico y pregunta si quiere agendar o tiene dudas. 
-                    Sé muy amable y profesional.` 
+                    content: `Eres la asistente experta de Kâlon Estética. 
+                    Tu nombre es Asistente Kâlon.
+                    Usuario actual: ${currentLeadName}.
+                    Estado: ${assistantContext ? 'Precios enviados' : 'Consulta general'}.
+                    
+                    REGLAS DE ORO (ETAPA 3):
+                    1. Si el contexto indica que YA enviamos imágenes de precios, tu única misión es ser amable, confirmar que viste su pedido de "${messages[messages.length-1].content}" y preguntar DIRECTAMENTE si quiere agendar un turno para esos servicios.
+                    2. No repitas precios que ya están en las imágenes.
+                    3. Mantén un tono boutique, profesional y muy cálido.
+                    4. Usa el nombre ${currentLeadName} para que la charla sea personal.` 
                 },
                 ...messages.map((m) => ({ role: m.role as any, content: m.content }))
             ],
