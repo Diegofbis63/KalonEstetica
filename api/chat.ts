@@ -100,13 +100,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             // NO cortamos el flujo aquí (eliminado return), dejamos que la IA dé el toque final humano (Etapa 3)
         }
 
-        // C) REGISTRO (Etapa 1)
-        if (!activeLeadId && intent === 'REGISTRO' && detected_name && detected_categories.length === 0) {
-            console.log('[api/chat] FLOW: Registrando nuevo lead...');
+        // C) REGISTRO (Etapa 1) - PRIORIDAD ABSOLUTA
+        // Si no tenemos leadId y la IA detectó un nombre, registramos sí o sea.
+        if (!activeLeadId && (intent === 'REGISTRO' || detected_name) && detected_categories.length === 0) {
+            console.log('[api/chat] FLOW: Registrando nuevo lead (Etapa 1)...');
             const configRows = await sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`.catch(() => []);
             const mainImageUrl = configRows?.[0]?.value || 'https://ijltsqfshvunmngvbeue.supabase.co/storage/v1/object/public/kalon-services/CATALOGO%20KALON.png';
 
-            const newLead = await createLead(null, detected_name, { 
+            const newLead = await createLead(null, detected_name!, { 
                 phone: `anon_${Date.now()}`, 
                 source: "chatbot_web", 
                 initId: String(identificationId || '') 
@@ -114,16 +115,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             
             const finalLeadId = newLead?.id || `temp_${Date.now()}`;
             res.setHeader('Content-Type', 'text/event-stream');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('X-Accel-Buffering', 'no');
+            
             res.write(`data: ${JSON.stringify({ leadId: finalLeadId })}\n\n`);
             res.write(`data: ${JSON.stringify({ media_url: mainImageUrl })}\n\n`);
             
-            // Aquí sí podemos terminar porque el registro es un flujo cerrado de bienvenida
-            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: `¡Un gusto conocerte, ${detected_name}! ✨ Te dejo nuestro catálogo arriba para que lo veas. Contame, ¿qué servicio o tratamiento te interesa hoy?` } }] })}\n\n`);
+            const welcomeMsg = `¡Un gusto conocerte, ${detected_name}! ✨ Te dejo nuestro catálogo arriba para que lo veas. Contame, ¿qué servicio o tratamiento te interesa hoy?`;
+            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: welcomeMsg } }] })}\n\n`);
             res.write('data: [DONE]\n\n');
             return res.end();
         }
 
         // D) IA (Etapa 3 / Fallback)
+        // Solo llegamos aquí si el usuario ya está registrado o si no es un registro puro
         console.log('[api/chat] ETAPA 3 / IA FALLBACK');
         const stream = await openai.chat.completions.create({
             model: 'google/gemini-2.0-flash-001',
