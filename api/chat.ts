@@ -82,8 +82,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return res.end();
         }
 
-        // B) CONSULTA DE SERVICIO (Etapa 2 y 3)
+        // B) CONSULTA DE SERVICIO (Etapa 2 y 3) - DINÁMICO
         let assistantContext = "";
+        let receiptUrl = "";
+        
         if (intent === 'CONSULTA_SERVICIO' && !is_negation && detected_categories.length > 0) {
             res.setHeader('Content-Type', 'text/event-stream');
             res.setHeader('Cache-Control', 'no-cache');
@@ -91,14 +93,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
             if (activeLeadId) res.write(`data: ${JSON.stringify({ leadId: activeLeadId })}\n\n`);
 
-            const matchedCats = categories.filter(c => detected_categories.includes(c.id) || detected_categories.includes(String(c.id)));
-            for (const cat of matchedCats) {
-                if (cat.price_list_url) res.write(`data: ${JSON.stringify({ media_url: cat.price_list_url })}\n\n`);
-            }
+            // 1. Buscar servicios específicos
+            const allServices = await sql`SELECT id, name, price, category_id FROM services WHERE active = true`.catch(() => []);
+            const matchedServices = allServices.filter((s: any) => {
+                const nameNorm = s.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                return detected_categories.includes(s.category_id) && text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(nameNorm.split(' ')[0]);
+            });
 
-            const catNames = matchedCats.map(c => `**${c.name}**`).join(' y ');
-            assistantContext = `El usuario solicitó información sobre: ${catNames}. Ya le enviamos las imágenes de los precios correspondientes.`;
-            // NO cortamos el flujo aquí (eliminado return), dejamos que la IA dé el toque final humano (Etapa 3)
+            if (matchedServices.length > 0) {
+                // GENERAR RECIBO DINÁMICO (Satori)
+                const receiptItems = matchedServices.map((s: any) => ({ name: s.name, price: `$${Number(s.price).toLocaleString('es-AR')}` }));
+                const totalPrice = matchedServices.reduce((acc: number, s: any) => acc + Number(s.price), 0);
+                receiptItems.push({ name: 'TOTAL ESTIMADO', price: `$${totalPrice.toLocaleString('es-AR')}` });
+                
+                const satoriData = Buffer.from(JSON.stringify(receiptItems)).toString('base64');
+                const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://kalon-estetica.vercel.app';
+                receiptUrl = `${baseUrl}/api/satori-image?title=${encodeURIComponent('TU PRESUPUESTO KÂLON')}&data=${satoriData}`;
+                
+                res.write(`data: ${JSON.stringify({ media_url: receiptUrl })}\n\n`);
+                assistantContext = `Le enviamos un RECIBO personalizado con: ${matchedServices.map((s: any) => s.name).join(', ')}. El TOTAL es $${totalPrice.toLocaleString('es-AR')}.`;
+            } else {
+                // Fallback a imágenes de categoría si no hay servicios específicos detectados
+                const matchedCats = categories.filter(c => detected_categories.includes(c.id) || detected_categories.includes(String(c.id)));
+                for (const cat of matchedCats) {
+                    if (cat.price_list_url) res.write(`data: ${JSON.stringify({ media_url: cat.price_list_url })}\n\n`);
+                }
+                const catNames = matchedCats.map(c => `**${c.name}**`).join(' y ');
+                assistantContext = `El usuario solicitó información sobre: ${catNames}. Ya le enviamos las imágenes de los precios correspondientes.`;
+            }
         }
 
         // C) REGISTRO (Etapa 1) - PRIORIDAD ABSOLUTA
@@ -146,10 +168,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     Estado: ${assistantContext ? 'Precios enviados' : 'Consulta general'}.
                     
                     REGLAS DE ORO (ETAPA 3):
-                    1. Si ya enviamos precios ("Precios enviados"), confirma ÚNICAMENTE que recibiste el pedido de "${text}" y ofrece proactivamente buscar un horario.
-                    2. PROHIBIDO: No menciones nombres de sub-servicios específicos ni precios en texto (ej: no digas "limpieza profunda: $4500"). El usuario ya tiene las imágenes con esa información.
-                    3. No inventes servicios que el usuario no mencionó explícitamente.
-                    4. Sé extremadamente breve, elegante y usa siempre el nombre ${currentLeadName}.` 
+                    1. Si enviamos un RECIBO ("TOTAL es $..."), confirma que viste su pedido específico y menciona el PRECIO TOTAL que aparece en la imagen.
+                    2. Pregunta directamente si quiere agendar un turno para esos servicios.
+                    3. Sé breve, profesional y usa siempre el nombre ${currentLeadName}.
+                    4. No repitas precios individuales, enfócate en el total y la reserva.` 
                 },
                 ...messages.map((m) => ({ role: m.role as any, content: m.content }))
             ],
