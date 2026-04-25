@@ -33,12 +33,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log(`[api/chat] MSG: "${text}" | ID: ${identificationId} | LeadId: ${leadId}`);
 
         // --- 1. PRE-PROCESAMIENTO: IDENTIFICACIÓN ROBUSTA ---
+        let leadByInitId = null;
         let activeLeadId: string | number | null = leadId || null;
         if (identificationId && String(identificationId).length > 10 && !activeLeadId) {
-            const existingLead = await findLeadByInitId(String(identificationId)).catch(() => null);
-            if (existingLead) {
-                activeLeadId = existingLead.id;
-                console.log(`[api/chat] Lead recuperado por initId: ${activeLeadId}`);
+            leadByInitId = await findLeadByInitId(String(identificationId)).catch(() => null);
+            if (leadByInitId) {
+                activeLeadId = leadByInitId.id;
+                console.log(`[api/chat] Lead recuperado por initId: ${activeLeadId} (${leadByInitId.first_name})`);
             }
         }
 
@@ -145,10 +146,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     Estado: ${assistantContext ? 'Precios enviados' : 'Consulta general'}.
                     
                     REGLAS DE ORO (ETAPA 3):
-                    1. Si el contexto indica que YA enviamos imágenes de precios, tu única misión es ser amable, confirmar que viste su pedido de "${messages[messages.length-1].content}" y preguntar DIRECTAMENTE si quiere agendar un turno para esos servicios.
-                    2. No repitas precios que ya están en las imágenes.
-                    3. Mantén un tono boutique, profesional y muy cálido.
-                    4. Usa el nombre ${currentLeadName} para que la charla sea personal.` 
+                    1. Si enviamos precios ("Precios enviados"), sé cálida, confirma que recibiste el pedido de "${text}" y ofrece proactivamente buscar un horario disponible para agendar.
+                    2. Tu objetivo es convertir la consulta en un turno real.
+                    3. No repitas precios ni des explicaciones largas.
+                    4. Sé breve, elegante y usa siempre el nombre ${currentLeadName}.` 
                 },
                 ...messages.map((m) => ({ role: m.role as any, content: m.content }))
             ],
