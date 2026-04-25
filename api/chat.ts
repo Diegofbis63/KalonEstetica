@@ -146,10 +146,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     Estado: ${assistantContext ? 'Precios enviados' : 'Consulta general'}.
                     
                     REGLAS DE ORO (ETAPA 3):
-                    1. Si enviamos precios ("Precios enviados"), sé cálida, confirma que recibiste el pedido de "${text}" y ofrece proactivamente buscar un horario disponible para agendar.
-                    2. Tu objetivo es convertir la consulta en un turno real.
-                    3. No repitas precios ni des explicaciones largas.
-                    4. Sé breve, elegante y usa siempre el nombre ${currentLeadName}.` 
+                    1. Si ya enviamos precios ("Precios enviados"), confirma ÚNICAMENTE que recibiste el pedido de "${text}" y ofrece proactivamente buscar un horario.
+                    2. PROHIBIDO: No menciones nombres de sub-servicios específicos ni precios en texto (ej: no digas "limpieza profunda: $4500"). El usuario ya tiene las imágenes con esa información.
+                    3. No inventes servicios que el usuario no mencionó explícitamente.
+                    4. Sé extremadamente breve, elegante y usa siempre el nombre ${currentLeadName}.` 
                 },
                 ...messages.map((m) => ({ role: m.role as any, content: m.content }))
             ],
