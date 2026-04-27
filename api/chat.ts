@@ -201,6 +201,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return res.end();
         }
 
+        // Obtenemos el nombre real del lead para evitar confusiones de identidad
+        const currentLeadName = leadByInitId?.first_name || detected_name || 'cliente';
+
         // D) TURNO / AGENDA (Etapa 4)
         if (intent === 'TURNO' && activeLeadId) {
             console.log('[api/chat] FLOW: Etapa 4 — Solicitud de turno');
@@ -236,9 +239,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // E) IA CONVERSACIONAL (Fallback + Etapa 3 + Etapa 4)
         // Solo llegamos aquí si el usuario ya está registrado o si no es un registro puro
         console.log('[api/chat] ETAPA 3 / IA CONVERSACIONAL');
-        
-        // Obtenemos el nombre real del lead para evitar confusiones de identidad
-        const currentLeadName = leadByInitId?.first_name || detected_name || 'cliente';
 
         const stream = await openai.chat.completions.create({
             model: 'google/gemini-2.0-flash-001',
