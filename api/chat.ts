@@ -145,15 +145,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             if (deduped.length > 0) {
                 // ══════ GENERAR RECIBO DINÁMICO (Satori) ══════
                 const receiptItems = deduped.map((s: any) => ({ 
-                    name: (s.title || '').replace(/^\d+[\s.]*/, ''), 
+                    label: (s.title || '').replace(/^\d+[\s.]*/, ''), 
                     price: `$${Number(s.price).toLocaleString('es-AR')}` 
                 }));
                 const totalPrice = deduped.reduce((acc: number, s: any) => acc + Number(s.price), 0);
-                receiptItems.push({ name: 'TOTAL ESTIMADO', price: `$${totalPrice.toLocaleString('es-AR')}` });
+                receiptItems.push({ label: 'TOTAL ESTIMADO', price: `$${totalPrice.toLocaleString('es-AR')}` });
                 
                 const satoriData = Buffer.from(JSON.stringify(receiptItems)).toString('base64');
-                const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://kalon-estetica.vercel.app';
-                receiptUrl = `${baseUrl}/api/satori-image?title=${encodeURIComponent('TU PRESUPUESTO KÂLON')}&data=${satoriData}`;
+                receiptUrl = `https://kalon-estetica.vercel.app/api/satori-image?title=${encodeURIComponent('TU PRESUPUESTO KÂLON')}&data=${satoriData}`;
                 
                 res.write(`data: ${JSON.stringify({ media_url: receiptUrl })}\n\n`);
                 // Inyectamos los precios REALES en el contexto para que la IA no alucine
