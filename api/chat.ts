@@ -170,13 +170,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // C) REGISTRO (Etapa 1) - PRIORIDAD ABSOLUTA
-        // Si no tenemos leadId y la IA detectó un nombre, registramos sí o sea.
-        if (!activeLeadId && (intent === 'REGISTRO' || detected_name) && detected_categories.length === 0) {
+        // BLINDAJE: Si no hay lead y el texto parece un nombre, registrar SIN depender del clasificador
+        const looksLikeName = !activeLeadId && 
+            text.split(/\s+/).length >= 2 && 
+            text.length > 3 && text.length < 60 &&
+            !/\d/.test(text) && 
+            !/^(hola|buen|quiero|necesito|me |tengo|cuanto|cual|que |como|donde|cuando|hay |si |no )/i.test(text) &&
+            detected_categories.length === 0;
+        
+        const nameForRegistration = detected_name || (looksLikeName ? text : null);
+        
+        if (!activeLeadId && nameForRegistration && detected_categories.length === 0) {
             console.log('[api/chat] FLOW: Registrando nuevo lead (Etapa 1)...');
             const configRows = await sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`.catch(() => []);
             const mainImageUrl = configRows?.[0]?.value || 'https://ijltsqfshvunmngvbeue.supabase.co/storage/v1/object/public/kalon-services/CATALOGO%20KALON.png';
 
-            const newLead = await createLead(null, detected_name!, { 
+            const newLead = await createLead(null, nameForRegistration!, { 
                 phone: `anon_${Date.now()}`, 
                 source: "chatbot_web", 
                 initId: String(identificationId || '') 
@@ -190,7 +199,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             res.write(`data: ${JSON.stringify({ leadId: finalLeadId })}\n\n`);
             res.write(`data: ${JSON.stringify({ media_url: mainImageUrl })}\n\n`);
             
-            const welcomeMsg = `¡Un gusto conocerte, ${detected_name}! ✨ Te dejo nuestro catálogo arriba para que lo veas. Contame, ¿qué servicio o tratamiento te interesa hoy?`;
+            const welcomeMsg = `¡Un gusto conocerte, ${nameForRegistration}! ✨ Te dejo nuestro catálogo arriba para que lo veas. Contame, ¿qué servicio o tratamiento te interesa hoy?`;
             res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: welcomeMsg } }] })}\n\n`);
             res.write('data: [DONE]\n\n');
             return res.end();
