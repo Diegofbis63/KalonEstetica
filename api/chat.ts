@@ -107,32 +107,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 .filter(c => detectedCatIds.has(String(c.id)))
                 .map(c => c.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
             
-            const matchedServices = allServices.filter((s: any) => {
-                // Matching PRECISO — buscamos en TODAS las categorías, el filtro de nombre ya es estricto
+            let textLeft = " " + userTextNorm + " ";
+            const sortedServices = [...allServices].sort((a: any, b: any) => (b.title || '').length - (a.title || '').length);
+            const matchedServices = [];
+
+            for (const s of sortedServices) {
                 const serviceTitle = (s.title || '').replace(/^\d+[\s.]*/, '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
                 
-                // Fase 1: ¿El usuario escribió exactamente el nombre del servicio? (ej: "laminado de cejas")
-                if (userTextNorm.includes(serviceTitle)) return true;
-                
-                // Fase 2: ¿El servicio es una palabra simple que el usuario mencionó? (ej: servicio="Axilas", user="axilas y laminado")
-                // Solo aplica para servicios de 1-2 palabras significativas (evita combos falsos)
-                const significantWords = serviceTitle.split(/[\s+/()]+/).filter((w: string) => w.length > 3);
-                if (significantWords.length <= 2) {
-                    return significantWords.every((w: string) => userTextNorm.includes(w));
+                // Fase 1: Match exacto sobre lo que queda del texto
+                if (textLeft.includes(serviceTitle)) {
+                    matchedServices.push(s);
+                    textLeft = textLeft.replace(serviceTitle, " ");
+                    continue;
                 }
-                
-                return false;
-            });
 
-            // Deduplicar SOLO dentro de la misma categoría
-            // "Cejas" (Depilación) y "Laminado de cejas" (Pestañas) son servicios DIFERENTES
+                // Fase 2: Match por palabras significativas
+                const significantWords = serviceTitle.split(/[\s+/()]+/).filter((w: string) => w.length > 3);
+                if (significantWords.length > 0 && significantWords.length <= 2 && significantWords.every((w: string) => textLeft.includes(w))) {
+                    matchedServices.push(s);
+                    for (const w of significantWords) {
+                        textLeft = textLeft.replace(w, " ");
+                    }
+                }
+            }
+
+            // Deduplicar SOLO duplicados semánticos exactos (ej: "Cejas (Perfilado)" vs "Perfilado de cejas")
             const deduped = matchedServices.filter((s: any, _i: number, arr: any[]) => {
                 const sTitle = (s.title || '').replace(/^\d+[\s.]*/, '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                const sWords = sTitle.split(/[\s+/()]+/).filter((w: string) => w.length > 3).sort().join(' ');
+                
                 return !arr.some((other: any) => {
                     if (other.id === s.id) return false;
-                    if (String(other.category_id) !== String(s.category_id)) return false; // ← Solo dedup en misma categoría
                     const otherTitle = (other.title || '').replace(/^\d+[\s.]*/, '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-                    return otherTitle !== sTitle && otherTitle.includes(sTitle);
+                    const otherWords = otherTitle.split(/[\s+/()]+/).filter((w: string) => w.length > 3).sort().join(' ');
+                    
+                    if (sWords === otherWords && sWords.length > 0) return s.id > other.id;
+                    return false;
                 });
             });
 
