@@ -170,7 +170,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             text.split(/\s+/).length >= 2 && 
             text.length > 3 && text.length < 60 &&
             !/\d/.test(text) && 
-            !/^(hola|buen|quiero|necesito|me |tengo|cuanto|cual|que |como|donde|cuando|hay |si |no )/i.test(text) &&
+            !/^(hola|buen|quiero|necesito|me |tengo|cuanto|cual|que |como|donde|cuando|hay |si |no |tene|tiene|puede|puedo|quisiera|queria|podria|agenda|reserv|turno|cita|horario|disponib|cancel|modific|cambi|para |ya |estoy|dale|ok|listo|perfect|gracia|chau|bye|adios)/i.test(text) &&
+            !/turno|cita|agendar|reservar|horario|disponib|cancelar|fecha|hora /i.test(text) &&
             detected_categories.length === 0;
         
         const nameForRegistration = detected_name || (looksLikeName ? text : null);
@@ -200,7 +201,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return res.end();
         }
 
-        // D) IA (Etapa 3 / Fallback)
+        // D) TURNO / AGENDA (Etapa 4)
+        if (intent === 'TURNO' && activeLeadId) {
+            console.log('[api/chat] FLOW: Etapa 4 — Solicitud de turno');
+            
+            // Buscar turnos existentes del lead
+            const existingAppts = await sql`
+                SELECT id, date_time, service_type, status 
+                FROM appointments 
+                WHERE lead_id = ${activeLeadId}::uuid 
+                AND status NOT IN ('canceled', 'CANCELADA')
+                ORDER BY date_time DESC LIMIT 5
+            `.catch(() => []);
+            
+            const upcomingAppts = existingAppts.filter((a: any) => new Date(a.date_time) >= new Date());
+            const pastAppts = existingAppts.filter((a: any) => new Date(a.date_time) < new Date());
+            
+            // Construir contexto real para la IA
+            let turnoContext = `ETAPA 4 — GESTIÓN DE TURNOS.\n`;
+            turnoContext += `El usuario ${currentLeadName} quiere agendar/consultar un turno.\n`;
+            
+            if (upcomingAppts.length > 0) {
+                turnoContext += `TURNOS PRÓXIMOS: ${upcomingAppts.map((a: any) => 
+                    `${a.service_type} el ${new Date(a.date_time).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })} a las ${new Date(a.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} (${a.status})`
+                ).join('; ')}\n`;
+            }
+            
+            turnoContext += `HORARIO DE ATENCIÓN: Lunes a Viernes 9:00 a 20:00, Sábados 9:00 a 14:00.\n`;
+            turnoContext += `INSTRUCCIONES: Preguntale al usuario qué servicio quiere, para qué día y horario. Ofrecé opciones concretas. Si ya mencionó servicios antes en la conversación, usá esos. Confirmá los datos antes de agendar.`;
+            
+            assistantContext = turnoContext;
+        }
+
+        // E) IA CONVERSACIONAL (Fallback + Etapa 3 + Etapa 4)
         // Solo llegamos aquí si el usuario ya está registrado o si no es un registro puro
         console.log('[api/chat] ETAPA 3 / IA CONVERSACIONAL');
         
@@ -215,15 +248,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     content: `Eres la asistente experta de Kâlon Estética. 
                     Tu nombre es Asistente Kâlon.
                     Usuario actual: ${currentLeadName}.
-                    ${assistantContext ? `CONTEXTO DE COTIZACIÓN: ${assistantContext}` : 'Estado: Consulta general.'}
+                    ${assistantContext ? `CONTEXTO ACTUAL: ${assistantContext}` : 'Estado: Consulta general.'}
                     
-                    REGLAS DE ORO (ETAPA 3 - CIERRE):
+                    REGLAS:
                     ${assistantContext.includes('RECIBO ENVIADO') ? `
                     ★ YA GENERAMOS Y ENVIAMOS UN RECIBO/PRESUPUESTO VISUAL AL CLIENTE.
-                    ★ En tu respuesta, mencioná los servicios y el TOTAL REAL que aparece arriba en el CONTEXTO DE COTIZACIÓN.
+                    ★ En tu respuesta, mencioná los servicios y el TOTAL REAL que aparece arriba en el CONTEXTO ACTUAL.
                     ★ NO inventes precios. Usá EXACTAMENTE los montos del contexto.
                     ★ Preguntá directamente si quiere agendar un turno para esos servicios.
                     ★ Sé breve, cálida y profesional. Usá el nombre ${currentLeadName}.
+                    ` : assistantContext.includes('ETAPA 4') ? `
+                    ★ EL CLIENTE QUIERE AGENDAR O CONSULTAR UN TURNO.
+                    ★ Preguntale qué servicio necesita (si no lo mencionó antes), para qué día y en qué horario.
+                    ★ Ofrecé opciones concretas basándote en el horario de atención del contexto.
+                    ★ Si el cliente ya mencionó servicios anteriormente, referite a esos.
+                    ★ Confirmá siempre: servicio, día y hora antes de dar por agendado.
+                    ★ Sé cálida, proactiva y eficiente. Usá el nombre ${currentLeadName}.
+                    ★ NO inventes turnos confirmados. Solo proponé opciones.
                     ` : `
                     1. Si ya enviamos precios como imágenes, confirmá que los puede ver arriba.
                     2. No inventes precios ni servicios.
