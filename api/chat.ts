@@ -93,26 +93,62 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
             if (activeLeadId) res.write(`data: ${JSON.stringify({ leadId: activeLeadId })}\n\n`);
 
-            // 1. Buscar servicios específicos (Ignorando números al inicio como "1. ", "2. ")
-            const allServices = await sql`SELECT id, name, price, category_id FROM services WHERE active = true`.catch(() => []);
+            // 1. Buscar servicios específicos — ETAPA 3 (Recibo Dinámico)
+            // Usamos la columna correcta "title" y matcheamos por nombre de categoría
+            const allServices = await sql`SELECT s.id, s.title, s.price, s.category_id, c.name as category_name 
+                FROM services s LEFT JOIN categories c ON s.category_id = c.id 
+                WHERE s.active = true`.catch(() => []);
+            
+            const userTextNorm = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            
+            // Mapa de categorías detectadas (por ID o por nombre)
+            const detectedCatIds = new Set(detected_categories.map(String));
+            const detectedCatNames = categories
+                .filter(c => detectedCatIds.has(String(c.id)))
+                .map(c => c.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+            
             const matchedServices = allServices.filter((s: any) => {
-                // Limpiar el nombre del servicio de números y puntos al inicio (ej: "2. Laminado" -> "laminado")
-                const cleanServiceName = s.name.replace(/^\d+[\s.]*/, '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-                const userTextNorm = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                // ¿Este servicio pertenece a una categoría detectada?
+                const catMatch = detectedCatIds.has(String(s.category_id)) || 
+                    detectedCatNames.some(cn => (s.category_name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(cn));
+                if (!catMatch) return false;
                 
-                // Buscamos si el texto del usuario contiene el nombre del servicio o palabras clave significativas
-                const words = cleanServiceName.split(' ').filter(w => w.length > 3);
-                return detected_categories.includes(s.category_id) && 
-                       (userTextNorm.includes(cleanServiceName) || words.some(w => userTextNorm.includes(w)));
+                // Matching PRECISO en 2 fases
+                const serviceTitle = (s.title || '').replace(/^\d+[\s.]*/, '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                
+                // Fase 1: ¿El usuario escribió exactamente el nombre del servicio? (ej: "laminado de cejas")
+                if (userTextNorm.includes(serviceTitle)) return true;
+                
+                // Fase 2: ¿El servicio es una palabra simple que el usuario mencionó? (ej: servicio="Axilas", user="axilas y laminado")
+                // Solo aplica para servicios de 1-2 palabras (evita que "Combo Pierna+Axilas" matchee por "axilas")
+                const significantWords = serviceTitle.split(/[\s+/()]+/).filter((w: string) => w.length > 3);
+                if (significantWords.length <= 2) {
+                    return significantWords.every((w: string) => userTextNorm.includes(w));
+                }
+                
+                return false;
             });
 
-            if (matchedServices.length > 0) {
-                // GENERAR RECIBO DINÁMICO (Satori)
-                const receiptItems = matchedServices.map((s: any) => ({ 
-                    name: s.name.replace(/^\d+[\s.]*/, ''), 
+            // Deduplicar: si tenemos "Cejas" y "Laminado de cejas", quedarse solo con el más específico
+            const deduped = matchedServices.filter((s: any, _i: number, arr: any[]) => {
+                const sTitle = (s.title || '').replace(/^\d+[\s.]*/, '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                // Si este servicio es un substring de otro más específico, eliminarlo
+                return !arr.some((other: any) => {
+                    if (other.id === s.id) return false;
+                    const otherTitle = (other.title || '').replace(/^\d+[\s.]*/, '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                    return otherTitle !== sTitle && otherTitle.includes(sTitle);
+                });
+            });
+
+            console.log(`[ETAPA 3] Matched ${deduped.length} servicios: ${deduped.map((s:any) => s.title).join(', ')}`);
+
+            if (deduped.length > 0) {
+                // ══════ GENERAR RECIBO DINÁMICO (Satori) ══════
+                const receiptItems = deduped.map((s: any) => ({ 
+                    name: (s.title || '').replace(/^\d+[\s.]*/, ''), 
                     price: `$${Number(s.price).toLocaleString('es-AR')}` 
                 }));
-                const totalPrice = matchedServices.reduce((acc: number, s: any) => acc + Number(s.price), 0);
+                const totalPrice = deduped.reduce((acc: number, s: any) => acc + Number(s.price), 0);
                 receiptItems.push({ name: 'TOTAL ESTIMADO', price: `$${totalPrice.toLocaleString('es-AR')}` });
                 
                 const satoriData = Buffer.from(JSON.stringify(receiptItems)).toString('base64');
@@ -121,10 +157,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 
                 res.write(`data: ${JSON.stringify({ media_url: receiptUrl })}\n\n`);
                 // Inyectamos los precios REALES en el contexto para que la IA no alucine
-                assistantContext = `RECIBO ENVIADO. Servicios: ${matchedServices.map((s: any) => `${s.name}: $${s.price}`).join(', ')}. TOTAL REAL: $${totalPrice.toLocaleString('es-AR')}.`;
+                assistantContext = `RECIBO ENVIADO. Servicios: ${deduped.map((s: any) => `${s.title}: $${Number(s.price).toLocaleString('es-AR')}`).join(', ')}. TOTAL REAL: $${totalPrice.toLocaleString('es-AR')}.`;
             } else {
-                // Fallback a imágenes de categoría si no hay servicios específicos detectados
-                const matchedCats = categories.filter(c => detected_categories.includes(c.id) || detected_categories.includes(String(c.id)));
+                // ══════ FALLBACK: Imágenes de categoría (ETAPA 2 — NO TOCAR) ══════
+                const matchedCats = categories.filter(c => detectedCatIds.has(String(c.id)));
                 for (const cat of matchedCats) {
                     if (cat.price_list_url) res.write(`data: ${JSON.stringify({ media_url: cat.price_list_url })}\n\n`);
                 }
@@ -175,14 +211,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     content: `Eres la asistente experta de Kâlon Estética. 
                     Tu nombre es Asistente Kâlon.
                     Usuario actual: ${currentLeadName}.
-                    Estado: ${assistantContext ? 'Precios enviados' : 'Consulta general'}.
+                    ${assistantContext ? `CONTEXTO DE COTIZACIÓN: ${assistantContext}` : 'Estado: Consulta general.'}
                     
                     REGLAS DE ORO (ETAPA 3 - CIERRE):
-                    1. Si enviamos un RECIBO (mencionado en el contexto como "RECIBO ENVIADO"), confirma que preparaste el presupuesto.
-                    2. MENCIONA EL TOTAL REAL: Usa el monto que aparece en "TOTAL REAL: $..." del contexto. NO INVENTES PRECIOS.
-                    3. Si vas a listar los servicios en el texto, usa EXACTAMENTE los precios que figuran en el contexto (ej: "Axilas: $3.500").
-                    4. Sé breve, profesional y usa siempre el nombre ${currentLeadName}.
-                    5. Pregunta directamente si quiere agendar un turno.` 
+                    ${assistantContext.includes('RECIBO ENVIADO') ? `
+                    ★ YA GENERAMOS Y ENVIAMOS UN RECIBO/PRESUPUESTO VISUAL AL CLIENTE.
+                    ★ En tu respuesta, mencioná los servicios y el TOTAL REAL que aparece arriba en el CONTEXTO DE COTIZACIÓN.
+                    ★ NO inventes precios. Usá EXACTAMENTE los montos del contexto.
+                    ★ Preguntá directamente si quiere agendar un turno para esos servicios.
+                    ★ Sé breve, cálida y profesional. Usá el nombre ${currentLeadName}.
+                    ` : `
+                    1. Si ya enviamos precios como imágenes, confirmá que los puede ver arriba.
+                    2. No inventes precios ni servicios.
+                    3. Sé breve, cálida y profesional. Usá el nombre ${currentLeadName}.
+                    4. Ofrecé agendar un turno si corresponde.
+                    `}` 
                 },
                 ...messages.map((m) => ({ role: m.role as any, content: m.content }))
             ],
