@@ -93,16 +93,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
             if (activeLeadId) res.write(`data: ${JSON.stringify({ leadId: activeLeadId })}\n\n`);
 
-            // 1. Buscar servicios específicos
+            // 1. Buscar servicios específicos (Ignorando números al inicio como "1. ", "2. ")
             const allServices = await sql`SELECT id, name, price, category_id FROM services WHERE active = true`.catch(() => []);
             const matchedServices = allServices.filter((s: any) => {
-                const nameNorm = s.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                return detected_categories.includes(s.category_id) && text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(nameNorm.split(' ')[0]);
+                // Limpiar el nombre del servicio de números y puntos al inicio (ej: "2. Laminado" -> "laminado")
+                const cleanServiceName = s.name.replace(/^\d+[\s.]*/, '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                const userTextNorm = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                
+                // Buscamos si el texto del usuario contiene el nombre del servicio o palabras clave significativas
+                const words = cleanServiceName.split(' ').filter(w => w.length > 3);
+                return detected_categories.includes(s.category_id) && 
+                       (userTextNorm.includes(cleanServiceName) || words.some(w => userTextNorm.includes(w)));
             });
 
             if (matchedServices.length > 0) {
                 // GENERAR RECIBO DINÁMICO (Satori)
-                const receiptItems = matchedServices.map((s: any) => ({ name: s.name, price: `$${Number(s.price).toLocaleString('es-AR')}` }));
+                const receiptItems = matchedServices.map((s: any) => ({ 
+                    name: s.name.replace(/^\d+[\s.]*/, ''), 
+                    price: `$${Number(s.price).toLocaleString('es-AR')}` 
+                }));
                 const totalPrice = matchedServices.reduce((acc: number, s: any) => acc + Number(s.price), 0);
                 receiptItems.push({ name: 'TOTAL ESTIMADO', price: `$${totalPrice.toLocaleString('es-AR')}` });
                 
@@ -111,7 +120,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 receiptUrl = `${baseUrl}/api/satori-image?title=${encodeURIComponent('TU PRESUPUESTO KÂLON')}&data=${satoriData}`;
                 
                 res.write(`data: ${JSON.stringify({ media_url: receiptUrl })}\n\n`);
-                assistantContext = `Le enviamos un RECIBO personalizado con: ${matchedServices.map((s: any) => s.name).join(', ')}. El TOTAL es $${totalPrice.toLocaleString('es-AR')}.`;
+                // Inyectamos los precios REALES en el contexto para que la IA no alucine
+                assistantContext = `RECIBO ENVIADO. Servicios: ${matchedServices.map((s: any) => `${s.name}: $${s.price}`).join(', ')}. TOTAL REAL: $${totalPrice.toLocaleString('es-AR')}.`;
             } else {
                 // Fallback a imágenes de categoría si no hay servicios específicos detectados
                 const matchedCats = categories.filter(c => detected_categories.includes(c.id) || detected_categories.includes(String(c.id)));
@@ -167,11 +177,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     Usuario actual: ${currentLeadName}.
                     Estado: ${assistantContext ? 'Precios enviados' : 'Consulta general'}.
                     
-                    REGLAS DE ORO (ETAPA 3):
-                    1. Si enviamos un RECIBO ("TOTAL es $..."), confirma que viste su pedido específico y menciona el PRECIO TOTAL que aparece en la imagen.
-                    2. Pregunta directamente si quiere agendar un turno para esos servicios.
-                    3. Sé breve, profesional y usa siempre el nombre ${currentLeadName}.
-                    4. No repitas precios individuales, enfócate en el total y la reserva.` 
+                    REGLAS DE ORO (ETAPA 3 - CIERRE):
+                    1. Si enviamos un RECIBO (mencionado en el contexto como "RECIBO ENVIADO"), confirma que preparaste el presupuesto.
+                    2. MENCIONA EL TOTAL REAL: Usa el monto que aparece en "TOTAL REAL: $..." del contexto. NO INVENTES PRECIOS.
+                    3. Si vas a listar los servicios en el texto, usa EXACTAMENTE los precios que figuran en el contexto (ej: "Axilas: $3.500").
+                    4. Sé breve, profesional y usa siempre el nombre ${currentLeadName}.
+                    5. Pregunta directamente si quiere agendar un turno.` 
                 },
                 ...messages.map((m) => ({ role: m.role as any, content: m.content }))
             ],
