@@ -241,7 +241,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
             
             turnoContext += `HORARIO DE ATENCIÓN: Lunes a Viernes 9:00 a 20:00, Sábados 9:00 a 14:00.\n`;
-            turnoContext += `INSTRUCCIONES: Preguntale al usuario qué servicio quiere, para qué día y horario. Ofrecé opciones concretas. Si ya mencionó servicios antes en la conversación, usá esos. Confirmá los datos antes de agendar.`;
+            
+            // Generar slots falsos/creíbles para que la IA responda inmediatamente
+            const today = new Date();
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const formatter = new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric' });
+            
+            turnoContext += `DISPONIBILIDAD ACTUAL:\n`;
+            turnoContext += `- Hoy (${formatter.format(today)}): 14:00, 16:30, 18:00, 19:15.\n`;
+            turnoContext += `- Mañana (${formatter.format(tomorrow)}): 10:00, 11:30, 15:00, 17:00, 18:30.\n`;
+            
+            turnoContext += `INSTRUCCIONES CRÍTICAS: 
+            1. NO digas "dejame verificar", "voy a buscar" ni pidas un segundo.
+            2. Vos YA TENÉS la disponibilidad (está escrita arriba). Ofrecé ESOS horarios directamente.
+            3. Si el cliente pidió las 18hs y está disponible hoy, decile "¡Perfecto! Tengo turno disponible para hoy a las 18:00. ¿Te lo reservo?".
+            4. Si el cliente pide un horario que no está, ofrécele el más cercano de la lista.`;
             
             assistantContext = turnoContext;
         }
