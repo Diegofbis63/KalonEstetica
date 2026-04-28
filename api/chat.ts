@@ -62,10 +62,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         Mensaje: "${text}"`;
 
         const classificationResponse = await openai.chat.completions.create({
-            model: 'google/gemini-2.0-flash-001',
+            model: 'google/gemini-2.5-flash',
             messages: [{ role: 'system', content: classificationPrompt }],
             response_format: { type: 'json_object' }
-        }).catch(() => null);
+        }, { timeout: 10000 }).catch((e) => {
+            console.warn('[api/chat] Classification timeout/error:', e.message);
+            return null;
+        });
 
         const classification = JSON.parse(classificationResponse?.choices[0]?.message?.content || '{}');
         const { intent, detected_categories = [], detected_name, is_negation } = classification;
@@ -266,7 +269,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log('[api/chat] ETAPA 3 / IA CONVERSACIONAL');
 
         const stream = await openai.chat.completions.create({
-            model: 'google/gemini-2.0-flash-001',
+            model: 'google/gemini-2.5-flash',
             messages: [
                 { 
                     role: 'system', 
@@ -300,7 +303,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 ...messages.map((m) => ({ role: m.role as any, content: m.content }))
             ],
             stream: true,
-        });
+        }, { timeout: 15000 });
 
         if (!res.headersSent) {
             res.setHeader('Content-Type', 'text/event-stream');
