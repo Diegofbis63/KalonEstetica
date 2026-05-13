@@ -33,20 +33,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         console.log(`[api/chat] MSG: "${text}" | ID: ${identificationId} | LeadId: ${leadId}`);
 
-        // --- 1. PRE-PROCESAMIENTO: IDENTIFICACIÓN ROBUSTA ---
+        // --- 1. PRE-PROCESAMIENTO: IDENTIFICACIÓN ROBUSTA Y CONSULTAS EN PARALELO ---
         let leadByInitId = null;
         let activeLeadId: string | number | null = leadId || null;
-        if (identificationId && String(identificationId).length > 10 && !activeLeadId) {
-            leadByInitId = await findLeadByInitId(String(identificationId)).catch(() => null);
-            if (leadByInitId) {
-                activeLeadId = leadByInitId.id;
-                console.log(`[api/chat] Lead recuperado por initId: ${activeLeadId} (${leadByInitId.first_name})`);
-            }
+
+        // Promesas en paralelo para reducir latencia drásticamente
+        const initIdPromise = (identificationId && String(identificationId).length > 10 && !activeLeadId) 
+            ? findLeadByInitId(String(identificationId)).catch(() => null)
+            : Promise.resolve(null);
+        
+        const categoriesPromise = getCategories().catch(() => []) as Promise<Array<{ id: string | number, name: string, price_list_url?: string }>>;
+        const servicesPromise = sql`SELECT s.title, c.id as category_id FROM services s LEFT JOIN categories c ON s.category_id = c.id WHERE s.active = true`.catch(() => []);
+
+        const [fetchedLead, categories, services] = await Promise.all([initIdPromise, categoriesPromise, servicesPromise]);
+
+        if (fetchedLead) {
+            leadByInitId = fetchedLead;
+            activeLeadId = leadByInitId.id;
+            console.log(`[api/chat] Lead recuperado por initId: ${activeLeadId} (${leadByInitId.first_name})`);
         }
 
         // --- 2. CLASIFICACIÓN DE INTENCIÓN (IA) ---
-        const categories = await getCategories().catch(() => []) as Array<{ id: string | number, name: string, price_list_url?: string }>;
-        const services = await sql`SELECT s.title, c.id as category_id FROM services s LEFT JOIN categories c ON s.category_id = c.id WHERE s.active = true`.catch(() => []);
         const catList = categories.map((c: any) => {
             const sList = services.filter((s: any) => s.category_id === c.id).map((s: any) => s.title).join(', ');
             return `${c.id}: ${c.name} (${sList || 'sin servicios'})`;
@@ -272,62 +279,70 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (intent === 'TURNO' && activeLeadId) {
             console.log('[api/chat] FLOW: Etapa 4 — Solicitud de turno');
             
-            // Buscar turnos existentes del lead
-            const existingAppts = await sql`
+            // 1. Preparar cálculo de fechas para slots
+            const { getAvailableSlotsFromDB } = await import('./_services/db.js');
+            const now = new Date();
+            const startDate = new Date(now.getTime());
+            // Redondear a los próximos 30 minutos
+            const ms = 1000 * 60 * 30;
+            startDate.setTime(Math.ceil(startDate.getTime() / ms) * ms);
+            
+            const endDate = new Date(startDate);
+            endDate.setDate(endDate.getDate() + 7);
+            
+            // 2. Inferir categoría objetivo (síncrono, no requiere BD)
+            let targetCatId = detected_categories?.[0] ? String(detected_categories[0]) : '';
+            if (!targetCatId) {
+                const fullHistoryNorm = messages.slice(-6).map(m => m.content).join(' ').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                for (const c of categories) {
+                    const cNameNorm = c.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    if (fullHistoryNorm.includes(cNameNorm) || (c.name === 'Depilación' && fullHistoryNorm.includes('depilac')) || (c.name === 'Pestañas' && (fullHistoryNorm.includes('pestañ') || fullHistoryNorm.includes('laminado') || fullHistoryNorm.includes('ceja')))) {
+                        targetCatId = String(c.id);
+                        break;
+                    }
+                }
+                if (!targetCatId && categories.length > 0) {
+                    targetCatId = String(categories[0].id);
+                }
+            }
+
+            // 3. Consultar DB en paralelo (Latencia reducida a la mitad)
+            const apptsPromise = sql`
                 SELECT id, date_time, service_type, status 
                 FROM appointments 
                 WHERE lead_id = ${activeLeadId}::uuid 
                 AND status NOT IN ('canceled', 'CANCELADA')
                 ORDER BY date_time DESC LIMIT 5
             `.catch(() => []);
+
+            const slotsPromise = targetCatId 
+                ? getAvailableSlotsFromDB(targetCatId, startDate, endDate, 30).catch(() => [])
+                : Promise.resolve([]);
+
+            const [existingAppts, slots] = await Promise.all([apptsPromise, slotsPromise]);
             
             const upcomingAppts = existingAppts.filter((a: any) => new Date(a.date_time) >= new Date());
             const pastAppts = existingAppts.filter((a: any) => new Date(a.date_time) < new Date());
             
-            // Construir contexto real para la IA
+            // 4. Construir contexto real para la IA
             let turnoContext = `ETAPA 4 — GESTIÓN DE TURNOS.\n`;
             turnoContext += `El usuario ${currentLeadName} quiere agendar/consultar un turno.\n`;
             
             if (upcomingAppts.length > 0) {
                 turnoContext += `TURNOS PRÓXIMOS: ${upcomingAppts.map((a: any) => 
-                    `${a.service_type} el ${new Date(a.date_time).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })} a las ${new Date(a.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} (${a.status})`
+                    `${a.service_type} el ${new Date(a.date_time).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Argentina/Buenos_Aires' })} a las ${new Date(a.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })} (${a.status})`
                 ).join('; ')}\n`;
             }
             
             turnoContext += `HORARIO DE ATENCIÓN: Lunes a Viernes 9:00 a 20:00, Sábados 9:00 a 14:00.\n`;
             
-            // Consultar disponibilidad REAL desde la DB
             try {
-                const { getAvailableSlotsFromDB } = await import('./_services/db.js');
-                const startDate = new Date();
-                const endDate = new Date(startDate);
-                endDate.setDate(endDate.getDate() + 7);
-                
-                // Intentar obtener slots de la categoría detectada o inferir del historial reciente
-                let targetCatId = detected_categories?.[0] ? String(detected_categories[0]) : '';
-                if (!targetCatId) {
-                    const fullHistoryNorm = messages.slice(-6).map(m => m.content).join(' ').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                    for (const c of categories) {
-                        const cNameNorm = c.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                        if (fullHistoryNorm.includes(cNameNorm) || (c.name === 'Depilación' && fullHistoryNorm.includes('depilac')) || (c.name === 'Pestañas' && (fullHistoryNorm.includes('pestañ') || fullHistoryNorm.includes('laminado') || fullHistoryNorm.includes('ceja')))) {
-                            targetCatId = String(c.id);
-                            break;
-                        }
-                    }
-                    if (!targetCatId && categories.length > 0) {
-                        targetCatId = String(categories[0].id);
-                    }
-                }
-                
-                const slots = targetCatId 
-                    ? await getAvailableSlotsFromDB(targetCatId, startDate, endDate, 30).catch(() => [])
-                    : [];
-                
                 if (slots.length > 0) {
                     // Agrupar por día (máx 5 días, sin límite restrictivo por día para dar visibilidad total)
                     const slotsByDay = new Map<string, string[]>();
-                    const formatter = new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
-                    const timeFormatter = new Intl.DateTimeFormat('es-AR', { hour: '2-digit', minute: '2-digit' });
+                    // FIX IMPORTANTÍSIMO: Fijar el timezone para que no se desfacen las horas en Vercel
+                    const formatter = new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Argentina/Buenos_Aires' });
+                    const timeFormatter = new Intl.DateTimeFormat('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' });
                     
                     for (const slot of slots) {
                         const dt = new Date(slot.slot_time);
