@@ -138,7 +138,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 const significantWords: string[] = Array.from(new Set(serviceTitle.split(/[\s+/()]+/).filter((w: string) => w.length > 3)));
                 const matchedWords: string[] = significantWords.filter((w: string) => textLeft.includes(w) || textLeft.includes(w.replace(/s$/, '')));
                 
-                const threshold = significantWords.length === 1 ? 1 : 2;
+                let threshold = significantWords.length === 1 ? 1 : 2;
+                if (serviceTitle.includes('combo') || serviceTitle.includes('pack') || serviceTitle.includes('promo')) {
+                    threshold = Math.max(threshold, significantWords.length - 1);
+                }
                 if (significantWords.length > 0 && matchedWords.length >= threshold) {
                     matchedServices.push(s);
                     for (const w of matchedWords) {
