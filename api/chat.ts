@@ -126,35 +126,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 .filter(c => detectedCatIds.has(String(c.id)))
                 .map(c => c.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
             
-            let textLeft = " " + userTextNorm + " ";
+            const phrases = userTextNorm.split(/\s+y\s+|\s+o\s+|\s+e\s+|,|\.|-|\n/g).map(p => p.trim()).filter(p => p.length > 0);
             const sortedServices = [...allServices].sort((a: any, b: any) => (b.title || '').length - (a.title || '').length);
             const matchedServices = [];
-
+            
             for (const s of sortedServices) {
-                const serviceTitle = (s.title || '').replace(/^\d+[\s.]*/, '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                const t = (s.title || '').replace(/^\d+[\s.]*/, '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
                 
-                // Fase 1: Match exacto sobre lo que queda del texto
-                if (textLeft.includes(serviceTitle)) {
-                    matchedServices.push(s);
-                    textLeft = textLeft.replace(serviceTitle, " ");
-                    continue;
+                let matchedPhraseIndex = -1;
+                for (let i = 0; i < phrases.length; i++) {
+                    let phrase = " " + phrases[i] + " ";
+                    if (phrase.includes(" " + t + " ") || phrase.includes(t)) {
+                        matchedPhraseIndex = i;
+                        break;
+                    }
+
+                    // Fase 2: Match por palabras significativas DENTRO de la frase
+                    const significantWords: string[] = Array.from(new Set(t.split(/[\s+/()]+/).filter((w: string) => w.length > 3)));
+                    const matchedWords: string[] = significantWords.filter((w: string) => phrase.includes(w) || phrase.includes(w.replace(/s$/, '')));
+                    
+                    let threshold = significantWords.length === 1 ? 1 : 2;
+                    if (t.includes('combo') || t.includes('pack') || t.includes('promo')) {
+                        threshold = Math.max(threshold, significantWords.length - 1);
+                    }
+                    if (significantWords.length > 0 && matchedWords.length >= threshold) {
+                        matchedPhraseIndex = i;
+                        for (const w of matchedWords) {
+                            phrase = phrase.replace(w, " ");
+                            phrase = phrase.replace(w + 's', " ");
+                            phrase = phrase.replace(w.replace(/s$/, ''), " ");
+                        }
+                        phrases[i] = phrase.trim();
+                        break;
+                    }
                 }
 
-                // Fase 2: Match por palabras significativas (umbral flexible para subsets y plurales)
-                const significantWords: string[] = Array.from(new Set(serviceTitle.split(/[\s+/()]+/).filter((w: string) => w.length > 3)));
-                const matchedWords: string[] = significantWords.filter((w: string) => textLeft.includes(w) || textLeft.includes(w.replace(/s$/, '')));
-                
-                let threshold = significantWords.length === 1 ? 1 : 2;
-                if (serviceTitle.includes('combo') || serviceTitle.includes('pack') || serviceTitle.includes('promo')) {
-                    threshold = Math.max(threshold, significantWords.length - 1);
-                }
-                if (significantWords.length > 0 && matchedWords.length >= threshold) {
+                if (matchedPhraseIndex !== -1) {
                     matchedServices.push(s);
-                    for (const w of matchedWords) {
-                        textLeft = textLeft.replace(w, " ");
-                        textLeft = textLeft.replace(w + 's', " ");
-                        textLeft = textLeft.replace(w.replace(/s$/, ''), " ");
-                    }
+                    phrases[matchedPhraseIndex] = phrases[matchedPhraseIndex].replace(t, " ").trim();
                 }
             }
 
