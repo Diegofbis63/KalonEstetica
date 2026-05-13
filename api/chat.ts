@@ -46,20 +46,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // --- 2. CLASIFICACIÓN DE INTENCIÓN (IA) ---
         const categories = await getCategories().catch(() => []) as Array<{ id: string | number, name: string, price_list_url?: string }>;
         const catList = categories.map(c => `${c.id}: ${c.name}`).join(', ');
+        
+        const recentHistory = messages.slice(-4, -1).map(m => `${m.role === 'assistant' ? 'Asistente' : 'Usuario'}: ${m.content}`).join('\n');
 
         const classificationPrompt = `Analiza el mensaje del usuario para KÂLON Estética.
         Categorías disponibles: [${catList}]
         Estado actual del Lead: ${activeLeadId ? 'Identificado' : 'No Identificado'}
         
+        Contexto reciente de la conversación:
+        ${recentHistory}
+        
         Responde ÚNICAMENTE un objeto JSON con:
         {
           "intent": "SALUDO" | "REGISTRO" | "CONSULTA_SERVICIO" | "TURNO" | "OTRO",
-          "detected_categories": [ids_de_categorias_detectadas],
+          "detected_categories": [ids_de_categorias_detectadas] (Asegúrate de inferirlas del contexto reciente si el usuario está agendando turnos para servicios que pidió antes),
           "detected_name": "nombre si es registro",
           "is_negation": true/false
         }
         
-        Mensaje: "${text}"`;
+        Mensaje actual del usuario: "${text}"`;
 
         const classificationResponse = await openai.chat.completions.create({
             model: 'google/gemini-2.5-flash',
@@ -279,9 +284,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 const endDate = new Date(startDate);
                 endDate.setDate(endDate.getDate() + 7);
                 
-                // Intentar obtener slots de la categoría detectada, o usar la primera categoría general del sistema como fallback para mostrar horarios.
-                let firstCatId = detected_categories?.[0] ? String(detected_categories[0]) : '';
-                if (!firstCatId && categories.length > 0) firstCatId = String(categories[0].id);
+                // Intentar obtener slots de la primera categoría detectada
+                const firstCatId = detected_categories?.[0] ? String(detected_categories[0]) : '';
                 
                 const slots = firstCatId 
                     ? await getAvailableSlotsFromDB(firstCatId, startDate, endDate, 30).catch(() => [])
