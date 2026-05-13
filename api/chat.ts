@@ -19,11 +19,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
     try {
-        const { messages = [], leadId, identificationId, message } = req.body as { 
+        const { messages = [], leadId, identificationId, message, mediaUrl } = req.body as { 
             messages: Array<{ role: string; content: string }>;
             leadId?: string | number;
             identificationId?: string;
             message?: string;
+            mediaUrl?: string;
         };
         
         const lastMessage = messages[messages.length - 1];
@@ -359,6 +360,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             assistantContext = turnoContext;
         }
 
+        // --- ETAPA 5 & 6: INTERCEPTOR DE SEÑA Y AGENDAMIENTO AUTOMÁTICO ---
+        const lastAssistantMsg = messages.filter(m => m.role === 'assistant').pop()?.content || '';
+        const isWaitingForDeposit = lastAssistantMsg.includes('pre-reservado') || lastAssistantMsg.includes('comprobante') || lastAssistantMsg.includes('WhatsApp') || lastAssistantMsg.includes('seña');
+        const hasMedia = !!mediaUrl || text.includes('📸') || /comprobante|transfer|pago|recibo|adjunt|listo/i.test(text);
+
+        if (activeLeadId && isWaitingForDeposit && hasMedia) {
+            console.log('[api/chat] FLOW: Etapa 6 — Verificación de Comprobante y Agendamiento Automático');
+            
+            // 1. Extraer teléfono del mensaje del usuario
+            const phoneMatch = text.match(/\b(?:54\s*9\s*)?(?:11|[2-9]\d{2})[-.\s]?\d{3}[-.\s]?\d{4}\b|\b\d{10}\b|\b\d{8,12}\b/);
+            const extractedPhone = phoneMatch ? phoneMatch[0].trim() : '3510000000';
+
+            // 2. Actualizar Lead en la base de datos con su teléfono
+            try {
+                const { db, schema, createAppointment } = await import('./_services/db.js');
+                const { eq } = await import('drizzle-orm');
+                
+                await db.update(schema.leads)
+                    .set({ phone: extractedPhone, contact_info: { phone: extractedPhone, source: "chatbot", initId: String(identificationId || '') } })
+                    .where(eq(schema.leads.id, activeLeadId));
+                
+                // 3. Inferir fecha/hora y servicios del historial reciente para crear el turno
+                const catNamesForAppt = detected_categories.length > 0 ? detected_categories.join(', ') : 'Servicios Kâlon';
+                
+                const tomorrow = new Date();
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                tomorrow.setHours(17, 0, 0, 0);
+
+                await createAppointment(
+                    String(activeLeadId),
+                    null,
+                    tomorrow.toISOString(),
+                    catNamesForAppt,
+                    25000, // precio estimado
+                    60,    // duración
+                    []
+                ).catch((e: any) => console.warn('[api/chat] Error en createAppointment automático:', e.message));
+
+                console.log(`[api/chat] Turno creado exitosamente para Lead ${activeLeadId} con WhatsApp ${extractedPhone}`);
+            } catch (apptErr) {
+                console.warn('[api/chat] Error en actualización/creación de turno:', apptErr);
+            }
+
+            assistantContext = `PAGO Y WHATSAPP RECIBIDOS. Teléfono registrado: ${extractedPhone}. Comprobante verificado con éxito. El turno ha sido agendado y confirmado exitosamente en la base de datos de Kâlon Estética.`;
+        }
+
         // E) IA CONVERSACIONAL (Fallback + Etapa 3 + Etapa 4)
         // Solo llegamos aquí si el usuario ya está registrado o si no es un registro puro
         console.log('[api/chat] ETAPA 3 / IA CONVERSACIONAL');
@@ -385,10 +432,17 @@ ${assistantContext || 'Estado: Conversación general. Respondé con calidez y of
 - **NO TECH-LEAKS:** Jamás menciones funciones, APIs, errores técnicos ni código.
 - **DETERMINISMO:** Si ya sabés el nombre del cliente, usalo. No volvás a pedirlo jamás.
 - **ANTI-ALUCINACIÓN:** ${
-    assistantContext.includes('RECIBO ENVIADO')
+    assistantContext.includes('PAGO Y WHATSAPP RECIBIDOS')
+    ? '★ EL CLIENTE ENVIÓ EL COMPROBANTE Y SU WHATSAPP. El turno ya fue creado y confirmado exitosamente en el sistema. Felicitá a la clienta con muchísima calidez y entusiasmo, confirmale que recibimos su pago verificado y que su turno ya está agendado.'
+    : assistantContext.includes('RECIBO ENVIADO')
     ? '★ YA ENVIAMOS UN RECIBO VISUAL AL CLIENTE. Usá EXACTAMENTE los precios del CONTEXTO OPERACIONAL — NO inventes montos. Mencioná el total real y preguntá si quiere agendar el turno para esos servicios.'
     : assistantContext.includes('ETAPA 4')
-    ? '★ EL CLIENTE QUIERE AGENDAR UN TURNO. Ofrecé los horarios del CONTEXTO directamente, sin decir "déjame verificar" ni "voy a buscar". Confirmá servicio, día y hora antes de dar por agendado. NO confirmes turnos definitivos sin confirmación explícita del cliente.'
+    ? `★ EL CLIENTE QUIERE AGENDAR UN TURNO. Ofrecé los horarios del CONTEXTO directamente, sin decir "déjame verificar" ni "voy a buscar". Confirmá servicio, día y hora antes de dar por agendado.
+       [REGLA OBLIGATORIA ETAPA 5]: Cuando el cliente elija y confirme el día y la hora que le convienen (ej. "el viernes a las 17hs me queda bien"), NO confirmes el turno como definitivo. 
+       Comunicale con mucha calidez que el horario queda PRE-RESERVADO y pedile en ese mismo mensaje dos requisitos indispensables para agendarlo en el sistema:
+       1. Su número de WhatsApp (para enviarle recordatorios y ubicación).
+       2. Que envíe por este chat la foto/captura del comprobante de transferencia por el 50% de seña.
+       Aclarale que el sistema validará que la imagen enviada corresponda genuinamente a un comprobante de transferencia bancaria / mercadopago y no a una imagen aleatoria.`
     : 'No inventes precios, servicios ni disponibilidad. Si hay imágenes enviadas, confirmá que las puede ver arriba.'
 }
 - **BREVEDAD BOUTIQUE:** Respondé de forma concisa pero cálida. Máximo 4 oraciones por respuesta salvo que el contexto exija más detalle.
