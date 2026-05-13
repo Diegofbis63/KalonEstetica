@@ -252,7 +252,7 @@ export async function getAvailableSlotsFromDB(categoryId: string, startDate: Dat
     console.log(`[db.ts] Calling availability DB for category: ${categoryId} (Min Duration: ${minDuration})`);
     const query = drizzleSql`
         SELECT slot_time as "slot_time", professional_id as "staff_id"
-        FROM get_available_slots(${categoryId}, ${startDate.toISOString()}, ${endDate.toISOString()}, ${minDuration})
+        FROM get_available_slots(${categoryId}::uuid, ${startDate.toISOString()}::timestamp, ${endDate.toISOString()}::timestamp, ${minDuration})
         ORDER BY slot_time ASC
     `;
     const results = await withTimeout(db.execute(query), 5000, { 

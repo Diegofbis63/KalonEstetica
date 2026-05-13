@@ -279,8 +279,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 const endDate = new Date(startDate);
                 endDate.setDate(endDate.getDate() + 7);
                 
-                // Intentar obtener slots de la primera categoría detectada, o general
-                const firstCatId = detected_categories?.[0] ? String(detected_categories[0]) : '';
+                // Intentar obtener slots de la categoría detectada, o usar la primera categoría general del sistema como fallback para mostrar horarios.
+                let firstCatId = detected_categories?.[0] ? String(detected_categories[0]) : '';
+                if (!firstCatId && categories.length > 0) firstCatId = String(categories[0].id);
+                
                 const slots = firstCatId 
                     ? await getAvailableSlotsFromDB(firstCatId, startDate, endDate, 30).catch(() => [])
                     : [];
@@ -312,11 +314,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 turnoContext += `DISPONIBILIDAD: Tenemos turnos disponibles esta semana. Preguntale al cliente qué día y horario le viene mejor.\n`;
             }
             
-            turnoContext += `INSTRUCCIONES CRÍTICAS: 
-            1. NO digas "dejame verificar", "voy a buscar" ni pidas un segundo.
-            2. Vos YA TENÉS la disponibilidad (está escrita arriba). Ofrecé ESOS horarios directamente.
-            3. Si el cliente pide un horario que no está en la lista, ofrecele el más cercano disponible.
-            4. Confirmá siempre: servicio, día y hora antes de dar por agendado.`;
+            turnoContext += `INSTRUCCIONES CRÍTICAS ETAPA 4 (AGENDAMIENTO): 
+            1. SÉ EXTREMADAMENTE PROACTIVO. NUNCA digas "no hay turno" o "ya no tenemos" sin OFRECER INMEDIATAMENTE al menos 3 alternativas reales de los días y horarios que ves en la DISPONIBILIDAD REAL.
+            2. NO digas "dejame verificar", "voy a buscar" ni pidas un segundo.
+            3. Vos YA TENÉS la disponibilidad (está escrita arriba). Ofrecé ESOS horarios directamente.
+            4. Si el cliente pide un horario que no está en la lista, decile amablemente que ese no está disponible pero OFRECELE los horarios más cercanos que tengas.
+            5. Confirmá siempre: servicio, día y hora antes de dar por agendado.`;
             
             assistantContext = turnoContext;
         }
