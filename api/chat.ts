@@ -50,7 +50,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (fetchedLead) {
             leadByInitId = fetchedLead;
             activeLeadId = leadByInitId.id;
-            console.log(`[api/chat] Lead recuperado por initId: ${activeLeadId} (${leadByInitId.first_name})`);
+            console.log(`[api/chat] Lead recuperado por initId: ${activeLeadId} (${leadByInitId.client_name})`);
         }
 
         // --- 2. CLASIFICACIÓN DE INTENCIÓN (IA) ---
@@ -141,10 +141,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 .map(c => c.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
             
             const phrases = userTextNorm.split(/\s+y\s+|\s+o\s+|\s+e\s+|,|\.|-|\n/g).map(p => p.trim()).filter(p => p.length > 0);
-            const sortedServices = [...allServices].sort((a: any, b: any) => (b.title || '').length - (a.title || '').length);
+            
+            // Expandir servicios compuestos (ej: A / B / C (c/u))
+            const expandedServices: any[] = [];
+            for (const s of allServices) {
+                if (s.title && s.title.includes('(c/u)')) {
+                    const parts = s.title.replace('(c/u)', '').split('/').map((p: string) => p.trim());
+                    for (const p of parts) {
+                        if (p) expandedServices.push({ ...s, originalTitle: s.title, title: p });
+                    }
+                } else {
+                    expandedServices.push({ ...s, originalTitle: s.title });
+                }
+            }
+
+            // Ordenar priorizando las categorías detectadas por la IA, luego por longitud
+            expandedServices.sort((a: any, b: any) => {
+                const aCat = detectedCatIds.has(String(a.category_id));
+                const bCat = detectedCatIds.has(String(b.category_id));
+                if (aCat && !bCat) return -1;
+                if (!aCat && bCat) return 1;
+                return (b.title || '').length - (a.title || '').length;
+            });
+
             const matchedServices = [];
             
-            for (const s of sortedServices) {
+            for (const s of expandedServices) {
                 const t = (s.title || '').replace(/^\d+[\s.]*/, '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
                 
                 let matchedPhraseIndex = -1;
@@ -181,13 +203,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 }
             }
 
-            // Deduplicar SOLO duplicados semánticos exactos (ej: "Cejas (Perfilado)" vs "Perfilado de cejas")
+            // Deduplicar SOLO duplicados semánticos exactos
             const deduped = matchedServices.filter((s: any, _i: number, arr: any[]) => {
                 const sTitle = (s.title || '').replace(/^\d+[\s.]*/, '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
                 const sWords = sTitle.split(/[\s+/()]+/).filter((w: string) => w.length > 3).sort().join(' ');
                 
                 return !arr.some((other: any) => {
-                    if (other.id === s.id) return false;
+                    if (other.id === s.id && other.title === s.title) return false;
                     const otherTitle = (other.title || '').replace(/^\d+[\s.]*/, '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
                     const otherWords = otherTitle.split(/[\s+/()]+/).filter((w: string) => w.length > 3).sort().join(' ');
                     
@@ -273,7 +295,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // Obtenemos el nombre real del lead para evitar confusiones de identidad
-        const currentLeadName = leadByInitId?.client_name || (leadByInitId as any)?.first_name || detected_name || 'cliente';
+        const currentLeadName = leadByInitId?.client_name || detected_name || 'cliente';
 
         // D) TURNO / AGENDA (Etapa 4)
         if (intent === 'TURNO' && activeLeadId) {
@@ -370,7 +392,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             2. NO digas "dejame verificar", "voy a buscar" ni pidas un segundo.
             3. Vos YA TENÉS la disponibilidad (está escrita arriba). Ofrecé ESOS horarios directamente.
             4. Si el cliente pide un horario que no está en la lista exacta, ofrecele proactivamente los 3 horarios libres más cercanos de ese mismo día o del día siguiente.
-            5. Confirmá siempre: servicio, día y hora antes de dar por agendado.`;
+            5. Confirmá siempre: servicio, día y hora antes de dar por agendado.
+            6. REGLA ESTRICTA: NUNCA des consejos médicos, recomendaciones de preparación (ej. no tomar sol) ni pongas restricciones a los tratamientos. Limitáte EXCLUSIVAMENTE a agendar el turno.
+            7. REGLA ESTRICTA: Si el cliente pide turnos para MÚLTIPLES servicios, asumí SIEMPRE que se hacen juntos en el mismo horario. NUNCA los separes en días distintos a menos que el cliente lo pida.`;
             
             assistantContext = turnoContext;
         }
@@ -399,17 +423,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 // 3. Inferir fecha/hora y servicios del historial reciente para crear el turno
                 const catNamesForAppt = detected_categories.length > 0 ? detected_categories.join(', ') : 'Servicios Kâlon';
                 
-                const tomorrow = new Date();
-                tomorrow.setDate(tomorrow.getDate() + 1);
-                tomorrow.setHours(17, 0, 0, 0);
+                // Extraer fecha y hora confirmada del historial reciente
+                const recentMsgs = messages.slice(-8).map((m: any) => m.content || '').join(' ');
+                const dateMatch = recentMsgs.match(/(\d{4}-\d{2}-\d{2})/);
+                const timeMatch = recentMsgs.match(/(\d{1,2}):(\d{2})\s*hs?/i);
+
+                let appointmentDateTime: Date;
+                if (dateMatch && timeMatch) {
+                    const [_, hour, minute] = timeMatch;
+                    appointmentDateTime = new Date(`${dateMatch[1]}T${hour.padStart(2,'0')}:${minute}:00-03:00`);
+                } else {
+                    // Fallback: mañana 17hs con warning
+                    console.warn('[api/chat] ADVERTENCIA: No se pudo inferir fecha/hora del historial. Usando fallback.');
+                    appointmentDateTime = new Date();
+                    appointmentDateTime.setDate(appointmentDateTime.getDate() + 1);
+                    appointmentDateTime.setHours(17, 0, 0, 0);
+                }
+
+                // Extraer precio real del contexto del recibo si está disponible
+                const priceMatch = assistantContext.match(/TOTAL REAL:\s*\$?([\d.,]+)/);
+                const realPrice = priceMatch ? Number(priceMatch[1].replace(/\./g, '').replace(',', '.')) : 0;
 
                 await createAppointment(
                     String(activeLeadId),
                     null,
-                    tomorrow.toISOString(),
+                    appointmentDateTime.toISOString(),
                     catNamesForAppt,
-                    25000, // precio estimado
-                    60,    // duración
+                    realPrice,
+                    60,
                     []
                 ).catch((e: any) => console.warn('[api/chat] Error en createAppointment automático:', e.message));
 

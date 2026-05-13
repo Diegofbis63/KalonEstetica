@@ -75,7 +75,7 @@ export async function getCategories(): Promise<Category[]> {
             where: eq(schema.categories.active, true),
             orderBy: [asc(schema.categories.sort_order)]
         }),
-        5000, []
+        12000, []
     );
     return results as unknown as Category[];
 }
@@ -255,7 +255,7 @@ export async function getAvailableSlotsFromDB(categoryId: string, startDate: Dat
         FROM get_available_slots(${categoryId}::uuid, ${startDate.toISOString()}::timestamp, ${endDate.toISOString()}::timestamp, ${minDuration})
         ORDER BY slot_time ASC
     `;
-    const results = await withTimeout(db.execute(query), 5000, { 
+    const results = await withTimeout(db.execute(query), 12000, { 
         rows: [] as Record<string, unknown>[],
         fields: [],
         command: 'SELECT',

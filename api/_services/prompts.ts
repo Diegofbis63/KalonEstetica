@@ -26,8 +26,16 @@ const STAGE_2_EN_DESARROLLO = `
 `;
 
 const STAGE_3_PENDIENTE = `
-### [MODULO 3: AGENDAMIENTO]
-- Gestión de turnos y disponibilidad.
+### [MODULO 3: AGENDAMIENTO Y TURNOS]
+- **ESTADO:** El usuario quiere agendar un turno o consultar disponibilidad.
+- **ACCIÓN:** Mostrá los horarios disponibles directamente. NUNCA digas "voy a verificar" o "déjame buscar".
+- **FLUJO OBLIGATORIO:**
+  1. Confirmá el servicio elegido por el cliente.
+  2. Ofrecé al menos 3 opciones de horario disponible.
+  3. Cuando el cliente confirme día y hora, indicale que queda PRE-RESERVADO.
+  4. Pedile su número de WhatsApp y el comprobante de transferencia del 50% de seña.
+- **REGLA ESTRICTA:** Jamás des consejos médicos ni restricciones sobre los tratamientos.
+- **REGLA ESTRICTA:** Si hay múltiples servicios, asumí que van en el mismo turno.
 `;
 
 const TRAINING_PROTOCOL = `

@@ -58,7 +58,10 @@ export function formatDateHuman(dateStr: string): string {
 }
 
 export function formatPrice(price: number | string): string {
-    const num = Math.round(Number(price));
+    // Sanitizar: eliminar separadores de miles (puntos) y convertir coma decimal si existe
+    const sanitized = price.toString().replace(/\./g, '').replace(',', '.');
+    const num = Math.round(Number(sanitized));
+    if (isNaN(num)) return String(price); // Fallback seguro
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 }
 

@@ -156,9 +156,8 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                     const totalDuration = selected.reduce((acc, s) => acc + (s.duration_min || 30), 0);
                     const primaryCategoryId = selected[0]?.category_id || '';
 
-                    const start = new Date(fecha + "T00:00:00");
-                    const end = new Date(start);
-                    end.setDate(end.getDate() + 1);
+                    const start = new Date(fecha + "T00:00:00-03:00");
+                    const end = new Date(fecha + "T23:59:59-03:00");
 
                     const [slots, allStaff] = await Promise.all([
                         getAvailableSlotsFromDB(primaryCategoryId, start, end, totalDuration),
@@ -190,8 +189,9 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
             parameters: z.object({
                 serviceIds: z.array(z.string()).describe('IDs de los servicios elegidos'),
                 dateTimeIso: z.string().describe('Fecha y hora en ISO, ej: "2026-03-27T15:00:00"'),
+                staff_id: z.string().optional().describe('ID del profesional elegido, obtenido de consultar_disponibilidad'),
             }),
-            execute: async ({ serviceIds, dateTimeIso }) => {
+            execute: async ({ serviceIds, dateTimeIso, staff_id }) => {
                 if (!currentLeadId) return { success: false, error: 'Sesión expirada.' };
                 try {
                     const [activeServices, allCategories] = await Promise.all([
@@ -204,6 +204,8 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                     const totalDuration = selected.reduce((sum, s) => sum + Number(s.duration_min || 30), 0);
                     const catIds = [...new Set(selected.map(s => s.category_id))];
                     const catNames = allCategories.filter(c => catIds.includes(c.id)).map(c => c.name).join(' y ');
+                    
+                    if (staff_id) console.log(`[agendar_turno] Staff asignado: ${staff_id}`);
 
                     await createAppointment(currentLeadId, orgId, dateTimeIso, catNames, totalPrice, totalDuration, selected);
                     
