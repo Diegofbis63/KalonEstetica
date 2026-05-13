@@ -55,7 +55,7 @@ export const admin_users = pgTable('admin_users', {
   password_hash: text('password_hash').notNull(),
   username: text('username'),
   role: text('role'),
-  raw_password: text('raw_password'),
+  // SEGURIDAD: raw_password eliminado — nunca almacenar contraseñas en texto plano
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
 
@@ -108,7 +108,7 @@ export const services = pgTable('services', {
 export const leads = pgTable('leads', {
   id: uuid('id').primaryKey().defaultRandom(),
   organization_id: text('organization_id'),
-  phone: text('phone').unique(),
+  phone: text('phone'),  // Sin restricción UNIQUE — leads chatbot usan null como teléfono inicial (PostgreSQL permite múltiples NULLs)
   client_name: text('client_name').notNull(),
   contact_info: jsonb('contact_info'),
   intent_score: integer('intent_score').default(0),
@@ -256,10 +256,7 @@ export const appointmentsRelations = relations(appointments, ({ one }) => ({
     fields: [appointments.lead_id],
     references: [leads.id],
   }),
-  client: one(leads, {
-    fields: [appointments.lead_id],
-    references: [leads.id],
-  }),
+  // Nota: relación 'client' eliminada — era duplicado de 'lead' con los mismos fields
   category: one(categories, {
     fields: [appointments.category_id],
     references: [categories.id],

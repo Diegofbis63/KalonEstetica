@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { createLead, sql, getCategories, getServicesByCategory, findLeadByInitId } from './_services/db.js';
+import { parseRelativeDate } from './_services/utils.js';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export const config = {
@@ -275,7 +276,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const mainImageUrl = configRows?.[0]?.value || 'https://ijltsqfshvunmngvbeue.supabase.co/storage/v1/object/public/kalon-services/CATALOGO%20KALON.png';
 
             const newLead = await createLead(null, nameForRegistration!, { 
-                phone: `anon_${Date.now()}`, 
+                phone: null,          // Sin teléfono real aún — se actualiza en Etapa 6 con el WhatsApp del cliente
                 source: "chatbot_web", 
                 initId: String(identificationId || '') 
             }).catch(() => null);
@@ -416,28 +417,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 const { db, schema, createAppointment } = await import('./_services/db.js');
                 const { eq } = await import('drizzle-orm');
                 
-                await db.update(schema.leads)
-                    .set({ phone: extractedPhone, contact_info: { phone: extractedPhone, source: "chatbot", initId: String(identificationId || '') } })
-                    .where(eq(schema.leads.id, activeLeadId));
+                // N07: Manejar UNIQUE constraint — si el teléfono ya existe en otro lead, actualizar solo contact_info
+                try {
+                    await db.update(schema.leads)
+                        .set({ phone: extractedPhone, contact_info: { phone: extractedPhone, source: "chatbot", initId: String(identificationId || '') } })
+                        .where(eq(schema.leads.id, activeLeadId));
+                } catch (phoneUpdateErr: any) {
+                    const isUniqueViolation = phoneUpdateErr?.code === '23505' || phoneUpdateErr?.message?.includes('unique') || phoneUpdateErr?.message?.includes('duplicate');
+                    if (isUniqueViolation) {
+                        console.warn('[api/chat] N07: Teléfono ya existe en otro lead, actualizando solo contact_info:', extractedPhone);
+                        await db.update(schema.leads)
+                            .set({ contact_info: { phone: extractedPhone, source: "chatbot", initId: String(identificationId || '') } })
+                            .where(eq(schema.leads.id, activeLeadId));
+                    } else {
+                        throw phoneUpdateErr;
+                    }
+                }
                 
-                // 3. Inferir fecha/hora y servicios del historial reciente para crear el turno
+                // N08: Extraer fecha/hora del historial — soporta ISO y formato humano ("el viernes a las 17hs")
                 const catNamesForAppt = detected_categories.length > 0 ? detected_categories.join(', ') : 'Servicios Kâlon';
-                
-                // Extraer fecha y hora confirmada del historial reciente
                 const recentMsgs = messages.slice(-8).map((m: any) => m.content || '').join(' ');
-                const dateMatch = recentMsgs.match(/(\d{4}-\d{2}-\d{2})/);
+                
+                const isoDateMatch = recentMsgs.match(/(\d{4}-\d{2}-\d{2})/);
                 const timeMatch = recentMsgs.match(/(\d{1,2}):(\d{2})\s*hs?/i);
+                // Intentar fecha relativa si no hay ISO (ej: "viernes", "el martes", "mañana")
+                const relativeDateStr = !isoDateMatch ? parseRelativeDate(recentMsgs, new Date()) : null;
+                const resolvedDateStr = isoDateMatch?.[1] || relativeDateStr;
 
                 let appointmentDateTime: Date;
-                if (dateMatch && timeMatch) {
+                if (resolvedDateStr && timeMatch) {
                     const [_, hour, minute] = timeMatch;
-                    appointmentDateTime = new Date(`${dateMatch[1]}T${hour.padStart(2,'0')}:${minute}:00-03:00`);
+                    appointmentDateTime = new Date(`${resolvedDateStr}T${hour.padStart(2,'0')}:${minute}:00-03:00`);
+                } else if (resolvedDateStr) {
+                    // Tenemos fecha pero sin hora, usar 10:00 como fallback razonable
+                    console.warn('[api/chat] Hora no encontrada, usando 10:00 como fallback para fecha:', resolvedDateStr);
+                    appointmentDateTime = new Date(`${resolvedDateStr}T10:00:00-03:00`);
                 } else {
-                    // Fallback: mañana 17hs con warning
-                    console.warn('[api/chat] ADVERTENCIA: No se pudo inferir fecha/hora del historial. Usando fallback.');
+                    console.warn('[api/chat] ADVERTENCIA: No se pudo inferir fecha/hora del historial. Usando fallback mañana 10hs.');
                     appointmentDateTime = new Date();
                     appointmentDateTime.setDate(appointmentDateTime.getDate() + 1);
-                    appointmentDateTime.setHours(17, 0, 0, 0);
+                    appointmentDateTime.setHours(10, 0, 0, 0);
                 }
 
                 // Extraer precio real del contexto del recibo si está disponible
@@ -451,7 +470,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     catNamesForAppt,
                     realPrice,
                     60,
-                    []
+                    [],
+                    null  // staff_id: se asigna en el flujo de herramientas, aquí es automático
                 ).catch((e: any) => console.warn('[api/chat] Error en createAppointment automático:', e.message));
 
                 console.log(`[api/chat] Turno creado exitosamente para Lead ${activeLeadId} con WhatsApp ${extractedPhone}`);

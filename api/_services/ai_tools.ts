@@ -205,9 +205,9 @@ export const buildTools = (initialLeadId: string | null = null, orgId: string | 
                     const catIds = [...new Set(selected.map(s => s.category_id))];
                     const catNames = allCategories.filter(c => catIds.includes(c.id)).map(c => c.name).join(' y ');
                     
-                    if (staff_id) console.log(`[agendar_turno] Staff asignado: ${staff_id}`);
+                    console.log(`[agendar_turno] Staff asignado: ${staff_id || 'N/A (sin asignar)'}`);
 
-                    await createAppointment(currentLeadId, orgId, dateTimeIso, catNames, totalPrice, totalDuration, selected);
+                    await createAppointment(currentLeadId, orgId, dateTimeIso, catNames, totalPrice, totalDuration, selected, staff_id || null);
                     
                     return {
                         success: true,

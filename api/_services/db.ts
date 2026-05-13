@@ -7,7 +7,7 @@ import type { ConvState, Category, Service } from './schema.js';
 
 
 export interface ContactInfo {
-    phone: string;
+    phone: string | null;
     source: string;
     initId?: string | null;
 }
@@ -89,7 +89,7 @@ export async function getActiveServices(): Promise<Service[]> {
             with: { category: true },
             orderBy: [asc(schema.services.sort_order)]
         }),
-        5000, [] as any[]
+        12000, [] as any[]
     );
     
     return results.map((s: any) => ({
@@ -131,7 +131,7 @@ export async function getServicesByCategory(categoryNameOrId: string): Promise<{
             where: and(eq(schema.services.active, true), eq(schema.services.category_id, match.id)),
             orderBy: [asc(schema.services.sort_order)]
         }),
-        5000, []
+        12000, []
     );
 
     console.log(`[DB CRITICAL] SERVICES FOUND for ${match.name}: ${results.length}`);
@@ -265,8 +265,8 @@ export async function getAvailableSlotsFromDB(categoryId: string, startDate: Dat
     return results.rows || [];
 }
 
-export async function createAppointment(leadId: string, orgId: string | null, dateTime: string, catNames: string, price: number, duration: number, selectedServices: Service[]) {
-    console.log(`[db.ts] Creating appointment for lead ${leadId}`);
+export async function createAppointment(leadId: string, orgId: string | null, dateTime: string, catNames: string, price: number, duration: number, selectedServices: Service[], staffId?: string | null) {
+    console.log(`[db.ts] Creating appointment for lead ${leadId}${staffId ? ` (staff: ${staffId})` : ''}`);
     return await withTimeout(
         db.insert(schema.appointments).values({
             lead_id: leadId,
@@ -276,9 +276,10 @@ export async function createAppointment(leadId: string, orgId: string | null, da
             status: 'confirmed',
             total_price: price.toString(),
             total_duration: duration,
-            selected_services: selectedServices
+            selected_services: selectedServices,
+            ...(staffId ? { staff_id: staffId } : {})
         }),
-        4000, null
+        12000, null
     );
 }
 

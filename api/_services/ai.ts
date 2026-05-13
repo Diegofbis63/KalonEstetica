@@ -1,13 +1,18 @@
-import { createOpenAI } from '@ai-sdk/openai';
-import { getKalonSystemPrompt } from './prompts.js';
-
 /**
- * Modelo de IA para KÂLON — vía OpenRouter (Gemini 2.0).
+ * @deprecated MÓDULO LEGACY — NO USADO EN EL FLUJO ACTIVO
+ * 
+ * El endpoint activo es `api/chat.ts`, que usa OpenRouter + Gemini 2.5 Flash directamente
+ * via el cliente openai SDK. Este módulo (Claude 3.5 Sonnet via Vercel AI SDK) fue
+ * el modelo original pero quedó descontinuado. Mantener como referencia únicamente.
+ * 
+ * Si se necesita volver a Claude: importar getKalonModel() aquí y usarlo en chat.ts.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const getKalonModel = () => {
     const rawKey = process.env.OPENROUTER_API_KEY;
     if (!rawKey) throw new Error("Falta OPENROUTER_API_KEY.");
 
+    const { createOpenAI } = require('@ai-sdk/openai');
     const openrouter = createOpenAI({
         baseURL: 'https://openrouter.ai/api/v1',
         apiKey: rawKey,
@@ -17,7 +22,6 @@ export const getKalonModel = () => {
         },
     });
 
-    // Cambiamos a Claude 3.5 Sonnet que es mucho más robusto siguiendo herramientas.
     return openrouter('anthropic/claude-3.5-sonnet');
 };
 
