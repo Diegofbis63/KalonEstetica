@@ -45,12 +45,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         // --- 2. CLASIFICACIÓN DE INTENCIÓN (IA) ---
         const categories = await getCategories().catch(() => []) as Array<{ id: string | number, name: string, price_list_url?: string }>;
-        const catList = categories.map(c => `${c.id}: ${c.name}`).join(', ');
+        const services = await sql`SELECT s.title, c.id as category_id FROM services s LEFT JOIN categories c ON s.category_id = c.id WHERE s.active = true`.catch(() => []);
+        const catList = categories.map((c: any) => {
+            const sList = services.filter((s: any) => s.category_id === c.id).map((s: any) => s.title).join(', ');
+            return `${c.id}: ${c.name} (${sList || 'sin servicios'})`;
+        }).join('\n        ');
         
         const recentHistory = messages.slice(-4, -1).map(m => `${m.role === 'assistant' ? 'Asistente' : 'Usuario'}: ${m.content}`).join('\n');
 
-        const classificationPrompt = `Analiza el mensaje del usuario para KÂLON Estética.
-        Categorías disponibles: [${catList}]
+        const classificationPrompt = `Analiza el mensaje del usuario para KÂLON Estética y clasifica su intención.
+        Categorías disponibles y sus servicios comunes:
+        ${catList}
+        
         Estado actual del Lead: ${activeLeadId ? 'Identificado' : 'No Identificado'}
         
         Contexto reciente de la conversación:
@@ -221,11 +227,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         // BLINDAJE: Si no hay lead y el texto parece un nombre, registrar SIN depender del clasificador
         const looksLikeName = !activeLeadId && 
+            intent !== 'CONSULTA_SERVICIO' && intent !== 'TURNO' &&
             text.split(/\s+/).length >= 2 && 
             text.length > 3 && text.length < 60 &&
             !/\d/.test(text) && 
             !/^(hola|buen|quiero|necesito|me |tengo|cuanto|cual|que |como|donde|cuando|hay |si |no |tene|tiene|puede|puedo|quisiera|queria|podria|agenda|reserv|turno|cita|horario|disponib|cancel|modific|cambi|para |ya |estoy|dale|ok|listo|perfect|gracia|chau|bye|adios)/i.test(text) &&
             !/turno|cita|agendar|reservar|horario|disponib|cancelar|fecha|hora /i.test(text) &&
+            !/ceja|pestaña|pestana|depilac|masaje|limpieza|facial|manicuria|pedicuria|kapping|esculpida|reiki|podolog|psicolog|cavado|bozo|axila|gluteo|brazo|pierna|lifting|perfilado|laminado|dermaplaning|peeling|uñas/i.test(text) &&
             detected_categories.length === 0;
         
         // Prioridad: nombre extraído de frase > nombre detectado por IA > texto literal si parece nombre
