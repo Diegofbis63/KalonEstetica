@@ -70,7 +70,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return null;
         });
 
-        const classification = JSON.parse(classificationResponse?.choices[0]?.message?.content || '{}');
+        // Blindaje robusto: extrae JSON aunque venga envuelto en ```json ... ```
+        let classification: { intent?: string; detected_categories?: any[]; detected_name?: string; is_negation?: boolean } = {};
+        try {
+            const rawContent = classificationResponse?.choices[0]?.message?.content || '{}';
+            const jsonMatch = rawContent.match(/```json\s*([\s\S]*?)```/) || rawContent.match(/({[\s\S]*})/);
+            const jsonStr = jsonMatch ? jsonMatch[1].trim() : rawContent.trim();
+            classification = JSON.parse(jsonStr);
+        } catch (parseErr) {
+            console.warn('[api/chat] Classification parse error — using safe defaults:', parseErr);
+            classification = { intent: 'OTRO', detected_categories: [], detected_name: undefined, is_negation: false };
+        }
         const { intent, detected_categories = [], detected_name, is_negation } = classification;
 
         console.log(`[api/chat] INTENT: ${intent} | Cats: ${detected_categories} | Name: ${detected_name}`);
@@ -124,12 +134,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     continue;
                 }
 
-                // Fase 2: Match por palabras significativas
-                const significantWords = serviceTitle.split(/[\s+/()]+/).filter((w: string) => w.length > 3);
-                if (significantWords.length > 0 && significantWords.length <= 2 && significantWords.every((w: string) => textLeft.includes(w))) {
+                // Fase 2: Match por palabras significativas (umbral flexible para subsets y plurales)
+                const significantWords: string[] = Array.from(new Set(serviceTitle.split(/[\s+/()]+/).filter((w: string) => w.length > 3)));
+                const matchedWords: string[] = significantWords.filter((w: string) => textLeft.includes(w) || textLeft.includes(w.replace(/s$/, '')));
+                
+                const threshold = significantWords.length === 1 ? 1 : 2;
+                if (significantWords.length > 0 && matchedWords.length >= threshold) {
                     matchedServices.push(s);
-                    for (const w of significantWords) {
+                    for (const w of matchedWords) {
                         textLeft = textLeft.replace(w, " ");
+                        textLeft = textLeft.replace(w + 's', " ");
+                        textLeft = textLeft.replace(w.replace(/s$/, ''), " ");
                     }
                 }
             }
@@ -178,6 +193,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // C) REGISTRO (Etapa 1) - PRIORIDAD ABSOLUTA
+        // Extrae nombre de frases como "Hola soy María López" o "Me llamo Valentina"
+        const extractNameFromPhrase = (t: string): string | null => {
+            const match = t.match(/(?:soy|me\s+llamo|mi\s+nombre\s+es)\s+([A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]+(?:\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]+)*)/i);
+            if (match) return match[1].trim();
+            return null;
+        };
+        const extractedName = extractNameFromPhrase(text);
+
         // BLINDAJE: Si no hay lead y el texto parece un nombre, registrar SIN depender del clasificador
         const looksLikeName = !activeLeadId && 
             text.split(/\s+/).length >= 2 && 
@@ -187,7 +210,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             !/turno|cita|agendar|reservar|horario|disponib|cancelar|fecha|hora /i.test(text) &&
             detected_categories.length === 0;
         
-        const nameForRegistration = detected_name || (looksLikeName ? text : null);
+        // Prioridad: nombre extraído de frase > nombre detectado por IA > texto literal si parece nombre
+        const nameForRegistration = extractedName || detected_name || (looksLikeName ? text : null);
         
         if (!activeLeadId && nameForRegistration && detected_categories.length === 0) {
             console.log('[api/chat] FLOW: Registrando nuevo lead (Etapa 1)...');
@@ -245,21 +269,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             
             turnoContext += `HORARIO DE ATENCIÓN: Lunes a Viernes 9:00 a 20:00, Sábados 9:00 a 14:00.\n`;
             
-            // Generar slots falsos/creíbles para que la IA responda inmediatamente
-            const today = new Date();
-            const tomorrow = new Date(today);
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            const formatter = new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric' });
-            
-            turnoContext += `DISPONIBILIDAD ACTUAL:\n`;
-            turnoContext += `- Hoy (${formatter.format(today)}): 14:00, 16:30, 18:00, 19:15.\n`;
-            turnoContext += `- Mañana (${formatter.format(tomorrow)}): 10:00, 11:30, 15:00, 17:00, 18:30.\n`;
+            // Consultar disponibilidad REAL desde la DB
+            try {
+                const { getAvailableSlotsFromDB } = await import('./_services/db.js');
+                const startDate = new Date();
+                const endDate = new Date(startDate);
+                endDate.setDate(endDate.getDate() + 7);
+                
+                // Intentar obtener slots de la primera categoría detectada, o general
+                const firstCatId = detected_categories?.[0] ? String(detected_categories[0]) : '';
+                const slots = firstCatId 
+                    ? await getAvailableSlotsFromDB(firstCatId, startDate, endDate, 30).catch(() => [])
+                    : [];
+                
+                if (slots.length > 0) {
+                    // Agrupar por día (máx 3 días, 4 slots por día)
+                    const slotsByDay = new Map<string, string[]>();
+                    const formatter = new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
+                    const timeFormatter = new Intl.DateTimeFormat('es-AR', { hour: '2-digit', minute: '2-digit' });
+                    
+                    for (const slot of slots) {
+                        const dt = new Date(slot.slot_time);
+                        const dayKey = formatter.format(dt);
+                        if (!slotsByDay.has(dayKey)) slotsByDay.set(dayKey, []);
+                        const daySlots = slotsByDay.get(dayKey)!;
+                        if (daySlots.length < 4) daySlots.push(timeFormatter.format(dt));
+                    }
+                    
+                    const daysToShow = Array.from(slotsByDay.entries()).slice(0, 3);
+                    turnoContext += `DISPONIBILIDAD REAL (base de datos):\n`;
+                    for (const [day, times] of daysToShow) {
+                        turnoContext += `- ${day}: ${times.join(', ')}.\n`;
+                    }
+                } else {
+                    turnoContext += `DISPONIBILIDAD: Tenemos turnos disponibles esta semana. Preguntale al cliente qué día y horario le viene mejor (recordá: L-V de 9 a 20hs, Sábados de 9 a 14hs).\n`;
+                }
+            } catch (slotErr) {
+                console.warn('[api/chat] Error fetching real slots, using general message:', slotErr);
+                turnoContext += `DISPONIBILIDAD: Tenemos turnos disponibles esta semana. Preguntale al cliente qué día y horario le viene mejor.\n`;
+            }
             
             turnoContext += `INSTRUCCIONES CRÍTICAS: 
             1. NO digas "dejame verificar", "voy a buscar" ni pidas un segundo.
             2. Vos YA TENÉS la disponibilidad (está escrita arriba). Ofrecé ESOS horarios directamente.
-            3. Si el cliente pidió las 18hs y está disponible hoy, decile "¡Perfecto! Tengo turno disponible para hoy a las 18:00. ¿Te lo reservo?".
-            4. Si el cliente pide un horario que no está, ofrécele el más cercano de la lista.`;
+            3. Si el cliente pide un horario que no está en la lista, ofrecele el más cercano disponible.
+            4. Confirmá siempre: servicio, día y hora antes de dar por agendado.`;
             
             assistantContext = turnoContext;
         }
@@ -273,32 +327,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             messages: [
                 { 
                     role: 'system', 
-                    content: `Eres la asistente experta de Kâlon Estética. 
-                    Tu nombre es Asistente Kâlon.
-                    Usuario actual: ${currentLeadName}.
-                    ${assistantContext ? `CONTEXTO ACTUAL: ${assistantContext}` : 'Estado: Consulta general.'}
-                    
-                    REGLAS:
-                    ${assistantContext.includes('RECIBO ENVIADO') ? `
-                    ★ YA GENERAMOS Y ENVIAMOS UN RECIBO/PRESUPUESTO VISUAL AL CLIENTE.
-                    ★ En tu respuesta, mencioná los servicios y el TOTAL REAL que aparece arriba en el CONTEXTO ACTUAL.
-                    ★ NO inventes precios. Usá EXACTAMENTE los montos del contexto.
-                    ★ Preguntá directamente si quiere agendar un turno para esos servicios.
-                    ★ Sé breve, cálida y profesional. Usá el nombre ${currentLeadName}.
-                    ` : assistantContext.includes('ETAPA 4') ? `
-                    ★ EL CLIENTE QUIERE AGENDAR O CONSULTAR UN TURNO.
-                    ★ Preguntale qué servicio necesita (si no lo mencionó antes), para qué día y en qué horario.
-                    ★ Ofrecé opciones concretas basándote en el horario de atención del contexto.
-                    ★ Si el cliente ya mencionó servicios anteriormente, referite a esos.
-                    ★ Confirmá siempre: servicio, día y hora antes de dar por agendado.
-                    ★ Sé cálida, proactiva y eficiente. Usá el nombre ${currentLeadName}.
-                    ★ NO inventes turnos confirmados. Solo proponé opciones.
-                    ` : `
-                    1. Si ya enviamos precios como imágenes, confirmá que los puede ver arriba.
-                    2. No inventes precios ni servicios.
-                    3. Sé breve, cálida y profesional. Usá el nombre ${currentLeadName}.
-                    4. Ofrecé agendar un turno si corresponde.
-                    `}` 
+                    content: `## IDENTIDAD KÂLON
+Sos KÂLON, la asistente boutique de "Kâlon Estética Avanzada" en Córdoba, Argentina.
+Hablás con elegancia, calidez extrema y voseo cordobés refinado (usá "vos", "te", "tu", nunca "usted" ni "tú").
+Tu objetivo es hacer que cada clienta se sienta especial y guiada con profesionalismo hacia el servicio ideal.
+
+## CLIENTE ACTUAL
+Nombre: ${currentLeadName}.
+Fecha actual: ${new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}.
+
+## CONTEXTO OPERACIONAL
+${assistantContext || 'Estado: Conversación general. Respondé con calidez y ofrecé ayuda para encontrar el servicio ideal.'}
+
+## REGLAS DE ORO — OBLIGATORIAS
+- **VOSEO EXCLUSIVO:** Siempre "vos", "te", "tu". Nunca "usted" o "tú".
+- **NO TECH-LEAKS:** Jamás menciones funciones, APIs, errores técnicos ni código.
+- **DETERMINISMO:** Si ya sabés el nombre del cliente, usalo. No volvás a pedirlo jamás.
+- **ANTI-ALUCINACIÓN:** ${
+    assistantContext.includes('RECIBO ENVIADO')
+    ? '★ YA ENVIAMOS UN RECIBO VISUAL AL CLIENTE. Usá EXACTAMENTE los precios del CONTEXTO OPERACIONAL — NO inventes montos. Mencioná el total real y preguntá si quiere agendar el turno para esos servicios.'
+    : assistantContext.includes('ETAPA 4')
+    ? '★ EL CLIENTE QUIERE AGENDAR UN TURNO. Ofrecé los horarios del CONTEXTO directamente, sin decir "déjame verificar" ni "voy a buscar". Confirmá servicio, día y hora antes de dar por agendado. NO confirmes turnos definitivos sin confirmación explícita del cliente.'
+    : 'No inventes precios, servicios ni disponibilidad. Si hay imágenes enviadas, confirmá que las puede ver arriba.'
+}
+- **BREVEDAD BOUTIQUE:** Respondé de forma concisa pero cálida. Máximo 4 oraciones por respuesta salvo que el contexto exija más detalle.
+- **PROACTIVIDAD:** Siempre cerrá con una pregunta que guíe al cliente al siguiente paso (ej: "¿Querés que te agendemos un turno?").`
                 },
                 ...messages.map((m) => ({ role: m.role as any, content: m.content }))
             ],
