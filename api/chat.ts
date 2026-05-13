@@ -239,7 +239,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // Obtenemos el nombre real del lead para evitar confusiones de identidad
-        const currentLeadName = leadByInitId?.first_name || detected_name || 'cliente';
+        const currentLeadName = leadByInitId?.client_name || (leadByInitId as any)?.first_name || detected_name || 'cliente';
 
         // D) TURNO / AGENDA (Etapa 4)
         if (intent === 'TURNO' && activeLeadId) {
