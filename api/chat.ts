@@ -55,11 +55,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         
         Contexto reciente de la conversación:
         ${recentHistory}
+        IMPORTANTE: Si el usuario está agendando un turno o preguntando disponibilidad, ASEGÚRATE de inferir y rellenar "detected_categories" basándote en el 'Contexto reciente de la conversación', extrayendo los IDs de los servicios que solicitó previamente.
         
-        Responde ÚNICAMENTE un objeto JSON con:
+        Responde ÚNICAMENTE un objeto JSON con el siguiente formato exacto:
         {
           "intent": "SALUDO" | "REGISTRO" | "CONSULTA_SERVICIO" | "TURNO" | "OTRO",
-          "detected_categories": [ids_de_categorias_detectadas] (Asegúrate de inferirlas del contexto reciente si el usuario está agendando turnos para servicios que pidió antes),
+          "detected_categories": ["id1", "id2"],
           "detected_name": "nombre si es registro",
           "is_negation": true/false
         }
