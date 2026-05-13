@@ -82,19 +82,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         
         Mensaje actual del usuario: "${text}"`;
 
-        const classificationResponse = await openai.chat.completions.create({
-            model: 'google/gemini-2.5-flash',
+        // === PRE-CLASIFICACIÓN POR KEYWORDS (ahorra 2-4s en casos obvios) ===
+        const textLow = text.toLowerCase();
+        let preClassified: { intent?: string; detected_categories?: any[]; detected_name?: string; is_negation?: boolean } | null = null;
+        if (!activeLeadId && /^(hola[!.]?|buenas?[!.]?|buenos?\s+d[ií]as?[!.]?|buen[a]?\s+tarde[s]?|buen[a]?\s+noche[s]?)\s*$/i.test(text.trim())) {
+            preClassified = { intent: 'SALUDO', detected_categories: [], is_negation: false };
+        } else if (activeLeadId && /\b(turno|cita|agendar|reservar|disponib|me\s+anot|qu[eé]\s+horario|qu[eé]\s+d[ií]a)\b/i.test(text) && !/servicio|precio|cu[aá]nto|cuesta/i.test(text)) {
+            preClassified = { intent: 'TURNO', detected_categories: [], is_negation: false };
+        }
+
+        const classificationResponse = preClassified ? null : await openai.chat.completions.create({
+            model: 'google/gemini-2.0-flash',
             messages: [{ role: 'system', content: classificationPrompt }],
             response_format: { type: 'json_object' }
-        }, { timeout: 10000 }).catch((e) => {
+        }, { timeout: 6000 }).catch((e) => {
             console.warn('[api/chat] Classification timeout/error:', e.message);
             return null;
         });
 
         // Blindaje robusto: extrae JSON aunque venga envuelto en ```json ... ```
-        let classification: { intent?: string; detected_categories?: any[]; detected_name?: string; is_negation?: boolean } = {};
+        let classification: { intent?: string; detected_categories?: any[]; detected_name?: string; is_negation?: boolean } = preClassified || {};
         try {
-            const rawContent = classificationResponse?.choices[0]?.message?.content || '{}';
+            const rawContent = preClassified ? '{}' : (classificationResponse?.choices[0]?.message?.content || '{}');
             const jsonMatch = rawContent.match(/```json\s*([\s\S]*?)```/) || rawContent.match(/({[\s\S]*})/);
             const jsonStr = jsonMatch ? jsonMatch[1].trim() : rawContent.trim();
             classification = JSON.parse(jsonStr);
@@ -396,7 +405,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             5. Confirmá siempre: servicio, día y hora antes de dar por agendado.
             6. REGLA ESTRICTA: NUNCA des consejos médicos, recomendaciones de preparación (ej. no tomar sol) ni pongas restricciones a los tratamientos. Limitáte EXCLUSIVAMENTE a agendar el turno.
             7. REGLA ESTRICTA: Si el cliente pide turnos para MÚLTIPLES servicios, asumí SIEMPRE que se hacen juntos en el mismo horario. NUNCA los separes en días distintos a menos que el cliente lo pida.`;
-            
+
+            // === ETAPA 5 DETECTOR: ¿El usuario está CONFIRMANDO un horario ya ofrecido? ===
+            const lastBotMsg = messages.filter(m => m.role === 'assistant').slice(-1)[0]?.content || '';
+            const botOfferedSlots = /a las \d{1,2}[:.:]\d{2}|\d{1,2}:\d{2}\s*hs/i.test(lastBotMsg)
+                && /ma[ñn]ana|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado/i.test(lastBotMsg);
+            const userPickedSlot = /para\s+(ma[ñn]ana|hoy|el\s+\w+)|a las \d{1,2}|ese\s+horario|esa\s+hora|me\s+queda|de\s+acuerdo|dale[!.]?$|listo[!.]?$|perfecto[!.]?$|s[ií][,!.]?\s*(dale|ese|eso|me)|entonces/i.test(text);
+
+            if (botOfferedSlots && userPickedSlot) {
+                console.log('[api/chat] *** ETAPA 5 DETECTADA *** — cliente confirmó horario, forzando PRE-RESERVADO + WhatsApp + seña');
+                turnoContext = `ETAPA 5 — CLIENTE CONFIRMÓ HORARIO: "${text}"\n`;
+                turnoContext += `ACCIÓN OBLIGATORIA (sin excepciones):\n`;
+                turnoContext += `1. Decile que el horario queda PRE-RESERVADO (no confirmado, no agendado).\n`;
+                turnoContext += `2. En EL MISMO mensaje, pedile su número de WhatsApp.\n`;
+                turnoContext += `3. En EL MISMO mensaje, pedile que envíe el comprobante de transferencia del 50% de seña por este chat.\n`;
+                turnoContext += `PROHIBIDO ABSOLUTO: No digas "te esperamos", "turno confirmado", "agendado" ni nada similar.\n`;
+                turnoContext += `El turno NO existe en el sistema hasta que recibas WhatsApp + seña.\n`;
+            }
+
             assistantContext = turnoContext;
         }
 
@@ -512,13 +538,14 @@ ${assistantContext || 'Estado: Conversación general. Respondé con calidez y of
     ? '★ EL CLIENTE ENVIÓ EL COMPROBANTE Y SU WHATSAPP. El turno ya fue creado y confirmado exitosamente en el sistema. Felicitá a la clienta con muchísima calidez y entusiasmo, confirmale que recibimos su pago verificado y que su turno ya está agendado.'
     : assistantContext.includes('RECIBO ENVIADO')
     ? '★ YA ENVIAMOS UN RECIBO VISUAL AL CLIENTE. Usá EXACTAMENTE los precios del CONTEXTO OPERACIONAL — NO inventes montos. Mencioná el total real y preguntá si quiere agendar el turno para esos servicios.'
+    : assistantContext.includes('ETAPA 5')
+    ? `★★★ ETAPA 5 — ACCIÓN BLOQUEANTE. El cliente eligió su horario. Tu respuesta tiene UNA SOLA misión:
+1. Confirmá calurosamente que el horario queda PRE-RESERVADO.
+2. Pedile su número de WhatsApp en este mismo mensaje.
+3. Pedile que envíe el comprobante de transferencia del 50% de seña por el chat.
+TERMINANTEMENTE PROHIBIDO: decir "te esperamos", "turno confirmado", "agendado" o dar el turno por hecho. Sin WhatsApp + seña, el turno NO se registra en el sistema.`
     : assistantContext.includes('ETAPA 4')
-    ? `★ EL CLIENTE QUIERE AGENDAR UN TURNO. Ofrecé los horarios del CONTEXTO directamente, sin decir "déjame verificar" ni "voy a buscar". Confirmá servicio, día y hora antes de dar por agendado.
-       [REGLA OBLIGATORIA ETAPA 5]: Cuando el cliente elija y confirme el día y la hora que le convienen (ej. "el viernes a las 17hs me queda bien"), NO confirmes el turno como definitivo. 
-       Comunicale con mucha calidez que el horario queda PRE-RESERVADO y pedile en ese mismo mensaje dos requisitos indispensables para agendarlo en el sistema:
-       1. Su número de WhatsApp (para enviarle recordatorios y ubicación).
-       2. Que envíe por este chat la foto/captura del comprobante de transferencia por el 50% de seña.
-       Aclarale que el sistema validará que la imagen enviada corresponda genuinamente a un comprobante de transferencia bancaria / mercadopago y no a una imagen aleatoria.`
+    ? `★ EL CLIENTE QUIERE AGENDAR UN TURNO. Ofrecé los horarios del CONTEXTO directamente. Cuando el cliente confirme un horario, activá el protocolo PRE-RESERVADO: pedí WhatsApp + comprobante de seña del 50%.`
     : 'No inventes precios, servicios ni disponibilidad. Si hay imágenes enviadas, confirmá que las puede ver arriba.'
 }
 - **BREVEDAD BOUTIQUE:** Respondé de forma concisa pero cálida. Máximo 4 oraciones por respuesta salvo que el contexto exija más detalle.
