@@ -302,15 +302,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 const endDate = new Date(startDate);
                 endDate.setDate(endDate.getDate() + 7);
                 
-                // Intentar obtener slots de la primera categoría detectada
-                const firstCatId = detected_categories?.[0] ? String(detected_categories[0]) : '';
+                // Intentar obtener slots de la categoría detectada o inferir del historial reciente
+                let targetCatId = detected_categories?.[0] ? String(detected_categories[0]) : '';
+                if (!targetCatId) {
+                    const fullHistoryNorm = messages.slice(-6).map(m => m.content).join(' ').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    for (const c of categories) {
+                        const cNameNorm = c.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                        if (fullHistoryNorm.includes(cNameNorm) || (c.name === 'Depilación' && fullHistoryNorm.includes('depilac')) || (c.name === 'Pestañas' && (fullHistoryNorm.includes('pestañ') || fullHistoryNorm.includes('laminado') || fullHistoryNorm.includes('ceja')))) {
+                            targetCatId = String(c.id);
+                            break;
+                        }
+                    }
+                    if (!targetCatId && categories.length > 0) {
+                        targetCatId = String(categories[0].id);
+                    }
+                }
                 
-                const slots = firstCatId 
-                    ? await getAvailableSlotsFromDB(firstCatId, startDate, endDate, 30).catch(() => [])
+                const slots = targetCatId 
+                    ? await getAvailableSlotsFromDB(targetCatId, startDate, endDate, 30).catch(() => [])
                     : [];
                 
                 if (slots.length > 0) {
-                    // Agrupar por día (máx 3 días, 4 slots por día)
+                    // Agrupar por día (máx 5 días, sin límite restrictivo por día para dar visibilidad total)
                     const slotsByDay = new Map<string, string[]>();
                     const formatter = new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
                     const timeFormatter = new Intl.DateTimeFormat('es-AR', { hour: '2-digit', minute: '2-digit' });
@@ -320,16 +333,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         const dayKey = formatter.format(dt);
                         if (!slotsByDay.has(dayKey)) slotsByDay.set(dayKey, []);
                         const daySlots = slotsByDay.get(dayKey)!;
-                        if (daySlots.length < 4) daySlots.push(timeFormatter.format(dt));
+                        if (daySlots.length < 20) daySlots.push(timeFormatter.format(dt));
                     }
                     
-                    const daysToShow = Array.from(slotsByDay.entries()).slice(0, 3);
+                    const daysToShow = Array.from(slotsByDay.entries()).slice(0, 4);
                     turnoContext += `DISPONIBILIDAD REAL (base de datos):\n`;
                     for (const [day, times] of daysToShow) {
                         turnoContext += `- ${day}: ${times.join(', ')}.\n`;
                     }
                 } else {
-                    turnoContext += `DISPONIBILIDAD: Tenemos turnos disponibles esta semana. Preguntale al cliente qué día y horario le viene mejor (recordá: L-V de 9 a 20hs, Sábados de 9 a 14hs).\n`;
+                    turnoContext += `DISPONIBILIDAD: Tenemos turnos disponibles esta semana de Lunes a Viernes de 9:00 a 20:00 y Sábados de 9:00 a 14:00. Preguntale al cliente qué día y horario le viene mejor.\n`;
                 }
             } catch (slotErr) {
                 console.warn('[api/chat] Error fetching real slots, using general message:', slotErr);
@@ -340,7 +353,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             1. SÉ EXTREMADAMENTE PROACTIVO. NUNCA digas "no hay turno" o "ya no tenemos" sin OFRECER INMEDIATAMENTE al menos 3 alternativas reales de los días y horarios que ves en la DISPONIBILIDAD REAL.
             2. NO digas "dejame verificar", "voy a buscar" ni pidas un segundo.
             3. Vos YA TENÉS la disponibilidad (está escrita arriba). Ofrecé ESOS horarios directamente.
-            4. Si el cliente pide un horario que no está en la lista, decile amablemente que ese no está disponible pero OFRECELE los horarios más cercanos que tengas.
+            4. Si el cliente pide un horario que no está en la lista exacta, ofrecele proactivamente los 3 horarios libres más cercanos de ese mismo día o del día siguiente.
             5. Confirmá siempre: servicio, día y hora antes de dar por agendado.`;
             
             assistantContext = turnoContext;
