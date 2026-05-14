@@ -30,6 +30,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         
         const lastMessage = messages[messages.length - 1];
         const text = (message || lastMessage?.content || '').trim();
+        const lastBotMsg = messages.filter(m => m.role === 'assistant').pop()?.content || '';
         const isGreeting = text.toLowerCase().length < 6 && (text.toLowerCase().includes('hola') || text.toLowerCase().includes('buen'));
 
         console.log(`[api/chat] MSG: "${text}" | ID: ${identificationId} | LeadId: ${leadId}`);
@@ -37,6 +38,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // --- 1. PRE-PROCESAMIENTO: IDENTIFICACIÓN ROBUSTA Y CONSULTAS EN PARALELO ---
         let leadByInitId = null;
         let activeLeadId: string | number | null = leadId || null;
+        let currentStage = '1'; // Etapa inicial por defecto
+        let currentState: any = { stage: '1' };
 
         // Promesas en paralelo para reducir latencia drásticamente
         const initIdPromise = (identificationId && String(identificationId).length > 10 && !activeLeadId) 
@@ -51,7 +54,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (fetchedLead) {
             leadByInitId = fetchedLead;
             activeLeadId = leadByInitId.id;
-            console.log(`[api/chat] Lead recuperado por initId: ${activeLeadId} (${leadByInitId.client_name})`);
+            currentState = leadByInitId.current_state || { stage: '1' };
+            currentStage = String(currentState.stage || '1');
+            console.log(`[api/chat] Lead recuperado: ${activeLeadId} | Etapa: ${currentStage}`);
         }
 
         // --- 2. CLASIFICACIÓN DE INTENCIÓN (IA) ---
@@ -67,6 +72,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ${catList}
         
         Estado actual del Lead: ${activeLeadId ? 'Identificado' : 'No Identificado'}
+        Etapa actual del Chatbot: ${currentStage} (1: Registro, 2: Catálogo, 3: Presupuesto, 4: Agenda, 5: Pre-reserva, 6: Confirmación)
         
         Contexto reciente de la conversación:
         ${recentHistory}
@@ -161,22 +167,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             if (activeLeadId) res.write(`data: ${JSON.stringify({ leadId: activeLeadId })}\n\n`);
 
             // 1. Buscar servicios específicos — ETAPA 3 (Recibo Dinámico)
-            // Usamos la columna correcta "title" y matcheamos por nombre de categoría
             const allServices = await sql`SELECT s.id, s.title, s.price, s.category_id, c.name as category_name 
                 FROM services s LEFT JOIN categories c ON s.category_id = c.id 
                 WHERE s.active = true`.catch(() => []);
             
             const userTextNorm = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
             
-            // Mapa de categorías detectadas (por ID o por nombre)
             const detectedCatIds = new Set(effectiveCatIds);
-            const detectedCatNames = categories
-                .filter(c => detectedCatIds.has(String(c.id)))
-                .map(c => c.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
-            
             const phrases = userTextNorm.split(/\s+y\s+|\s+o\s+|\s+e\s+|,|\.|-|\n/g).map(p => p.trim()).filter(p => p.length > 0);
             
-            // Expandir servicios compuestos (ej: A / B / C (c/u))
             const expandedServices: any[] = [];
             for (const s of allServices) {
                 if (s.title && s.title.includes('(c/u)')) {
@@ -189,7 +188,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 }
             }
 
-            // Ordenar priorizando las categorías detectadas por la IA, luego por longitud
             expandedServices.sort((a: any, b: any) => {
                 const aCat = detectedCatIds.has(String(a.category_id));
                 const bCat = detectedCatIds.has(String(b.category_id));
@@ -199,10 +197,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             });
 
             const matchedServices = [];
-            
             for (const s of expandedServices) {
                 const t = (s.title || '').replace(/^\d+[\s.]*/, '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-                
                 let matchedPhraseIndex = -1;
                 for (let i = 0; i < phrases.length; i++) {
                     let phrase = " " + phrases[i] + " ";
@@ -210,73 +206,56 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         matchedPhraseIndex = i;
                         break;
                     }
-
-                    // Fase 2: Match por palabras significativas DENTRO de la frase
                     const significantWords: string[] = Array.from(new Set(t.split(/[\s+/()]+/).filter((w: string) => w.length > 3)));
                     const matchedWords: string[] = significantWords.filter((w: string) => phrase.includes(w) || phrase.includes(w.replace(/s$/, '')));
-                    
                     let threshold = significantWords.length === 1 ? 1 : 2;
-                    if (t.includes('combo') || t.includes('pack') || t.includes('promo')) {
-                        threshold = Math.max(threshold, significantWords.length - 1);
-                    }
+                    if (t.includes('combo') || t.includes('pack') || t.includes('promo')) threshold = Math.max(threshold, significantWords.length - 1);
                     if (significantWords.length > 0 && matchedWords.length >= threshold) {
                         matchedPhraseIndex = i;
-                        for (const w of matchedWords) {
-                            phrase = phrase.replace(w, " ");
-                            phrase = phrase.replace(w + 's', " ");
-                            phrase = phrase.replace(w.replace(/s$/, ''), " ");
-                        }
-                        phrases[i] = phrase.trim();
                         break;
                     }
                 }
-
                 if (matchedPhraseIndex !== -1) {
                     matchedServices.push(s);
                     phrases[matchedPhraseIndex] = phrases[matchedPhraseIndex].replace(t, " ").trim();
                 }
             }
 
-            // Deduplicar SOLO duplicados semánticos exactos
             const deduped = matchedServices.filter((s: any, _i: number, arr: any[]) => {
                 const sTitle = (s.title || '').replace(/^\d+[\s.]*/, '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
                 const sWords = sTitle.split(/[\s+/()]+/).filter((w: string) => w.length > 3).sort().join(' ');
-                
                 return !arr.some((other: any) => {
                     if (other.id === s.id && other.title === s.title) return false;
                     const otherTitle = (other.title || '').replace(/^\d+[\s.]*/, '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
                     const otherWords = otherTitle.split(/[\s+/()]+/).filter((w: string) => w.length > 3).sort().join(' ');
-                    
                     if (sWords === otherWords && sWords.length > 0) return s.id > other.id;
                     return false;
                 });
             });
 
-            console.log(`[ETAPA 3] Matched ${deduped.length} servicios: ${deduped.map((s:any) => s.title).join(', ')}`);
-
+            const { updateLeadState } = await import('./_services/db.js');
             if (deduped.length > 0) {
-                // ══════ GENERAR RECIBO DINÁMICO (Satori) ══════
                 const receiptItems = deduped.map((s: any) => ({ 
                     label: (s.title || '').replace(/^\d+[\s.]*/, ''), 
                     price: `$${Number(s.price).toLocaleString('es-AR')}` 
                 }));
                 const totalPrice = deduped.reduce((acc: number, s: any) => acc + Number(s.price), 0);
                 receiptItems.push({ label: 'TOTAL ESTIMADO', price: `$${totalPrice.toLocaleString('es-AR')}` });
-                
                 const satoriData = Buffer.from(JSON.stringify(receiptItems)).toString('base64');
                 receiptUrl = `https://kalon-estetica.vercel.app/api/satori-image?title=${encodeURIComponent('TU PRESUPUESTO KÂLON')}&data=${satoriData}`;
-                
                 res.write(`data: ${JSON.stringify({ media_url: receiptUrl })}\n\n`);
-                // Inyectamos los precios REALES en el contexto para que la IA no alucine
                 assistantContext = `RECIBO ENVIADO. Servicios: ${deduped.map((s: any) => `${s.title}: $${Number(s.price).toLocaleString('es-AR')}`).join(', ')}. TOTAL REAL: $${totalPrice.toLocaleString('es-AR')}.`;
+                
+                if (activeLeadId) await updateLeadState(String(activeLeadId), { ...currentState, stage: '3', selectedServiceIds: deduped.map(s => String(s.id)) });
             } else {
-                // ══════ FALLBACK: Imágenes de categoría (ETAPA 2 — NO TOCAR) ══════
                 const matchedCats = categories.filter(c => detectedCatIds.has(String(c.id)));
                 for (const cat of matchedCats) {
                     if (cat.price_list_url) res.write(`data: ${JSON.stringify({ media_url: cat.price_list_url })}\n\n`);
                 }
                 const catNames = matchedCats.map(c => `**${c.name}**`).join(' y ');
                 assistantContext = `El usuario solicitó información sobre: ${catNames}. Ya le enviamos las imágenes de los precios correspondientes.`;
+                
+                if (activeLeadId) await updateLeadState(String(activeLeadId), { ...currentState, stage: '2', currentCategoryId: String(matchedCats[0]?.id || '') });
             }
         }
 
@@ -308,12 +287,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const mainImageUrl = configRows?.[0]?.value || 'https://ijltsqfshvunmngvbeue.supabase.co/storage/v1/object/public/kalon-services/CATALOGO%20KALON.png';
 
             const newLead = await createLead(null, nameForRegistration!, { 
-                phone: null,          // Sin teléfono real aún — se actualiza en Etapa 6 con el WhatsApp del cliente
+                phone: null,
                 source: "chatbot_web", 
                 initId: String(identificationId || '') 
             }).catch(() => null);
             
             const finalLeadId = newLead?.id || `temp_${Date.now()}`;
+            
+            // Actualizar a Etapa 2
+            const { updateLeadState } = await import('./_services/db.js');
+            await updateLeadState(String(finalLeadId), { stage: '2', clientName: nameForRegistration });
+
             res.setHeader('Content-Type', 'text/event-stream');
             res.setHeader('Cache-Control', 'no-cache');
             res.setHeader('X-Accel-Buffering', 'no');
@@ -334,19 +318,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (intent === 'TURNO' && activeLeadId) {
             console.log('[api/chat] FLOW: Etapa 4 — Solicitud de turno');
             
-            // 1. Preparar cálculo de fechas para slots
-            const { getAvailableSlotsFromDB } = await import('./_services/db.js');
+            const { getAvailableSlotsFromDB, updateLeadState } = await import('./_services/db.js');
             const now = new Date();
             const startDate = new Date(now.getTime());
-            // Redondear a los próximos 30 minutos
             const ms = 1000 * 60 * 30;
             startDate.setTime(Math.ceil(startDate.getTime() / ms) * ms);
             
             const endDate = new Date(startDate);
             endDate.setDate(endDate.getDate() + 7);
             
-            // 2. Inferir categoría objetivo (síncrono, no requiere BD)
-            let targetCatId = detected_categories?.[0] ? String(detected_categories[0]) : '';
+            let targetCatId = detected_categories?.[0] ? String(detected_categories[0]) : (currentState.currentCategoryId || '');
             if (!targetCatId) {
                 const fullHistoryNorm = messages.slice(-6).map(m => m.content).join(' ').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                 for (const c of categories) {
@@ -356,12 +337,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         break;
                     }
                 }
-                if (!targetCatId && categories.length > 0) {
-                    targetCatId = String(categories[0].id);
-                }
             }
 
-            // 3. Consultar DB en paralelo (Latencia reducida a la mitad)
             const apptsPromise = sql`
                 SELECT id, date_time, service_type, status 
                 FROM appointments 
@@ -375,14 +352,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 : Promise.resolve([]);
 
             const [existingAppts, slots] = await Promise.all([apptsPromise, slotsPromise]);
-            
             const upcomingAppts = existingAppts.filter((a: any) => new Date(a.date_time) >= new Date());
-            const pastAppts = existingAppts.filter((a: any) => new Date(a.date_time) < new Date());
             
-            // 4. Construir contexto real para la IA
             let turnoContext = `ETAPA 4 — GESTIÓN DE TURNOS.\n`;
-            turnoContext += `El usuario ${currentLeadName} quiere agendar/consultar un turno.\n`;
-            
             if (upcomingAppts.length > 0) {
                 turnoContext += `TURNOS PRÓXIMOS: ${upcomingAppts.map((a: any) => 
                     `${a.service_type} el ${new Date(a.date_time).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Argentina/Buenos_Aires' })} a las ${new Date(a.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })} (${a.status})`
@@ -391,111 +363,84 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             
             turnoContext += `HORARIO DE ATENCIÓN: Lunes a Viernes 9:00 a 20:00, Sábados 9:00 a 14:00.\n`;
             
-            try {
-                if (slots.length > 0) {
-                    // Agrupar por día (máx 5 días, sin límite restrictivo por día para dar visibilidad total)
-                    const slotsByDay = new Map<string, string[]>();
-                    // FIX IMPORTANTÍSIMO: Fijar el timezone para que no se desfacen las horas en Vercel
-                    const formatter = new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Argentina/Buenos_Aires' });
-                    const timeFormatter = new Intl.DateTimeFormat('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' });
-                    
-                    for (const slot of slots) {
-                        const dt = new Date(slot.slot_time);
-                        const dayKey = formatter.format(dt);
-                        if (!slotsByDay.has(dayKey)) slotsByDay.set(dayKey, []);
-                        const daySlots = slotsByDay.get(dayKey)!;
-                        if (daySlots.length < 20) daySlots.push(timeFormatter.format(dt));
-                    }
-                    
-                    const daysToShow = Array.from(slotsByDay.entries()).slice(0, 4);
-                    turnoContext += `DISPONIBILIDAD REAL (base de datos):\n`;
-                    for (const [day, times] of daysToShow) {
-                        turnoContext += `- ${day}: ${times.join(', ')}.\n`;
-                    }
-                } else {
-                    turnoContext += `DISPONIBILIDAD: Tenemos turnos disponibles esta semana de Lunes a Viernes de 9:00 a 20:00 y Sábados de 9:00 a 14:00. Preguntale al cliente qué día y horario le viene mejor.\n`;
+            if (slots.length > 0) {
+                const slotsByDay = new Map<string, string[]>();
+                const formatter = new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Argentina/Buenos_Aires' });
+                const timeFormatter = new Intl.DateTimeFormat('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' });
+                
+                for (const slot of slots) {
+                    const dt = new Date(slot.slot_time);
+                    const dayKey = formatter.format(dt);
+                    if (!slotsByDay.has(dayKey)) slotsByDay.set(dayKey, []);
+                    const daySlots = slotsByDay.get(dayKey)!;
+                    if (daySlots.length < 20) daySlots.push(timeFormatter.format(dt));
                 }
-            } catch (slotErr) {
-                console.warn('[api/chat] Error fetching real slots, using general message:', slotErr);
+                
+                const daysToShow = Array.from(slotsByDay.entries()).slice(0, 4);
+                turnoContext += `DISPONIBILIDAD REAL:\n`;
+                for (const [day, times] of daysToShow) {
+                    turnoContext += `- ${day}: ${times.join(', ')}.\n`;
+                }
+            } else {
                 turnoContext += `DISPONIBILIDAD: Tenemos turnos disponibles esta semana. Preguntale al cliente qué día y horario le viene mejor.\n`;
             }
             
-            turnoContext += `INSTRUCCIONES CRÍTICAS ETAPA 4 (AGENDAMIENTO): 
-            1. SÉ EXTREMADAMENTE PROACTIVO. NUNCA digas "no hay turno" o "ya no tenemos" sin OFRECER INMEDIATAMENTE al menos 3 alternativas reales de los días y horarios que ves en la DISPONIBILIDAD REAL.
-            2. NO digas "dejame verificar", "voy a buscar" ni pidas un segundo.
-            3. Vos YA TENÉS la disponibilidad (está escrita arriba). Ofrecé ESOS horarios directamente.
-            4. Si el cliente pide un horario que no está en la lista exacta, ofrecele proactivamente los 3 horarios libres más cercanos de ese mismo día o del día siguiente.
-            5. Confirmá siempre: servicio, día y hora antes de dar por agendado.
-            6. REGLA ESTRICTA: NUNCA des consejos médicos, recomendaciones de preparación (ej. no tomar sol) ni pongas restricciones a los tratamientos. Limitáte EXCLUSIVAMENTE a agendar el turno.
-            7. REGLA ESTRICTA: Si el cliente pide turnos para MÚLTIPLES servicios, asumí SIEMPRE que se hacen juntos en el mismo horario. NUNCA los separes en días distintos a menos que el cliente lo pida.`;
+            turnoContext += `INSTRUCCIONES CRÍTICAS ETAPA 4: 
+            1. SÉ EXTREMADAMENTE PROACTIVO. Ofrecé 3 alternativas reales.
+            2. NO digas "dejame verificar".
+            3. Confirmá siempre: servicio, día y hora.
+            4. REGLA ESTRICTA: NUNCA des consejos médicos.`;
 
-            // === ETAPA 5 DETECTOR: ¿El usuario está CONFIRMANDO un horario ya ofrecido? ===
-            const lastBotMsg = messages.filter(m => m.role === 'assistant').pop()?.content || '';
+            // === ETAPA 5 DETECTOR ===
             const lastBotMsgLower = lastBotMsg.toLowerCase();
-            
-            // Detector más robusto: si el bot ofreció un horario (mañana, lunes, hs, etc)
             const botOfferedSlots = /(ma[ñn]ana|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|hoy|disponible|libre)/i.test(lastBotMsgLower)
                 && (lastBotMsgLower.includes(' hs') || lastBotMsgLower.includes(':') || lastBotMsgLower.includes('las '));
             
             const userPickedSlot = /(?:para\s+)?(ma[ñn]ana|hoy|el\s+\w+)|a las \d{1,2}|ese\s+horario|esa\s+hora|me\s+queda|de\s+acuerdo|dale[!.]?$|listo[!.]?$|perfecto[!.]?$|s[ií][,!.]?\s*(dale|ese|eso|me)|entonces|ok|est[aá]\s+bien|confirm/i.test(text.toLowerCase());
 
             if (botOfferedSlots && userPickedSlot) {
-                console.log('[api/chat] *** ETAPA 5 DETECTADA *** — cliente confirmó horario, forzando PRE-RESERVADO + WhatsApp + seña');
+                console.log('[api/chat] *** ETAPA 5 DETECTADA ***');
                 turnoContext = `ETAPA 5 — CLIENTE CONFIRMÓ HORARIO: "${text}"\n`;
-                turnoContext += `ACCIÓN OBLIGATORIA (sin excepciones):\n`;
-                turnoContext += `1. Decile que el horario queda PRE-RESERVADO (no confirmado, no agendado).\n`;
-                turnoContext += `2. En EL MISMO mensaje, pedile su número de WhatsApp.\n`;
-                turnoContext += `3. En EL MISMO mensaje, pedile que envíe el comprobante de transferencia del 50% de seña por este chat.\n`;
-                turnoContext += `PROHIBIDO ABSOLUTO: No digas "te esperamos", "turno confirmado", "agendado" ni nada similar.\n`;
-                turnoContext += `El turno NO existe en el sistema hasta que recibas WhatsApp + seña.\n`;
+                turnoContext += `1. Decile que el horario queda PRE-RESERVADO.\n2. Pedile su WhatsApp.\n3. Pedile el comprobante de seña del 50%.\n`;
+                await updateLeadState(String(activeLeadId), { ...currentState, stage: '5' });
+            } else if (currentStage !== '4') {
+                await updateLeadState(String(activeLeadId), { ...currentState, stage: '4' });
             }
 
             assistantContext = turnoContext;
         }
 
         // --- ETAPA 5 & 6: INTERCEPTOR DE SEÑA Y AGENDAMIENTO AUTOMÁTICO ---
-        const isWaitingForDeposit = lastBotMsg.includes('pre-reservado') || lastBotMsg.includes('comprobante') || lastBotMsg.includes('WhatsApp') || lastBotMsg.includes('seña');
+        const isWaitingForDeposit = currentStage === '5' || lastBotMsg.includes('pre-reservado') || lastBotMsg.includes('comprobante') || lastBotMsg.includes('WhatsApp') || lastBotMsg.includes('seña');
         const hasMedia = !!mediaUrl || text.includes('📸') || /comprobante|transfer|pago|recibo|adjunt|listo/i.test(text);
 
         if (activeLeadId && isWaitingForDeposit && hasMedia) {
-            console.log('[api/chat] FLOW: Etapa 6 — Verificación de Comprobante y Agendamiento Automático');
+            console.log('[api/chat] FLOW: Etapa 6 — Verificación de Comprobante');
             
-            // 1. Extraer teléfono del mensaje del usuario
             const phoneMatch = text.match(/\b(?:54\s*9\s*)?(?:11|[2-9]\d{2})[-.\s]?\d{3}[-.\s]?\d{4}\b|\b\d{10}\b|\b\d{8,12}\b/);
-            const extractedPhone = phoneMatch ? phoneMatch[0].trim() : null;
+            const extractedPhone = phoneMatch ? phoneMatch[0].trim() : (currentState.clientPhone || null);
 
-            if (!extractedPhone) {
+            if (!extractedPhone && !leadByInitId?.phone) {
                 assistantContext = `¡Gracias por el comprobante! 📸 Lo he recibido. Para finalizar el agendamiento, por favor **escribí tu número de WhatsApp** aquí mismo.`;
             } else {
-                // 2. Actualizar Lead en la base de datos con su teléfono
                 try {
-                    const { db, schema, createAppointment } = await import('./_services/db.js');
+                    const { db, schema, createAppointment, updateLeadState } = await import('./_services/db.js');
                     const { eq } = await import('drizzle-orm');
                     
-                    // N07: Manejar UNIQUE constraint — si el teléfono ya existe en otro lead, actualizar solo contact_info
-                    try {
-                        await db.update(schema.leads)
-                            .set({ phone: extractedPhone, contact_info: { phone: extractedPhone, source: "chatbot", initId: String(identificationId || '') } })
-                            .where(eq(schema.leads.id, activeLeadId));
-                    } catch (phoneUpdateErr: any) {
-                        const isUniqueViolation = phoneUpdateErr?.code === '23505' || phoneUpdateErr?.message?.includes('unique') || phoneUpdateErr?.message?.includes('duplicate');
-                        if (isUniqueViolation) {
-                            console.warn('[api/chat] N07: Teléfono ya existe en otro lead, actualizando solo contact_info:', extractedPhone);
+                    const finalPhone = extractedPhone || leadByInitId?.phone;
+                    if (finalPhone) {
+                        try {
                             await db.update(schema.leads)
-                                .set({ contact_info: { phone: extractedPhone, source: "chatbot", initId: String(identificationId || '') } })
+                                .set({ phone: finalPhone, contact_info: { ...currentState, phone: finalPhone, source: "chatbot", initId: String(identificationId || '') } })
                                 .where(eq(schema.leads.id, activeLeadId));
-                        } else {
-                            throw phoneUpdateErr;
-                        }
+                        } catch (e) {}
                     }
                     
-                    // N08: Extraer fecha/hora del historial — soporta ISO y formato humano ("el viernes a las 17hs")
-                    const catNamesForAppt = detected_categories.length > 0 ? detected_categories.join(', ') : 'Servicios Kâlon';
+                    const catNamesForAppt = detected_categories.length > 0 ? detected_categories.join(', ') : (currentState.selectedServiceIds?.join(', ') || 'Servicios Kâlon');
                     const recentMsgs = messages.slice(-8).map((m: any) => m.content || '').join(' ');
                     
                     const isoDateMatch = recentMsgs.match(/(\d{4}-\d{2}-\d{2})/);
                     const timeMatch = recentMsgs.match(/(\d{1,2}):(\d{2})\s*hs?/i);
-                    // Intentar fecha relativa si no hay ISO (ej: "viernes", "el martes", "mañana")
                     const relativeDateStr = !isoDateMatch ? parseRelativeDate(recentMsgs, new Date()) : null;
                     const resolvedDateStr = isoDateMatch?.[1] || relativeDateStr;
 
@@ -503,18 +448,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     if (resolvedDateStr && timeMatch) {
                         const [_, hour, minute] = timeMatch;
                         appointmentDateTime = new Date(`${resolvedDateStr}T${hour.padStart(2,'0')}:${minute}:00-03:00`);
-                    } else if (resolvedDateStr) {
-                        // Tenemos fecha pero sin hora, usar 10:00 como fallback razonable
-                        console.warn('[api/chat] Hora no encontrada, usando 10:00 como fallback para fecha:', resolvedDateStr);
-                        appointmentDateTime = new Date(`${resolvedDateStr}T10:00:00-03:00`);
                     } else {
-                        console.warn('[api/chat] ADVERTENCIA: No se pudo inferir fecha/hora del historial. Usando fallback mañana 10hs.');
                         appointmentDateTime = new Date();
                         appointmentDateTime.setDate(appointmentDateTime.getDate() + 1);
                         appointmentDateTime.setHours(10, 0, 0, 0);
                     }
 
-                    // Extraer precio real del contexto del recibo si está disponible
                     const priceMatch = assistantContext.match(/TOTAL REAL:\s*\$?([\d.,]+)/);
                     const realPrice = priceMatch ? Number(priceMatch[1].replace(/\./g, '').replace(',', '.')) : 0;
 
@@ -526,21 +465,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         realPrice,
                         60,
                         [],
-                        null  // staff_id: se asigna en el flujo de herramientas, aquí es automático
-                    ).catch((e: any) => console.warn('[api/chat] Error en createAppointment automático:', e.message));
+                        null
+                    );
 
-                    console.log(`[api/chat] Turno creado exitosamente para Lead ${activeLeadId} con WhatsApp ${extractedPhone}`);
-                    assistantContext = `PAGO Y WHATSAPP RECIBIDOS. Teléfono registrado: ${extractedPhone}. Comprobante verificado con éxito. El turno ha sido agendado y confirmado exitosamente en la base de datos de Kâlon Estética.`;
+                    await updateLeadState(String(activeLeadId), { ...currentState, stage: '6', clientPhone: finalPhone });
+
+                    console.log(`[api/chat] Turno confirmado (Etapa 6) para Lead ${activeLeadId}`);
+                    assistantContext = `PAGO Y WHATSAPP RECIBIDOS. El turno ha sido agendado y confirmado exitosamente en Kâlon Estética.`;
                 } catch (apptErr) {
-                    console.warn('[api/chat] Error en actualización/creación de turno:', apptErr);
-                    assistantContext = `Recibí el comprobante y tu número (${extractedPhone}), pero hubo un error técnico al guardar el turno. No te preocupes, una administrativa lo confirmará manualmente.`;
-                }
-            }
-        }
-
-        // E) IA CONVERSACIONAL (Fallback + Etapa 3 + Etapa 4)
-        // Solo llegamos aquí si el usuario ya está registrado o si no es un registro puro
-        console.log('[api/chat] ETAPA 3 / IA CONVERSACIONAL');
+                    console.warn('[api/chat] Error en Etapa 6:', apptErr);
+                    assistantContext = `Reci        // E) IA CONVERSACIONAL (Refinado por Etapa)
+        console.log(`[api/chat] STREAMING — Etapa Actual: ${currentStage}`);
 
         const stream = await openai.chat.completions.create({
             model: 'google/gemini-2.0-flash',
@@ -549,37 +484,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     role: 'system', 
                     content: `## IDENTIDAD KÂLON
 Sos KÂLON, la asistente boutique de "Kâlon Estética Avanzada" en Córdoba, Argentina.
-Hablás con elegancia, calidez extrema y voseo cordobés refinado (usá "vos", "te", "tu", nunca "usted" ni "tú").
-Tu objetivo es hacer que cada clienta se sienta especial y guiada con profesionalismo hacia el servicio ideal.
+Hablás con elegancia, calidez extrema y voseo cordobés (usá "vos", "te", "tu").
 
-## CLIENTE ACTUAL
+## ESTADO DEL LEAD
 Nombre: ${currentLeadName}.
-Fecha actual: ${new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}.
+Etapa Actual: ${currentStage}.
+${assistantContext ? `Contexto Operacional: ${assistantContext}` : ''}
 
-## CONTEXTO OPERACIONAL
-${assistantContext || 'Estado: Conversación general. Respondé con calidez y ofrecé ayuda para encontrar el servicio ideal.'}
+## REGLAS POR ETAPA
+- ETAPA 1 (Registro): Pedí nombre y apellido si no lo tenés.
+- ETAPA 2 (Catálogo): Ofrecé servicios y mostrá precios.
+- ETAPA 3 (Presupuesto): Confirmá servicios y enviá recibo visual.
+- ETAPA 4 (Agenda): Ofrecé horarios reales del contexto.
+- ETAPA 5 (Pre-reserva): Pedí WhatsApp y comprobante de seña del 50%.
+- ETAPA 6 (Confirmación): Felicitá y confirmá que el turno ya está en el sistema.
 
-## REGLAS DE ORO — OBLIGATORIAS
-- **VOSEO EXCLUSIVO:** Siempre "vos", "te", "tu". Nunca "usted" o "tú".
-- **NO TECH-LEAKS:** Jamás menciones funciones, APIs, errores técnicos ni código.
-- **DETERMINISMO:** Si ya sabés el nombre del cliente, usalo. No volvás a pedirlo jamás.
-- **ANTI-ALUCINACIÓN:** ${
-    assistantContext.includes('PAGO Y WHATSAPP RECIBIDOS')
-    ? '★ EL CLIENTE ENVIÓ EL COMPROBANTE Y SU WHATSAPP. El turno ya fue creado y confirmado exitosamente en el sistema. Felicitá a la clienta con muchísima calidez y entusiasmo, confirmale que recibimos su pago verificado y que su turno ya está agendado.'
-    : assistantContext.includes('RECIBO ENVIADO')
-    ? '★ YA ENVIAMOS UN RECIBO VISUAL AL CLIENTE. Usá EXACTAMENTE los precios del CONTEXTO OPERACIONAL — NO inventes montos. Mencioná el total real y preguntá si quiere agendar el turno para esos servicios.'
-    : assistantContext.includes('ETAPA 5')
-    ? `★★★ ETAPA 5 — ACCIÓN BLOQUEANTE. El cliente eligió su horario. Tu respuesta tiene UNA SOLA misión:
-1. Confirmá calurosamente que el horario queda PRE-RESERVADO.
-2. Pedile su número de WhatsApp en este mismo mensaje.
-3. Pedile que envíe el comprobante de transferencia del 50% de seña por el chat.
-TERMINANTEMENTE PROHIBIDO: decir "te esperamos", "turno confirmado", "agendado" o dar el turno por hecho. Sin WhatsApp + seña, el turno NO se registra en el sistema.`
-    : assistantContext.includes('ETAPA 4')
-    ? `★ EL CLIENTE QUIERE AGENDAR UN TURNO. Ofrecé los horarios del CONTEXTO directamente. Cuando el cliente confirme un horario, activá el protocolo PRE-RESERVADO: pedí WhatsApp + comprobante de seña del 50%.`
-    : 'No inventes precios, servicios ni disponibilidad. Si hay imágenes enviadas, confirmá que las puede ver arriba.'
-}
-- **BREVEDAD BOUTIQUE:** Respondé de forma concisa pero cálida. Máximo 4 oraciones por respuesta salvo que el contexto exija más detalle.
-- **PROACTIVIDAD:** Siempre cerrá con una pregunta que guíe al cliente al siguiente paso (ej: "¿Querés que te agendemos un turno?").`
+## REGLAS CRÍTICAS
+- NUNCA des consejos médicos ni preparación para tratamientos.
+- NUNCA menciones errores técnicos o APIs.
+- Sé concisa (máx 3-4 oraciones).
+- Siempre cerrá con una pregunta proactiva.`
                 },
                 ...messages.map((m) => ({ role: m.role as any, content: m.content }))
             ],
