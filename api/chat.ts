@@ -56,15 +56,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             ? findLeadByInitId(String(identificationId)).catch(() => null)
             : Promise.resolve(null);
         
+        // Nueva búsqueda: Si identificationId parece un UUID, intentar buscar por lead.id directamente
+        const leadByIdPromise = (identificationId && identificationId.includes('-') && !activeLeadId)
+            ? sql`SELECT * FROM leads WHERE id = ${identificationId} LIMIT 1`.then(r => r[0] || null).catch(() => null)
+            : Promise.resolve(null);
+        
         const categoriesPromise = getCategories().catch(() => []) as Promise<Array<{ id: string | number, name: string, price_list_url?: string }>>;
-        const servicesPromise = sql`SELECT s.title, c.id as category_id FROM services s LEFT JOIN categories c ON s.category_id = c.id WHERE s.active = true`.catch(() => []);
+        const servicesPromise = sql`SELECT s.id, s.title, c.id as category_id FROM services s LEFT JOIN categories c ON s.category_id = c.id WHERE s.active = true`.catch(() => []);
 
-        const [fetchedLead, categories, services] = await Promise.all([initIdPromise, categoriesPromise, servicesPromise]);
+        const [fetchedLead, leadById, categories, services] = await Promise.all([initIdPromise, leadByIdPromise, categoriesPromise, servicesPromise]);
 
-        if (fetchedLead) {
-            leadByInitId = fetchedLead;
-            activeLeadId = leadByInitId.id;
-            currentState = leadByInitId.current_state || { stage: '1' };
+        const leadToUse = fetchedLead || leadById;
+        if (leadToUse) {
+            activeLeadId = leadToUse.id;
+            currentState = leadToUse.current_state || { stage: '1' };
             currentStage = String(currentState.stage || '1');
             console.log(`[api/chat] Lead recuperado: ${activeLeadId} | Etapa: ${currentStage}`);
         }
@@ -297,14 +302,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const phoneMatch = text.match(/\d{8,12}/);
             const finalPhone = phoneMatch ? phoneMatch[0] : (currentState.clientPhone || null);
 
-            if (activeLeadId) {
+            if (activeLeadId && String(activeLeadId).length > 5) {
                 await createAppointment(String(activeLeadId), null, new Date().toISOString(), "Servicio Confirmado", 0, 60, []).catch(() => null);
                 await updateLeadState(String(activeLeadId), { ...currentState, stage: '6', clientPhone: finalPhone });
                 currentStage = '6';
                 assistantContext = `TURNO CONFIRMADO EXITOSAMENTE. Fin del flujo.`;
             }
         }
-        const currentLeadName = leadByInitId?.client_name || 'cliente';
+        const currentLeadName = (leadToUse as any)?.client_name || 'cliente';
 
         // --- 4. IA CONVERSACIONAL (Refinado por Etapa) ---
         console.log(`[api/chat] STREAMING — Etapa Final: ${currentStage}`);

@@ -40,11 +40,13 @@ export async function streamKalonChat({
       mediaUrl?: string;
       message?: string;
       identificationId?: string;
+      leadId?: string;
     } = { 
       messages: strippedMessages, 
       clientPhone, 
       mediaUrl: mediaUrl || lastMsg?.media_url,
-      identificationId
+      identificationId,
+      leadId: identificationId // For redundant compatibility
     };
     if (lastMsg) body.message = lastMsg.content;
 
