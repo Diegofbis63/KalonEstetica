@@ -233,7 +233,7 @@ export async function createLead(orgId: string | null, name: string, contactInfo
 }
 
 // --- UPDATES ---
-export async function updateLeadState(leadId: string, state: ConvState) {
+export async function updateLeadState(leadId: string, state: Partial<ConvState>) {
     console.log(`[db.ts] Updating lead ${leadId} current_state`);
     return await withTimeout(
         db.update(schema.leads)

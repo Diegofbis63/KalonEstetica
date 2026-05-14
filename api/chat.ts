@@ -11,7 +11,7 @@ import {
     getAvailableSlotsFromDB
 } from './_services/db.js';
 import { parseRelativeDate } from './_services/utils.js';
-import type { VercelRequest, VercelResponse } from '@vercel node';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export const config = {
   maxDuration: 60,
