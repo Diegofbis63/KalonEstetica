@@ -155,7 +155,10 @@ export async function getLeadByPhone(phone: string) {
     
     const results = await withTimeout(
         db.select().from(schema.leads)
-            .where(drizzleSql`regexp_replace(${schema.leads.contact_info}->>'phone', '\\D', '', 'g') LIKE ${'%' + normalized}`)
+            .where(or(
+                eq(schema.leads.phone, phone),
+                drizzleSql`regexp_replace(${schema.leads.contact_info}->>'phone', '\\D', '', 'g') LIKE ${'%' + normalized}`
+            ))
             .limit(1),
         7000, []
     );
@@ -170,7 +173,11 @@ export async function findLeadByInitId(initId: string) {
     // Usamos findFirst que es más eficiente en Neon
     const result = await withTimeout(
         db.query.leads.findFirst({
-            where: drizzleSql`(${schema.leads.contact_info}->>'initId') = ${initId}`
+            where: or(
+                drizzleSql`(${schema.leads.contact_info}->>'initId') = ${initId}`,
+                // Si el initId es un teléfono (frecuente en algunos clientes), buscar también por phone
+                eq(schema.leads.phone, initId)
+            )
         }),
         7500, // 7.5s timeout para tolerar cold start
         null
@@ -203,6 +210,7 @@ export async function createLead(orgId: string | null, name: string, contactInfo
             db.insert(schema.leads).values({
                 organization_id: orgId || null,
                 client_name: name,
+                phone: contactInfo?.phone || null,
                 contact_info: {
                     phone: contactInfo?.phone || "Pendiente",
                     source: contactInfo?.source || "chatbot",

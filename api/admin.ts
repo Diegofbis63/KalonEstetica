@@ -187,18 +187,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         // --- DASHBOARD / STATS ---
         if (sec === 'dashboard' && req.method === 'GET') {
-            const [ordersCount] = await db.select({ count: sql`count(*)` }).from(schema.appointments);
-            const [leadsCount] = await db.select({ count: sql`count(*)` }).from(schema.leads);
+            const [ordersCountObj] = await db.select({ count: sql`count(*)` }).from(schema.appointments);
+            const [leadsCountObj] = await db.select({ count: sql`count(*)` }).from(schema.leads);
             
-            const dateFilter = sql`1=1`;
-            const statsIncome = await db.select({
-                total: sql<number>`SUM(COALESCE(${schema.appointments.total_price}, 0))`,
-                count: sql<number>`COUNT(*)`
+            // Calculamos revenue desde appointments completados
+            const [revObj] = await db.select({
+                total: sql<number>`SUM(COALESCE(${schema.appointments.total_price}, 0))`
             })
             .from(schema.appointments)
-            .where(and(
-                sql`LOWER(${schema.appointments.status}) IN ('realizada', 'concluida', 'pagada', 'confirmed', 'completada', 'completado', 'finalizada', 'servido', 'completed')`,
-                dateFilter
+            .where(sql`LOWER(${schema.appointments.status}) IN ('realizada', 'concluida', 'pagada', 'confirmed', 'completada', 'completado', 'finalizada', 'servido', 'completed')`);
+
             const dashboardLeads = await db.select({
                 id: schema.leads.id,
                 client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente sin nombre')`,
@@ -230,18 +228,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .leftJoin(schema.categories, eq(schema.appointments.category_id, schema.categories.id))
             .orderBy(desc(schema.appointments.date_time))
             .limit(10);
-
-            const [ordersCount] = await db.select({ count: sql`count(*)` }).from(schema.appointments);
-            const [revSum] = await db.select({ total: sql`sum(amount)` }).from(schema.income);
-            const [leadsCount] = await db.select({ count: sql`count(*)` }).from(schema.leads);
             
             return res.status(200).json({
                 leads: dashboardLeads,
                 appointments: dashboardAppointments,
                 stats: {
-                    totalAppointments: Number(ordersCount.count),
-                    totalRevenue: Number(revSum.total || 0),
-                    totalClients: Number(leadsCount.count),
+                    totalAppointments: Number(ordersCountObj.count),
+                    totalRevenue: Number(revObj.total || 0),
+                    totalClients: Number(leadsCountObj.count),
                     activeStaff: 5
                 }
             });
@@ -282,7 +276,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     id: schema.appointments.id,
                     lead_id: schema.appointments.lead_id,
                     client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente')`,
-                    phone: sql<string>`COALESCE(${schema.leads.contact_info}->>'phone', '')`,
+                    phone: sql<string>`COALESCE(${schema.leads.phone}, ${schema.leads.contact_info}->>'phone', '')`,
                     service_type: sql<string>`COALESCE(${schema.appointments.service_type}, 'Servicio')`,
                     category_name: sql<string>`COALESCE(${schema.categories.name}, 'General')`,
                     category_id: schema.appointments.category_id,
@@ -343,7 +337,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 const results = await db.select({
                     id: schema.leads.id,
                     client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente')`,
-                    phone: sql<string>`COALESCE(${schema.leads.contact_info}->>'phone', '')`,
+                    phone: sql<string>`COALESCE(${schema.leads.phone}, ${schema.leads.contact_info}->>'phone', '')`,
                     status: sql<string>`COALESCE(${schema.leads.status}, 'new')`,
                     created_at: schema.leads.created_at,
                     last_interaction: schema.leads.last_interaction,
@@ -353,7 +347,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 })
                 .from(schema.leads)
                 .leftJoin(schema.appointments, eq(schema.leads.id, schema.appointments.lead_id))
-                .groupBy(schema.leads.id, schema.leads.client_name, schema.leads.phone, schema.leads.status, schema.leads.created_at, schema.leads.last_interaction)
+                .groupBy(schema.leads.id, schema.leads.client_name, schema.leads.phone, schema.leads.contact_info, schema.leads.status, schema.leads.created_at, schema.leads.last_interaction)
                 .orderBy(desc(schema.leads.last_interaction))
                 .limit(limit)
                 .offset(offset);
@@ -451,7 +445,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     id: schema.appointments.id,
                     lead_id: schema.appointments.lead_id,
                     client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente sin nombre')`,
-                    phone: sql<string>`${schema.leads.contact_info}->>'phone'`,
+                    phone: sql<string>`COALESCE(${schema.leads.phone}, ${schema.leads.contact_info}->>'phone', '')`,
                     service_type: schema.appointments.service_type,
                     category_name: schema.categories.name,
                     date_time: schema.appointments.date_time,

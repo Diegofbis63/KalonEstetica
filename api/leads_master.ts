@@ -29,7 +29,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 const results = await db.select({
                     id: schema.leads.id,
                     name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente')`,
-                    phone: sql<string>`COALESCE(${schema.leads.contact_info}->>'phone', '')`,
+                    phone: sql<string>`COALESCE(${schema.leads.phone}, ${schema.leads.contact_info}->>'phone', '')`,
                     status: sql<string>`COALESCE(${schema.leads.status}, 'active')`,
                     created_at: schema.leads.created_at,
                     total_appointments: sql<number>`COUNT(${schema.appointments.id})::int`,
@@ -43,7 +43,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 .groupBy(
                     schema.leads.id, 
                     schema.leads.client_name, 
-                    sql`${schema.leads.contact_info}->>'phone'`, 
+                    schema.leads.phone,
+                    schema.leads.contact_info,
                     schema.leads.status, 
                     schema.leads.created_at
                 )
@@ -132,7 +133,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 const results = await db.select({
                     id: schema.leads.id,
                     client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente')`,
-                    phone: sql<string>`COALESCE(${schema.leads.contact_info}->>'phone', '')`,
+                    phone: sql<string>`COALESCE(${schema.leads.phone}, ${schema.leads.contact_info}->>'phone', '')`,
                     status: sql<string>`COALESCE(${schema.leads.status}, 'new')`,
                     intent_score: sql<number>`COALESCE(${schema.leads.intent_score}, 0)`,
                     category_id: schema.leads.category_id,

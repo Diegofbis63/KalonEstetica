@@ -98,7 +98,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             model: 'google/gemini-2.0-flash',
             messages: [{ role: 'system', content: classificationPrompt }],
             response_format: { type: 'json_object' }
-        }, { timeout: 6000 }).catch((e) => {
+        }, { timeout: 4000 }).catch((e) => {
             console.warn('[api/chat] Classification timeout/error:', e.message);
             return null;
         });
@@ -106,10 +106,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Blindaje robusto: extrae JSON aunque venga envuelto en ```json ... ```
         let classification: { intent?: string; detected_categories?: any[]; detected_name?: string; is_negation?: boolean } = preClassified || {};
         try {
-            const rawContent = preClassified ? '{}' : (classificationResponse?.choices[0]?.message?.content || '{}');
-            const jsonMatch = rawContent.match(/```json\s*([\s\S]*?)```/) || rawContent.match(/({[\s\S]*})/);
-            const jsonStr = jsonMatch ? jsonMatch[1].trim() : rawContent.trim();
-            classification = JSON.parse(jsonStr);
+            if (!preClassified) {
+                const rawContent = classificationResponse?.choices[0]?.message?.content || '{}';
+                const jsonMatch = rawContent.match(/```json\s*([\s\S]*?)```/) || rawContent.match(/({[\s\S]*})/);
+                const jsonStr = jsonMatch ? jsonMatch[1].trim() : rawContent.trim();
+                classification = JSON.parse(jsonStr);
+            }
         } catch (parseErr) {
             console.warn('[api/chat] Classification parse error — using safe defaults:', parseErr);
             classification = { intent: 'OTRO', detected_categories: [], detected_name: undefined, is_negation: false };
@@ -293,10 +295,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             text.split(/\s+/).length >= 2 && 
             text.length > 3 && text.length < 60 &&
             !/\d/.test(text) && 
-            !/^(hola|buen|quiero|necesito|me |tengo|cuanto|cual|que |como|donde|cuando|hay |si |no |tene|tiene|puede|puedo|quisiera|queria|podria|agenda|reserv|turno|cita|horario|disponib|cancel|modific|cambi|para |ya |estoy|dale|ok|listo|perfect|gracia|chau|bye|adios)/i.test(text) &&
+            !/^(hola|buen|quiero|necesito|me |tengo|cuanto|cual|que |como|donde|cuando|hay |si |no |tene|tiene|puede|puedo|quisiera|queria|podria|agenda|reserv|turno|cita|horario|disponib|cancel|modific|cambi|para |ya |estoy|dale|ok|listo|perfect|gracia|chau|bye|adios|info|precio|servicio)/i.test(text) &&
             !/turno|cita|agendar|reservar|horario|disponib|cancelar|fecha|hora /i.test(text) &&
-            !/ceja|pestaña|pestana|depilac|masaje|limpieza|facial|manicuria|pedicuria|kapping|esculpida|reiki|podolog|psicolog|cavado|bozo|axila|gluteo|brazo|pierna|lifting|perfilado|laminado|dermaplaning|peeling|uñas/i.test(text) &&
-            detected_categories.length === 0;
+            !/ceja|pestaña|pestana|depilac|masaje|limpieza|facial|manicuria|pedicuria|kapping|esculpida|reiki|podolog|psicolog|cavado|bozo|axila|gluteo|brazo|pierna|lifting|perfilado|laminado|dermaplaning|peeling|uñas/i.test(text);
         
         // Prioridad: nombre extraído de frase > nombre detectado por IA > texto literal si parece nombre
         const nameForRegistration = extractedName || detected_name || (looksLikeName ? text : null);
@@ -429,10 +430,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             7. REGLA ESTRICTA: Si el cliente pide turnos para MÚLTIPLES servicios, asumí SIEMPRE que se hacen juntos en el mismo horario. NUNCA los separes en días distintos a menos que el cliente lo pida.`;
 
             // === ETAPA 5 DETECTOR: ¿El usuario está CONFIRMANDO un horario ya ofrecido? ===
-            const lastBotMsg = messages.filter(m => m.role === 'assistant').slice(-1)[0]?.content || '';
-            const botOfferedSlots = /a las \d{1,2}[:.:]\d{2}|\d{1,2}:\d{2}\s*hs/i.test(lastBotMsg)
-                && /ma[ñn]ana|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado/i.test(lastBotMsg);
-            const userPickedSlot = /para\s+(ma[ñn]ana|hoy|el\s+\w+)|a las \d{1,2}|ese\s+horario|esa\s+hora|me\s+queda|de\s+acuerdo|dale[!.]?$|listo[!.]?$|perfecto[!.]?$|s[ií][,!.]?\s*(dale|ese|eso|me)|entonces/i.test(text);
+            const lastBotMsg = messages.filter(m => m.role === 'assistant').pop()?.content || '';
+            const lastBotMsgLower = lastBotMsg.toLowerCase();
+            
+            // Detector más robusto: si el bot ofreció un horario (mañana, lunes, hs, etc)
+            const botOfferedSlots = /(ma[ñn]ana|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|hoy|disponible|libre)/i.test(lastBotMsgLower)
+                && (lastBotMsgLower.includes(' hs') || lastBotMsgLower.includes(':') || lastBotMsgLower.includes('las '));
+            
+            const userPickedSlot = /(?:para\s+)?(ma[ñn]ana|hoy|el\s+\w+)|a las \d{1,2}|ese\s+horario|esa\s+hora|me\s+queda|de\s+acuerdo|dale[!.]?$|listo[!.]?$|perfecto[!.]?$|s[ií][,!.]?\s*(dale|ese|eso|me)|entonces|ok|est[aá]\s+bien|confirm/i.test(text.toLowerCase());
 
             if (botOfferedSlots && userPickedSlot) {
                 console.log('[api/chat] *** ETAPA 5 DETECTADA *** — cliente confirmó horario, forzando PRE-RESERVADO + WhatsApp + seña');
@@ -449,8 +454,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // --- ETAPA 5 & 6: INTERCEPTOR DE SEÑA Y AGENDAMIENTO AUTOMÁTICO ---
-        const lastAssistantMsg = messages.filter(m => m.role === 'assistant').pop()?.content || '';
-        const isWaitingForDeposit = lastAssistantMsg.includes('pre-reservado') || lastAssistantMsg.includes('comprobante') || lastAssistantMsg.includes('WhatsApp') || lastAssistantMsg.includes('seña');
+        const isWaitingForDeposit = lastBotMsg.includes('pre-reservado') || lastBotMsg.includes('comprobante') || lastBotMsg.includes('WhatsApp') || lastBotMsg.includes('seña');
         const hasMedia = !!mediaUrl || text.includes('📸') || /comprobante|transfer|pago|recibo|adjunt|listo/i.test(text);
 
         if (activeLeadId && isWaitingForDeposit && hasMedia) {
@@ -458,76 +462,80 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             
             // 1. Extraer teléfono del mensaje del usuario
             const phoneMatch = text.match(/\b(?:54\s*9\s*)?(?:11|[2-9]\d{2})[-.\s]?\d{3}[-.\s]?\d{4}\b|\b\d{10}\b|\b\d{8,12}\b/);
-            const extractedPhone = phoneMatch ? phoneMatch[0].trim() : '3510000000';
+            const extractedPhone = phoneMatch ? phoneMatch[0].trim() : null;
 
-            // 2. Actualizar Lead en la base de datos con su teléfono
-            try {
-                const { db, schema, createAppointment } = await import('./_services/db.js');
-                const { eq } = await import('drizzle-orm');
-                
-                // N07: Manejar UNIQUE constraint — si el teléfono ya existe en otro lead, actualizar solo contact_info
+            if (!extractedPhone) {
+                assistantContext = `¡Gracias por el comprobante! 📸 Lo he recibido. Para finalizar el agendamiento, por favor **escribí tu número de WhatsApp** aquí mismo.`;
+            } else {
+                // 2. Actualizar Lead en la base de datos con su teléfono
                 try {
-                    await db.update(schema.leads)
-                        .set({ phone: extractedPhone, contact_info: { phone: extractedPhone, source: "chatbot", initId: String(identificationId || '') } })
-                        .where(eq(schema.leads.id, activeLeadId));
-                } catch (phoneUpdateErr: any) {
-                    const isUniqueViolation = phoneUpdateErr?.code === '23505' || phoneUpdateErr?.message?.includes('unique') || phoneUpdateErr?.message?.includes('duplicate');
-                    if (isUniqueViolation) {
-                        console.warn('[api/chat] N07: Teléfono ya existe en otro lead, actualizando solo contact_info:', extractedPhone);
+                    const { db, schema, createAppointment } = await import('./_services/db.js');
+                    const { eq } = await import('drizzle-orm');
+                    
+                    // N07: Manejar UNIQUE constraint — si el teléfono ya existe en otro lead, actualizar solo contact_info
+                    try {
                         await db.update(schema.leads)
-                            .set({ contact_info: { phone: extractedPhone, source: "chatbot", initId: String(identificationId || '') } })
+                            .set({ phone: extractedPhone, contact_info: { phone: extractedPhone, source: "chatbot", initId: String(identificationId || '') } })
                             .where(eq(schema.leads.id, activeLeadId));
-                    } else {
-                        throw phoneUpdateErr;
+                    } catch (phoneUpdateErr: any) {
+                        const isUniqueViolation = phoneUpdateErr?.code === '23505' || phoneUpdateErr?.message?.includes('unique') || phoneUpdateErr?.message?.includes('duplicate');
+                        if (isUniqueViolation) {
+                            console.warn('[api/chat] N07: Teléfono ya existe en otro lead, actualizando solo contact_info:', extractedPhone);
+                            await db.update(schema.leads)
+                                .set({ contact_info: { phone: extractedPhone, source: "chatbot", initId: String(identificationId || '') } })
+                                .where(eq(schema.leads.id, activeLeadId));
+                        } else {
+                            throw phoneUpdateErr;
+                        }
                     }
+                    
+                    // N08: Extraer fecha/hora del historial — soporta ISO y formato humano ("el viernes a las 17hs")
+                    const catNamesForAppt = detected_categories.length > 0 ? detected_categories.join(', ') : 'Servicios Kâlon';
+                    const recentMsgs = messages.slice(-8).map((m: any) => m.content || '').join(' ');
+                    
+                    const isoDateMatch = recentMsgs.match(/(\d{4}-\d{2}-\d{2})/);
+                    const timeMatch = recentMsgs.match(/(\d{1,2}):(\d{2})\s*hs?/i);
+                    // Intentar fecha relativa si no hay ISO (ej: "viernes", "el martes", "mañana")
+                    const relativeDateStr = !isoDateMatch ? parseRelativeDate(recentMsgs, new Date()) : null;
+                    const resolvedDateStr = isoDateMatch?.[1] || relativeDateStr;
+
+                    let appointmentDateTime: Date;
+                    if (resolvedDateStr && timeMatch) {
+                        const [_, hour, minute] = timeMatch;
+                        appointmentDateTime = new Date(`${resolvedDateStr}T${hour.padStart(2,'0')}:${minute}:00-03:00`);
+                    } else if (resolvedDateStr) {
+                        // Tenemos fecha pero sin hora, usar 10:00 como fallback razonable
+                        console.warn('[api/chat] Hora no encontrada, usando 10:00 como fallback para fecha:', resolvedDateStr);
+                        appointmentDateTime = new Date(`${resolvedDateStr}T10:00:00-03:00`);
+                    } else {
+                        console.warn('[api/chat] ADVERTENCIA: No se pudo inferir fecha/hora del historial. Usando fallback mañana 10hs.');
+                        appointmentDateTime = new Date();
+                        appointmentDateTime.setDate(appointmentDateTime.getDate() + 1);
+                        appointmentDateTime.setHours(10, 0, 0, 0);
+                    }
+
+                    // Extraer precio real del contexto del recibo si está disponible
+                    const priceMatch = assistantContext.match(/TOTAL REAL:\s*\$?([\d.,]+)/);
+                    const realPrice = priceMatch ? Number(priceMatch[1].replace(/\./g, '').replace(',', '.')) : 0;
+
+                    await createAppointment(
+                        String(activeLeadId),
+                        null,
+                        appointmentDateTime.toISOString(),
+                        catNamesForAppt,
+                        realPrice,
+                        60,
+                        [],
+                        null  // staff_id: se asigna en el flujo de herramientas, aquí es automático
+                    ).catch((e: any) => console.warn('[api/chat] Error en createAppointment automático:', e.message));
+
+                    console.log(`[api/chat] Turno creado exitosamente para Lead ${activeLeadId} con WhatsApp ${extractedPhone}`);
+                    assistantContext = `PAGO Y WHATSAPP RECIBIDOS. Teléfono registrado: ${extractedPhone}. Comprobante verificado con éxito. El turno ha sido agendado y confirmado exitosamente en la base de datos de Kâlon Estética.`;
+                } catch (apptErr) {
+                    console.warn('[api/chat] Error en actualización/creación de turno:', apptErr);
+                    assistantContext = `Recibí el comprobante y tu número (${extractedPhone}), pero hubo un error técnico al guardar el turno. No te preocupes, una administrativa lo confirmará manualmente.`;
                 }
-                
-                // N08: Extraer fecha/hora del historial — soporta ISO y formato humano ("el viernes a las 17hs")
-                const catNamesForAppt = detected_categories.length > 0 ? detected_categories.join(', ') : 'Servicios Kâlon';
-                const recentMsgs = messages.slice(-8).map((m: any) => m.content || '').join(' ');
-                
-                const isoDateMatch = recentMsgs.match(/(\d{4}-\d{2}-\d{2})/);
-                const timeMatch = recentMsgs.match(/(\d{1,2}):(\d{2})\s*hs?/i);
-                // Intentar fecha relativa si no hay ISO (ej: "viernes", "el martes", "mañana")
-                const relativeDateStr = !isoDateMatch ? parseRelativeDate(recentMsgs, new Date()) : null;
-                const resolvedDateStr = isoDateMatch?.[1] || relativeDateStr;
-
-                let appointmentDateTime: Date;
-                if (resolvedDateStr && timeMatch) {
-                    const [_, hour, minute] = timeMatch;
-                    appointmentDateTime = new Date(`${resolvedDateStr}T${hour.padStart(2,'0')}:${minute}:00-03:00`);
-                } else if (resolvedDateStr) {
-                    // Tenemos fecha pero sin hora, usar 10:00 como fallback razonable
-                    console.warn('[api/chat] Hora no encontrada, usando 10:00 como fallback para fecha:', resolvedDateStr);
-                    appointmentDateTime = new Date(`${resolvedDateStr}T10:00:00-03:00`);
-                } else {
-                    console.warn('[api/chat] ADVERTENCIA: No se pudo inferir fecha/hora del historial. Usando fallback mañana 10hs.');
-                    appointmentDateTime = new Date();
-                    appointmentDateTime.setDate(appointmentDateTime.getDate() + 1);
-                    appointmentDateTime.setHours(10, 0, 0, 0);
-                }
-
-                // Extraer precio real del contexto del recibo si está disponible
-                const priceMatch = assistantContext.match(/TOTAL REAL:\s*\$?([\d.,]+)/);
-                const realPrice = priceMatch ? Number(priceMatch[1].replace(/\./g, '').replace(',', '.')) : 0;
-
-                await createAppointment(
-                    String(activeLeadId),
-                    null,
-                    appointmentDateTime.toISOString(),
-                    catNamesForAppt,
-                    realPrice,
-                    60,
-                    [],
-                    null  // staff_id: se asigna en el flujo de herramientas, aquí es automático
-                ).catch((e: any) => console.warn('[api/chat] Error en createAppointment automático:', e.message));
-
-                console.log(`[api/chat] Turno creado exitosamente para Lead ${activeLeadId} con WhatsApp ${extractedPhone}`);
-            } catch (apptErr) {
-                console.warn('[api/chat] Error en actualización/creación de turno:', apptErr);
             }
-
-            assistantContext = `PAGO Y WHATSAPP RECIBIDOS. Teléfono registrado: ${extractedPhone}. Comprobante verificado con éxito. El turno ha sido agendado y confirmado exitosamente en la base de datos de Kâlon Estética.`;
         }
 
         // E) IA CONVERSACIONAL (Fallback + Etapa 3 + Etapa 4)
@@ -535,7 +543,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log('[api/chat] ETAPA 3 / IA CONVERSACIONAL');
 
         const stream = await openai.chat.completions.create({
-            model: 'google/gemini-2.5-flash',
+            model: 'google/gemini-2.0-flash',
             messages: [
                 { 
                     role: 'system', 

@@ -33,7 +33,6 @@ export interface ConvState {
 }
 
 export interface Category {
-
   id: string;
   name: string;
   slug: string;
@@ -57,33 +56,6 @@ export interface Service {
   active?: boolean | null;
   sort_order?: number | null;
 }
-
-
-export const admin_users = pgTable('admin_users', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  email: text('email').notNull().unique(),
-  password_hash: text('password_hash').notNull(),
-  username: text('username'),
-  role: text('role'),
-  raw_password: text('raw_password'),
-  created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
-});
-
-export const clients = pgTable('clients', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  name: text('name').notNull(),
-  phone: text('phone'),
-  email: text('email'),
-  created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
-});
-
-export const income = pgTable('income', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  amount: numeric('amount', { precision: 10, scale: 2 }).notNull(),
-  date: timestamp('date', { withTimezone: true }).defaultNow(),
-  description: text('description'),
-  created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
-});
 
 export const categories = pgTable('categories', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -258,9 +230,6 @@ export const leadsRelations = relations(leads, ({ one, many }) => ({
   chat_logs: many(chat_logs),
 }));
 
-export const clientsRelations = relations(clients, ({ many }) => ({
-  appointments: many(appointments),
-}));
 
 export const appointmentsRelations = relations(appointments, ({ one }) => ({
   lead: one(leads, {
