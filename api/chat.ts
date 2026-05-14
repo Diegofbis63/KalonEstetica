@@ -89,6 +89,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             preClassified = { intent: 'SALUDO', detected_categories: [], is_negation: false };
         } else if (activeLeadId && /\b(turno|cita|agendar|reservar|disponib|me\s+anot|qu[eé]\s+horario|qu[eé]\s+d[ií]a)\b/i.test(text) && !/servicio|precio|cu[aá]nto|cuesta/i.test(text)) {
             preClassified = { intent: 'TURNO', detected_categories: [], is_negation: false };
+        } else if (activeLeadId && /depilac|facial|corporal|masaj|psicolog|pesta[ñn]|podolog|lifting|l[aá]ser|laser|cera|manicur|pedicur|hidrat|micropig|tratamiento|precio|cu[aá]nto|cuanto|cuesta|servic|qu[eé]\s+tienen|qu[eé]\s+ofrecen/i.test(text)) {
+            // CONSULTA_SERVICIO: menciona un servicio/tratamiento específico — sin pasar por IA
+            preClassified = { intent: 'CONSULTA_SERVICIO', detected_categories: [], is_negation: false };
         }
 
         const classificationResponse = preClassified ? null : await openai.chat.completions.create({
