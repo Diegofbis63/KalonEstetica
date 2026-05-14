@@ -189,9 +189,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 }
             }
         }
-
         // ETAPA 2 & 3: CATÁLOGO Y PRESUPUESTO
-        if ((currentStage === '2' || currentStage === '3') && intent === 'CONSULTA_SERVICIO' && effectiveCatIds.length > 0) {
+        else if ((currentStage === '2' || currentStage === '3') && intent === 'CONSULTA_SERVICIO' && effectiveCatIds.length > 0) {
             console.log('[api/chat] TRANSITION: Stage 3 (Presupuesto)');
             
             const allServices = await sql`SELECT s.id, s.title, s.price, s.category_id, c.name as category_name 
@@ -200,7 +199,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             
             const userTextNorm = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
             const detectedCatIds = new Set(effectiveCatIds);
-            const phrases = userTextNorm.split(/\s+y\s+|\s+o\s+|\s+e\s+|,|\.|-|\n/g).map(p => p.trim()).filter(p => p.length > 0);
             
             const expandedServices: any[] = [];
             for (const s of allServices) {
@@ -241,7 +239,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     currentStage = '3';
                 }
             } else {
-                // Si solo consultó categoría sin servicio específico
                 const matchedCats = categories.filter(c => detectedCatIds.has(String(c.id)));
                 for (const cat of matchedCats) {
                     if (cat.price_list_url) {
@@ -254,14 +251,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 currentStage = '2';
             }
         }
-
         // ETAPA 4: AGENDA (Solo si viene de 3 o ya está en 4)
-        if ((currentStage === '3' || currentStage === '4') && (intent === 'TURNO' || /turno|cita|agendar/i.test(text))) {
+        else if ((currentStage === '3' || currentStage === '4') && (intent === 'TURNO' || /turno|cita|agendar/i.test(text))) {
             console.log('[api/chat] TRANSITION: Stage 4 (Agenda)');
             
             const now = new Date();
             const startDate = new Date(now.getTime());
-            startDate.setHours(startDate.getHours() + 2); // 2h de margen
+            startDate.setHours(startDate.getHours() + 2); 
             const endDate = new Date(startDate);
             endDate.setDate(endDate.getDate() + 7);
             
@@ -279,21 +275,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 currentStage = '4';
             }
         }
-
         // ETAPA 5: PRE-RESERVA (Solo si viene de 4 o ya está en 5)
-        const isSlotConfirmation = /dale|perfecto|ok|esa hora|ese horario|me queda bien|confirm/i.test(text.toLowerCase()) && currentStage === '4';
-        if (currentStage === '5' || isSlotConfirmation) {
-            if (isSlotConfirmation) {
-                console.log('[api/chat] TRANSITION: Stage 5 (Pre-reserva)');
-                if (activeLeadId) await updateLeadState(String(activeLeadId), { ...currentState, stage: '5' });
-                currentStage = '5';
+        else if (currentStage === '5' || (/dale|perfecto|ok|esa hora|ese horario|me queda bien|confirm/i.test(text.toLowerCase()) && currentStage === '4')) {
+            console.log('[api/chat] TRANSITION: Stage 5 (Pre-reserva)');
+            if (activeLeadId && currentStage === '4') {
+                await updateLeadState(String(activeLeadId), { ...currentState, stage: '5' });
             }
+            currentStage = '5';
             assistantContext = `ESPERANDO SEÑA (50%) Y WHATSAPP. Recordar al cliente que el turno es pre-reservado hasta recibir el comprobante.`;
         }
-
         // ETAPA 6: CONFIRMACIÓN
-        const hasMediaFile = !!mediaUrl || /comprobante|transferencia|pago|adjunto/i.test(text.toLowerCase());
-        if (currentStage === '5' && hasMediaFile) {
+        else if (currentStage === '5' && (!!mediaUrl || /comprobante|transferencia|pago|adjunto/i.test(text.toLowerCase()))) {
             console.log('[api/chat] TRANSITION: Stage 6 (Confirmación)');
             const phoneMatch = text.match(/\d{8,12}/);
             const finalPhone = phoneMatch ? phoneMatch[0] : (currentState.clientPhone || null);

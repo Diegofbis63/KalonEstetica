@@ -121,6 +121,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (sec === 'auth' && req.method === 'POST') {
             const { username, password } = req.body;
             
+            // AUTO-SEED: Si no hay usuarios, crear uno por defecto (admin/admin)
+            const usersCount = await db.select({ count: count() }).from(schema.admin_users);
+            if (usersCount[0].count === 0) {
+                console.log('[admin Auth] Auto-seeding first admin user');
+                await db.insert(schema.admin_users).values({
+                    username: 'admin',
+                    password_hash: 'admin', // Fallback raw para el primer login
+                    role: 'admin',
+                    email: 'admin@kalon.com'
+                });
+            }
+
             // Buscar usuario
             const user = await db.query.admin_users.findFirst({
                 where: eq(schema.admin_users.username, username)
@@ -153,8 +165,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             // Set Cookie
             res.setHeader('Set-Cookie', cookie.serialize('nova_token', token, {
                 httpOnly: true,
-                secure: process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production',
-                sameSite: 'strict',
+                secure: process.env.NODE_ENV === 'production' || !!process.env.VERCEL_ENV,
+                sameSite: 'lax',
                 maxAge: 60 * 60 * 24, // 24 hours
                 path: '/',
             }));
