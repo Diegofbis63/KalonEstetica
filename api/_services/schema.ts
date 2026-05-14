@@ -1,6 +1,16 @@
 import { relations } from 'drizzle-orm';
 import { pgTable, uuid, text, numeric, integer, boolean, timestamp, jsonb, index } from 'drizzle-orm/pg-core';
 
+export const admin_users = pgTable('admin_users', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  username: text('username').notNull().unique(),
+  password_hash: text('password_hash'),
+  raw_password: text('raw_password'),
+  role: text('role').default('admin'),
+  email: text('email'),
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
+});
+
 export interface ConvState {
   clientName: string | null;
   clientPhone: string | null;
