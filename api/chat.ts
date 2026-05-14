@@ -181,9 +181,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 if (activeLeadId) {
                     await updateLeadState(String(activeLeadId), { stage: '2', clientName: nameForRegistration });
                     currentStage = '2';
-                    assistantContext = `LEAD REGISTRADO: ${nameForRegistration}. Enviando catálogo principal.`;
+                    assistantContext = `SISTEMA: El lead se ha registrado como ${nameForRegistration} y ya se le envió la imagen del catálogo principal. SALUDALO y preguntale qué servicio de los que ve en la imagen le interesa.`;
                     
-                    res.setHeader('Content-Type', 'text/event-stream');
+                    if (!res.headersSent) {
+                        res.setHeader('Content-Type', 'text/event-stream');
+                        res.setHeader('Cache-Control', 'no-cache');
+                        res.setHeader('X-Accel-Buffering', 'no');
+                    }
                     res.write(`data: ${JSON.stringify({ leadId: activeLeadId })}\n\n`);
                     res.write(`data: ${JSON.stringify({ media_url: mainImageUrl })}\n\n`);
                 }
@@ -215,7 +219,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const matchedServices = [];
             for (const s of expandedServices) {
                 const t = (s.title || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-                if (userTextNorm.includes(t)) {
+                // Match si el texto del usuario contiene el título O si el título contiene alguna palabra clave importante del usuario
+                if (userTextNorm.includes(t) || (t.length > 3 && userTextNorm.includes(t.substring(0, Math.min(t.length, 10))))) {
                     matchedServices.push(s);
                 }
             }
@@ -242,11 +247,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 const matchedCats = categories.filter(c => detectedCatIds.has(String(c.id)));
                 for (const cat of matchedCats) {
                     if (cat.price_list_url) {
-                        res.setHeader('Content-Type', 'text/event-stream');
+                        if (!res.headersSent) {
+                            res.setHeader('Content-Type', 'text/event-stream');
+                        }
                         res.write(`data: ${JSON.stringify({ media_url: cat.price_list_url })}\n\n`);
                     }
                 }
-                assistantContext = `CATÁLOGOS ENVIADOS: ${matchedCats.map(c => c.name).join(', ')}.`;
+                assistantContext = `SISTEMA: No se detectó un servicio específico, pero sí las categorías: ${matchedCats.map(c => c.name).join(', ')}. Ya se enviaron las imágenes de catálogo. Invitá al cliente a revisarlas y preguntale qué tratamiento específico de esas áreas le gustaría realizarse.`;
                 if (activeLeadId) await updateLeadState(String(activeLeadId), { ...currentState, stage: '2', currentCategoryId: String(matchedCats[0]?.id || '') });
                 currentStage = '2';
             }
@@ -316,12 +323,12 @@ Etapa Actual: ${currentStage}.
 ${assistantContext ? `Contexto Operacional: ${assistantContext}` : ''}
 
 ## REGLAS CRÍTICAS POR ETAPA
-- ETAPA 1: Solo pedí nombre y apellido. Nada más.
-- ETAPA 2: Solo mostrá el catálogo y preguntá qué servicio le interesa.
-- ETAPA 3: Solo hablá del presupuesto enviado y preguntá si quiere agendar.
-- ETAPA 4: Solo ofrecé 3 horarios reales y pedí confirmación.
-- ETAPA 5: Solo pedí WhatsApp y comprobante de seña.
-- ETAPA 6: Solo confirmá el turno y despedite con calidez.
+- ETAPA 1: Solo pedí nombre y apellido para comenzar.
+- ETAPA 2: El sistema YA ENVIÓ el catálogo (imagen). Invitá al cliente a verlo y preguntale qué servicio específico le interesa. NO vuelvas a pedir el nombre.
+- ETAPA 3: El sistema YA ENVIÓ el presupuesto (imagen). Preguntale si los valores le parecen bien y si quiere que busquemos un turno.
+- ETAPA 4: Ofrecé 3 horarios reales según el contexto y pedí que elija uno.
+- ETAPA 5: Pedí el WhatsApp para el recordatorio y recordá que debe enviar el comprobante de seña para congelar el turno.
+- ETAPA 6: Confirmá que el turno quedó agendado y despedite con elegancia.
 
 ## REGLAS GENERALES
 - NUNCA des consejos médicos.
