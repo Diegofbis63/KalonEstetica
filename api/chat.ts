@@ -116,7 +116,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         const classificationResponse = preClassified ? null : await openai.chat.completions.create({
-            model: 'google/gemini-2.0-flash',
+            model: 'google/gemini-2.0-flash-001',
             messages: [{ role: 'system', content: classificationPrompt }],
             response_format: { type: 'json_object' }
         }, { timeout: 4000 }).catch((e) => {
@@ -315,7 +315,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log(`[api/chat] STREAMING — Etapa Final: ${currentStage}`);
 
         const stream = await openai.chat.completions.create({
-            model: 'google/gemini-2.0-flash',
+            model: 'google/gemini-2.0-flash-001',
             messages: [
                 { 
                     role: 'system', 
