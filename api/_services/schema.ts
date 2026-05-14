@@ -55,7 +55,7 @@ export const admin_users = pgTable('admin_users', {
   password_hash: text('password_hash').notNull(),
   username: text('username'),
   role: text('role'),
-  // SEGURIDAD: raw_password eliminado — nunca almacenar contraseñas en texto plano
+  raw_password: text('raw_password'),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
 
@@ -108,8 +108,8 @@ export const services = pgTable('services', {
 export const leads = pgTable('leads', {
   id: uuid('id').primaryKey().defaultRandom(),
   organization_id: text('organization_id'),
-  phone: text('phone'),  // Sin restricción UNIQUE — leads chatbot usan null como teléfono inicial (PostgreSQL permite múltiples NULLs)
   client_name: text('client_name').notNull(),
+  phone: text('phone'),
   contact_info: jsonb('contact_info'),
   intent_score: integer('intent_score').default(0),
   status: text('status').default('new'),
@@ -122,7 +122,6 @@ export const leads = pgTable('leads', {
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({
   leads_created_idx: index('leads_created_at_idx').on(table.created_at),
-  leads_phone_idx: index('leads_phone_idx').on(table.phone),
   leads_last_int_idx: index('leads_last_interaction_idx').on(table.last_interaction),
 }));
 
@@ -147,17 +146,19 @@ export const staff_specialties = pgTable('staff_specialties', {
 
 export const appointments = pgTable('appointments', {
   id: uuid('id').primaryKey().defaultRandom(),
-  lead_id: uuid('lead_id').references(() => leads.id, { onDelete: 'set null' }),
+  lead_id: uuid('lead_id').references(() => leads.id, { onDelete: 'cascade' }),
   organization_id: text('organization_id'),
   staff_id: uuid('staff_id').references(() => staff.id, { onDelete: 'set null' }),
   date_time: timestamp('date_time', { withTimezone: true }).notNull(),
-  service_type: text('service_type').notNull(),
-  status: text('status').default('confirmed'),
+  service_type: text('service_type'),
+  status: text('status').default('pending'),
   total_price: numeric('total_price', { precision: 10, scale: 2 }),
   total_duration: integer('total_duration'),
   selected_services: jsonb('selected_services'),
   category_id: uuid('category_id').references(() => categories.id, { onDelete: 'set null' }),
   payment_method: text('payment_method'),
+  receipt_url: text('receipt_url'),
+  notes: text('notes'),
   updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({
@@ -256,7 +257,6 @@ export const appointmentsRelations = relations(appointments, ({ one }) => ({
     fields: [appointments.lead_id],
     references: [leads.id],
   }),
-  // Nota: relación 'client' eliminada — era duplicado de 'lead' con los mismos fields
   category: one(categories, {
     fields: [appointments.category_id],
     references: [categories.id],

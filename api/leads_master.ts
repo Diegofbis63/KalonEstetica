@@ -29,7 +29,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 const results = await db.select({
                     id: schema.leads.id,
                     name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente')`,
-                    phone: sql<string>`COALESCE(${schema.leads.phone}, '')`,
+                    phone: sql<string>`COALESCE(${schema.leads.contact_info}->>'phone', '')`,
                     status: sql<string>`COALESCE(${schema.leads.status}, 'active')`,
                     created_at: schema.leads.created_at,
                     total_appointments: sql<number>`COUNT(${schema.appointments.id})::int`,
@@ -43,7 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 .groupBy(
                     schema.leads.id, 
                     schema.leads.client_name, 
-                    schema.leads.phone, 
+                    sql`${schema.leads.contact_info}->>'phone'`, 
                     schema.leads.status, 
                     schema.leads.created_at
                 )
@@ -132,7 +132,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 const results = await db.select({
                     id: schema.leads.id,
                     client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente')`,
-                    phone: sql<string>`COALESCE(${schema.leads.phone}, '')`,
+                    phone: sql<string>`COALESCE(${schema.leads.contact_info}->>'phone', '')`,
                     status: sql<string>`COALESCE(${schema.leads.status}, 'new')`,
                     intent_score: sql<number>`COALESCE(${schema.leads.intent_score}, 0)`,
                     category_id: schema.leads.category_id,
@@ -171,9 +171,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
             if (req.method === 'POST') {
                 const { phone, name, status } = req.body;
-                const [lead] = await db.insert(schema.leads).values({ phone, name, status: status || 'new' }).onConflictDoUpdate({
-                    target: schema.leads.phone,
-                    set: { last_interaction: new Date() }
+                const [lead] = await db.insert(schema.leads).values({ 
+                    client_name: name, 
+                    status: status || 'new',
+                    contact_info: { phone, source: 'admin' }
                 }).returning();
                 return res.status(201).json({ lead });
             }

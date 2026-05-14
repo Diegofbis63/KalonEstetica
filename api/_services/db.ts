@@ -203,7 +203,6 @@ export async function createLead(orgId: string | null, name: string, contactInfo
             db.insert(schema.leads).values({
                 organization_id: orgId || null,
                 client_name: name,
-                phone: contactInfo?.phone || null,
                 contact_info: {
                     phone: contactInfo?.phone || "Pendiente",
                     source: contactInfo?.source || "chatbot",

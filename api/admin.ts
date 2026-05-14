@@ -199,72 +199,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .where(and(
                 sql`LOWER(${schema.appointments.status}) IN ('realizada', 'concluida', 'pagada', 'confirmed', 'completada', 'completado', 'finalizada', 'servido', 'completed')`,
                 dateFilter
-            ));
-
-            const incomeData = statsIncome[0] || { total: 0, count: 0 };
-
-            // Fetch leads for dashboard table
             const dashboardLeads = await db.select({
                 id: schema.leads.id,
                 client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente sin nombre')`,
-                phone: sql<string>`COALESCE(${schema.leads.phone}, '')`,
+                phone: sql<string>`COALESCE(${schema.leads.phone}, ${schema.leads.contact_info}->>'phone', '')`,
                 status: sql<string>`COALESCE(${schema.leads.status}, 'new')`,
                 is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, true)`,
                 created_at: schema.leads.created_at,
-                intent_score: sql<number>`COALESCE(${schema.leads.intent_score}, 0)`,
-                category_id: schema.leads.category_id,
-                category_name: sql<string>`COALESCE(${schema.categories.name}, 'General')`,
-                updated_at: schema.leads.updated_at,
-                canManage: sql<boolean>`true`
+                last_interaction: schema.leads.last_interaction,
+                category_name: sql<string>`COALESCE(${schema.categories.name}, 'Sin categoría')`
             })
             .from(schema.leads)
             .leftJoin(schema.categories, eq(schema.leads.category_id, schema.categories.id))
             .orderBy(desc(schema.leads.last_interaction))
             .limit(15);
 
-            const conds = [];
-            conds.push(sql`LOWER(${schema.appointments.status}) NOT IN ('cancelled', 'canceled', 'anulado', 'anulada')`);
-            if (reqDateGeneral && reqDateGeneral !== 'all') {
-                conds.push(sql`DATE(${schema.appointments.date_time}) = ${reqDateGeneral}`);
-            }
-
             const dashboardAppointments = await db.select({
                 id: schema.appointments.id,
                 lead_id: schema.appointments.lead_id,
                 client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente')`,
-                phone: sql<string>`COALESCE(${schema.leads.phone}, '')`,
+                phone: sql<string>`COALESCE(${schema.leads.phone}, ${schema.leads.contact_info}->>'phone', '')`,
                 service_type: sql<string>`COALESCE(${schema.appointments.service_type}, 'Servicio')`,
                 category_name: sql<string>`COALESCE(${schema.categories.name}, 'General')`,
-                category_id: schema.appointments.category_id,
                 date_time: schema.appointments.date_time,
-                status: sql<string>`COALESCE(${schema.appointments.status}, 'confirmed')`,
-                created_at: schema.appointments.created_at,
-                total_price: sql<number>`COALESCE(${schema.appointments.total_price}, 0)::float`,
+                status: schema.appointments.status,
+                total_price: schema.appointments.total_price
             })
             .from(schema.appointments)
             .leftJoin(schema.leads, eq(schema.appointments.lead_id, schema.leads.id))
             .leftJoin(schema.categories, eq(schema.appointments.category_id, schema.categories.id))
-            .where(and(...conds))
             .orderBy(desc(schema.appointments.date_time))
-            .limit(50);
+            .limit(10);
 
-            const formattedAppts = dashboardAppointments.map((a) => ({
-                ...a,
-                date_time: a.date_time ? new Date(a.date_time).toISOString() : new Date().toISOString(),
-                created_at: a.created_at ? new Date(a.created_at).toISOString() : new Date().toISOString(),
-            }));
-
+            const [ordersCount] = await db.select({ count: sql`count(*)` }).from(schema.appointments);
+            const [revSum] = await db.select({ total: sql`sum(amount)` }).from(schema.income);
+            const [leadsCount] = await db.select({ count: sql`count(*)` }).from(schema.leads);
+            
             return res.status(200).json({
-                leads: dashboardLeads.map(l => ({
-                    ...l,
-                    created_at: l.created_at ? new Date(l.created_at).toISOString() : undefined,
-                    updated_at: l.updated_at ? new Date(l.updated_at).toISOString() : null,
-                })),
-                appointments: formattedAppts,
+                leads: dashboardLeads,
+                appointments: dashboardAppointments,
                 stats: {
-                    totalAppointments: Number(ordersCount?.count || 0),
-                    totalRevenue: Number(incomeData.total || 0),
-                    totalClients: Number(leadsCount?.count || 0),
+                    totalAppointments: Number(ordersCount.count),
+                    totalRevenue: Number(revSum.total || 0),
+                    totalClients: Number(leadsCount.count),
                     activeStaff: 5
                 }
             });
@@ -305,7 +282,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     id: schema.appointments.id,
                     lead_id: schema.appointments.lead_id,
                     client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente')`,
-                    phone: sql<string>`COALESCE(${schema.leads.phone}, '')`,
+                    phone: sql<string>`COALESCE(${schema.leads.contact_info}->>'phone', '')`,
                     service_type: sql<string>`COALESCE(${schema.appointments.service_type}, 'Servicio')`,
                     category_name: sql<string>`COALESCE(${schema.categories.name}, 'General')`,
                     category_id: schema.appointments.category_id,
@@ -366,7 +343,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 const results = await db.select({
                     id: schema.leads.id,
                     client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente')`,
-                    phone: sql<string>`COALESCE(${schema.leads.phone}, '')`,
+                    phone: sql<string>`COALESCE(${schema.leads.contact_info}->>'phone', '')`,
                     status: sql<string>`COALESCE(${schema.leads.status}, 'new')`,
                     created_at: schema.leads.created_at,
                     last_interaction: schema.leads.last_interaction,
@@ -474,7 +451,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     id: schema.appointments.id,
                     lead_id: schema.appointments.lead_id,
                     client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente sin nombre')`,
-                    phone: schema.leads.phone,
+                    phone: sql<string>`${schema.leads.contact_info}->>'phone'`,
                     service_type: schema.appointments.service_type,
                     category_name: schema.categories.name,
                     date_time: schema.appointments.date_time,
