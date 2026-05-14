@@ -113,7 +113,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         const { intent, detected_categories = [], detected_name, is_negation } = classification;
 
-        console.log(`[api/chat] INTENT: ${intent} | Cats: ${detected_categories} | Name: ${detected_name}`);
+        // === FALLBACK DE CATEGORÍA POR KEYWORD ===
+        // Si el clasificador devuelvió IDs vacíos (frecuente con textos cortos como "depilacion"),
+        // buscar la categoría directamente en el nombre de la categoría vs el texto del usuario.
+        const effectiveCatIds: string[] = detected_categories.map(String);
+        if ((intent === 'CONSULTA_SERVICIO' || intent === 'TURNO') && effectiveCatIds.length === 0) {
+            const userNorm = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            for (const cat of categories) {
+                const catNorm = cat.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                // Coincidencia si el texto incluye el nombre de categoría o alguna palabra clave de ella
+                const catWords = catNorm.split(/\s+/).filter((w: string) => w.length > 3);
+                if (userNorm.includes(catNorm) || catWords.some((w: string) => userNorm.includes(w))) {
+                    effectiveCatIds.push(String(cat.id));
+                }
+            }
+            if (effectiveCatIds.length > 0) {
+                console.log(`[api/chat] ETAPA 2/3 keyword fallback detectó categorías: ${effectiveCatIds.join(', ')}`);
+            }
+        }
+
+        console.log(`[api/chat] INTENT: ${intent} | Cats: ${effectiveCatIds.join(',') || '(ninguna)'} | Name: ${detected_name}`);
 
         // --- 3. EJECUCIÓN DE ETAPAS ---
 
@@ -129,7 +148,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         let assistantContext = "";
         let receiptUrl = "";
         
-        if (intent === 'CONSULTA_SERVICIO' && !is_negation && detected_categories.length > 0) {
+        if (intent === 'CONSULTA_SERVICIO' && !is_negation && effectiveCatIds.length > 0) {
             res.setHeader('Content-Type', 'text/event-stream');
             res.setHeader('Cache-Control', 'no-cache');
             res.setHeader('X-Accel-Buffering', 'no');
@@ -145,7 +164,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const userTextNorm = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
             
             // Mapa de categorías detectadas (por ID o por nombre)
-            const detectedCatIds = new Set(detected_categories.map(String));
+            const detectedCatIds = new Set(effectiveCatIds);
             const detectedCatNames = categories
                 .filter(c => detectedCatIds.has(String(c.id)))
                 .map(c => c.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
