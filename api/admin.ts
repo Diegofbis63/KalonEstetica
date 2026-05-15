@@ -121,13 +121,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (sec === 'auth' && req.method === 'POST') {
             const { username, password } = req.body;
             
-            // AUTO-SEED: Si no hay usuarios, crear uno por defecto (admin/admin)
+            // AUTO-SEED: Solo si el ambiente no es producción y no hay usuarios
             const usersCount = await db.select({ count: count() }).from(schema.admin_users);
             if (usersCount[0].count === 0) {
                 console.log('[admin Auth] Auto-seeding first admin user');
+                const hashedPass = await bcrypt.hash(process.env.ADMIN_PASSWORD || 'Kalon2024!', 10);
                 await db.insert(schema.admin_users).values({
                     username: 'admin',
-                    password_hash: 'admin', // Fallback raw para el primer login
+                    password_hash: hashedPass,
                     role: 'admin',
                     email: 'admin@kalon.com'
                 });
@@ -344,7 +345,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // --- CLIENTES COMPLETO (LEADS + STATS) ---
-        if (sec === 'leads' || sec === 'clients') {
+        if (sec === 'leads' || sec === 'clients' || sec === 'tracking') {
             if (req.method === 'GET') {
                 const results = await db.select({
                     id: schema.leads.id,
@@ -353,6 +354,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     status: sql<string>`COALESCE(${schema.leads.status}, 'new')`,
                     created_at: schema.leads.created_at,
                     last_interaction: schema.leads.last_interaction,
+                    is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, true)`,
                     total_appointments: sql<number>`COUNT(${schema.appointments.id})::int`,
                     pending_appointments: sql<number>`COUNT(CASE WHEN LOWER(${schema.appointments.status}) NOT IN ('realizada', 'completed', 'finalizada', 'canceled', 'cancelled', 'anulado', 'anulada', 'cancelado', 'cancelada') THEN 1 END)::int`,
                     total_spent: sql<number>`SUM(COALESCE(${schema.appointments.total_price}, 0))::float`
@@ -360,22 +362,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 .from(schema.leads)
                 .leftJoin(schema.appointments, eq(schema.leads.id, schema.appointments.lead_id))
                 .groupBy(schema.leads.id, schema.leads.client_name, schema.leads.phone, schema.leads.contact_info, schema.leads.status, schema.leads.created_at, schema.leads.last_interaction)
-                .orderBy(desc(schema.leads.last_interaction))
+                .orderBy(desc(schema.leads.last_interaction || schema.leads.created_at))
                 .limit(limit)
                 .offset(offset);
 
-                const [totalLeads] = await db.select({ count: sql`count(*)` }).from(schema.leads);
+                const [totalCount] = await db.select({ count: sql`count(*)` }).from(schema.leads);
 
-                const formattedClients = results.map(c => ({
-                    id: c.id,
-                    client_name: c.client_name,
+                const safeISO = (dateStr: any) => {
+                    if (!dateStr) return null;
+                    try {
+                        const date = new Date(dateStr);
+                        return isNaN(date.getTime()) ? null : date.toISOString();
+                    } catch { return null; }
+                };
+
+                const formatted = results.map(c => ({
+                    ...c,
                     name: c.client_name,
-                    phone: c.phone,
                     email: null,
-                    status: c.status,
-                    created_at: c.created_at ? new Date(c.created_at).toISOString() : new Date().toISOString(),
-                    last_interaction: c.last_interaction ? new Date(c.last_interaction).toISOString() : null,
-                    last_appointment: c.last_interaction ? new Date(c.last_interaction).toISOString() : null,
+                    created_at: safeISO(c.created_at) || new Date().toISOString(),
+                    last_interaction: safeISO(c.last_interaction),
+                    last_appointment: safeISO(c.last_interaction),
                     total_appointments: Number(c.total_appointments || 0),
                     pending_appointments: Number(c.pending_appointments || 0),
                     total_spent: Number(c.total_spent || 0),
@@ -383,12 +390,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 }));
 
                 return res.status(200).json({ 
-                    leads: formattedClients, // para el dashboard
-                    clients: formattedClients, // para la solapa clientes
+                    leads: formatted, 
+                    clients: formatted,
                     metadata: {
-                        total: Number(totalLeads?.count || 0),
+                        total: Number(totalCount?.count || 0),
                         limit,
-                        offset
+                        offset,
+                        hasMore: offset + limit < Number(totalCount?.count || 0)
                     }
                 });
             }
