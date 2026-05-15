@@ -48,8 +48,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // --- 1. PRE-PROCESAMIENTO: IDENTIFICACIÓN ROBUSTA Y CONSULTAS EN PARALELO ---
         let leadByInitId = null;
         let activeLeadId: string | number | null = leadId || null;
-        let currentStage = '1'; // Etapa inicial por defecto
+        let currentStage = '1'; 
         let currentState: any = { stage: '1' };
+
+        // --- 0. ESTABLECER CANAL DE COMUNICACIÓN (STREAM) INMEDIATAMENTE ---
+        if (!res.headersSent) {
+            res.setHeader('Content-Type', 'text/event-stream');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('X-Accel-Buffering', 'no');
+            res.setHeader('Connection', 'keep-alive');
+        }
 
         // Promesas en paralelo para reducir latencia drásticamente
         const initIdPromise = (identificationId && String(identificationId).length > 10 && !activeLeadId) 
@@ -156,7 +164,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         // --- 3. MÁQUINA DE ESTADOS LINEAL (BLOQUEO DE ETAPAS) ---
         let assistantContext = "";
-        let receiptUrl = "";
+        let mediaUrlsToSend: string[] = [];
 
         // ETAPA 1: REGISTRO
         if (currentStage === '1') {
@@ -186,20 +194,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 if (activeLeadId) {
                     await updateLeadState(String(activeLeadId), { stage: '2', clientName: nameForRegistration });
                     currentStage = '2';
-                    assistantContext = `SISTEMA: El lead se ha registrado como ${nameForRegistration} y ya se le envió la imagen del catálogo principal. SALUDALO y preguntale qué servicio de los que ve en la imagen le interesa.`;
-                    
-                    if (!res.headersSent) {
-                        res.setHeader('Content-Type', 'text/event-stream');
-                        res.setHeader('Cache-Control', 'no-cache');
-                        res.setHeader('X-Accel-Buffering', 'no');
-                    }
-                    res.write(`data: ${JSON.stringify({ leadId: activeLeadId })}\n\n`);
-                    res.write(`data: ${JSON.stringify({ media_url: mainImageUrl })}\n\n`);
+                    assistantContext = `SISTEMA: El lead se ha registrado como ${nameForRegistration} y ya se le envió la imagen del catálogo principal.`;
+                    mediaUrlsToSend.push(mainImageUrl);
                 }
             }
         }
         // ETAPA 2 & 3: CATÁLOGO Y PRESUPUESTO
-        else if ((currentStage === '2' || currentStage === '3') && intent === 'CONSULTA_SERVICIO' && effectiveCatIds.length > 0) {
+        else if ((currentStage === '2' || currentStage === '3') && (intent === 'CONSULTA_SERVICIO' || effectiveCatIds.length > 0)) {
             console.log('[api/chat] TRANSITION: Stage 3 (Presupuesto)');
             
             const allServices = await sql`SELECT s.id, s.title, s.price, s.category_id, c.name as category_name 
@@ -207,59 +208,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 WHERE s.active = true`.catch(() => []);
             
             const userTextNorm = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-            const detectedCatIds = new Set(effectiveCatIds);
             
-            const expandedServices: any[] = [];
-            for (const s of allServices) {
-                if (s.title && s.title.includes('(c/u)')) {
-                    const parts = s.title.replace('(c/u)', '').split('/').map((p: string) => p.trim());
-                    for (const p of parts) {
-                        if (p) expandedServices.push({ ...s, originalTitle: s.title, title: p });
-                    }
-                } else {
-                    expandedServices.push({ ...s, originalTitle: s.title });
-                }
-            }
-
-            const matchedServices = [];
-            for (const s of expandedServices) {
-                const t = (s.title || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-                // Match si el texto del usuario contiene el título O si el título contiene alguna palabra clave importante del usuario
-                if (userTextNorm.includes(t) || (t.length > 3 && userTextNorm.includes(t.substring(0, Math.min(t.length, 10))))) {
-                    matchedServices.push(s);
-                }
-            }
+            const matchedServices = allServices.filter((s: any) => {
+                const t = (s.title || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                return userTextNorm.includes(t) || t.includes(userTextNorm) || effectiveCatIds.includes(String(s.category_id));
+            });
 
             if (matchedServices.length > 0) {
-                const receiptItems = matchedServices.map((s: any) => ({ 
+                const receiptItems = matchedServices.slice(0, 8).map((s: any) => ({ 
                     label: s.title, 
                     price: `$${Number(s.price).toLocaleString('es-AR')}` 
                 }));
                 const totalPrice = matchedServices.reduce((acc: number, s: any) => acc + Number(s.price), 0);
                 receiptItems.push({ label: 'TOTAL ESTIMADO', price: `$${totalPrice.toLocaleString('es-AR')}` });
                 const satoriData = Buffer.from(JSON.stringify(receiptItems)).toString('base64');
-                receiptUrl = `https://kalon-estetica.vercel.app/api/satori-image?title=${encodeURIComponent('TU PRESUPUESTO KÂLON')}&data=${satoriData}`;
+                const receiptUrl = `https://kalon-estetica.vercel.app/api/satori-image?title=${encodeURIComponent('TU PRESUPUESTO KÂLON')}&data=${satoriData}`;
                 
-                res.setHeader('Content-Type', 'text/event-stream');
-                res.write(`data: ${JSON.stringify({ media_url: receiptUrl })}\n\n`);
-                assistantContext = `PRESUPUESTO GENERADO. Servicios: ${matchedServices.map(s => s.title).join(', ')}. Total: $${totalPrice}.`;
+                mediaUrlsToSend.push(receiptUrl);
+                assistantContext = `PRESUPUESTO GENERADO para: ${matchedServices.map((s: any) => s.title).join(', ')}.`;
                 
                 if (activeLeadId) {
-                    await updateLeadState(String(activeLeadId), { ...currentState, stage: '3', selectedServiceIds: matchedServices.map(s => String(s.id)) });
+                    await updateLeadState(String(activeLeadId), { ...currentState, stage: '3', selectedServiceIds: matchedServices.map((s: any) => String(s.id)) });
                     currentStage = '3';
                 }
             } else {
-                const matchedCats = categories.filter(c => detectedCatIds.has(String(c.id)));
+                const matchedCats = categories.filter(c => effectiveCatIds.includes(String(c.id)));
                 for (const cat of matchedCats) {
-                    if (cat.price_list_url) {
-                        if (!res.headersSent) {
-                            res.setHeader('Content-Type', 'text/event-stream');
-                        }
-                        res.write(`data: ${JSON.stringify({ media_url: cat.price_list_url })}\n\n`);
-                    }
+                    if (cat.price_list_url) mediaUrlsToSend.push(cat.price_list_url);
                 }
-                assistantContext = `SISTEMA: No se detectó un servicio específico, pero sí las categorías: ${matchedCats.map(c => c.name).join(', ')}. Ya se enviaron las imágenes de catálogo. Invitá al cliente a revisarlas y preguntale qué tratamiento específico de esas áreas le gustaría realizarse.`;
-                if (activeLeadId) await updateLeadState(String(activeLeadId), { ...currentState, stage: '2', currentCategoryId: String(matchedCats[0]?.id || '') });
+                assistantContext = `SISTEMA: No se detectó un servicio específico, pero enviamos los catálogos de área.`;
+                if (activeLeadId) await updateLeadState(String(activeLeadId), { ...currentState, stage: '2' });
                 currentStage = '2';
             }
         }
@@ -346,13 +324,11 @@ ${assistantContext ? `Contexto Operacional: ${assistantContext}` : ''}
             stream: true,
         }, { timeout: 15000 });
 
-        if (!res.headersSent) {
-            res.setHeader('Content-Type', 'text/event-stream');
-            res.setHeader('Cache-Control', 'no-cache');
-            res.setHeader('X-Accel-Buffering', 'no');
-        }
-        
+        // Headers ya seteados al inicio del try/catch
         if (activeLeadId) res.write(`data: ${JSON.stringify({ leadId: activeLeadId })}\n\n`);
+        for (const url of mediaUrlsToSend) {
+            res.write(`data: ${JSON.stringify({ media_url: url, stage: currentStage })}\n\n`);
+        }
 
         for await (const chunk of stream) {
             const content = chunk.choices[0]?.delta?.content || '';
