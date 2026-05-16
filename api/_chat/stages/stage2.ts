@@ -16,16 +16,22 @@ export async function handleStage2(ctx: StageContext): Promise<{ assistantContex
     if (detectedCategories.length > 0) {
         console.log(`[Stage 2] Categorías detectadas: ${detectedCategories.map(c => c.name).join(', ')}`);
         
-        // Agregar las imágenes de catálogo de todas las categorías detectadas
+        // Agregar las imágenes de catálogo de todas las categorías detectadas (buscando en ambos campos)
         detectedCategories.forEach(cat => {
-            if (cat.image_url) ctx.mediaUrls.push(cat.image_url);
+            const url = cat.image_url || cat.price_list_url;
+            if (url) {
+                console.log(`[Stage 2] Agregando media URL para ${cat.name}: ${url}`);
+                ctx.mediaUrls.push(url);
+            } else {
+                console.warn(`[Stage 2] La categoría ${cat.name} NO tiene imagen ni lista de precios cargada.`);
+            }
         });
 
         if (leadId) {
             await updateLeadState(String(leadId), { 
                 ...currentState, 
                 stage: '3', 
-                selectedCategoryId: detectedCategories[0].id, // Guardamos la primera como referencia principal
+                selectedCategoryId: detectedCategories[0].id,
                 justSelectedCategoryIds: detectedCategories.map(c => c.id)
             });
         }

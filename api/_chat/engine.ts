@@ -128,9 +128,6 @@ export async function processChat(reqBody: any, res: VercelResponse) {
             // Salto inteligente a Agenda si el cliente ya está registrado y pide turno
             console.log(`[Engine] Salto inteligente a ETAPA 4 detectado`);
             stageResult = await handleStage4(ctx);
-        } else if (isBudgetIntent && activeLeadId && currentStage === '2') {
-            // Salto inteligente a Presupuesto si pide precios
-            stageResult = await handleStage3(ctx);
         } else {
             // Flujo secuencial estándar
             switch (currentStage) {
