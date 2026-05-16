@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { sql, getCategories, findLeadByInitId } from '../_services/db.js';
+import { sql, getCategories, findLeadByInitId, updateLeadState } from '../_services/db.js';
 import { handleStage1 } from './stages/stage1.js';
 import { handleStage2 } from './stages/stage2.js';
 import { handleStage3 } from './stages/stage3.js';

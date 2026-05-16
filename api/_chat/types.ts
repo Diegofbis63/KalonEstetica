@@ -12,6 +12,11 @@ export interface ChatState {
     clientPhone?: string;
     selectedServiceIds?: string[];
     currentCategoryId?: string;
+    selectedCategoryId?: string | number;
+    budgetImageUrl?: string;
+    paymentProofUrl?: string;
+    totalPrice?: number;
+    totalDuration?: number;
     [key: string]: any;
 }
 
