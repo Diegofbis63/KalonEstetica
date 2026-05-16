@@ -36,7 +36,7 @@ export async function handleStage4(ctx: StageContext): Promise<{ assistantContex
     }
 
     // 3. Consultar Disponibilidad Real
-    const slots = await getAvailableSlotsFromDB(targetCatId, startDate, endDate, currentState.totalDuration || 30).catch(() => []);
+    const slots = await getAvailableSlotsFromDB(String(targetCatId), startDate, endDate, currentState.totalDuration || 30).catch(() => []);
     
     if (slots.length === 0) {
         return { 

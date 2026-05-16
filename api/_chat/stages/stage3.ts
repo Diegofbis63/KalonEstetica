@@ -3,11 +3,17 @@ import { generateMenuImage } from '../../_services/imageGenerator.js';
 import { createClient } from '@supabase/supabase-js';
 import type { StageContext, Service } from '../types.js';
 
-const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-
 export async function handleStage3(ctx: StageContext): Promise<{ assistantContext: string; nextStage?: string }> {
     const { text, leadId, currentState, services } = ctx;
     const lowText = text.toLowerCase();
+    
+    // Lazy Supabase init to prevent top-level crashes
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        console.error('[Stage 3] CRITICAL: Missing Supabase credentials');
+        return { assistantContext: "SISTEMA: Error de configuración (Supabase). TU MISIÓN: Pide disculpas y di que el sistema de presupuestos está en mantenimiento." };
+    }
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
 
     console.log(`[Stage 3] Analizando pedido: "${text}"`);
 
