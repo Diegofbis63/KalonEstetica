@@ -1,10 +1,10 @@
 import OpenAI from 'openai';
 import { sql, getCategories, findLeadByInitId } from '../_services/db.js';
-import { handleStage1 } from './stages/stage1';
-import { handleStage2And3 } from './stages/stage2_3';
-import { handleStage4 } from './stages/stage4';
-import { handleStage5And6 } from './stages/stage5_6';
-import type { ClassificationResult, StageContext, ChatState } from './types';
+import { handleStage1 } from './stages/stage1.js';
+import { handleStage2And3 } from './stages/stage2_3.js';
+import { handleStage4 } from './stages/stage4.js';
+import { handleStage5And6 } from './stages/stage5_6.js';
+import type { ClassificationResult, StageContext, ChatState } from './types.js';
 import type { VercelResponse } from '@vercel/node';
 
 const openai = new OpenAI({
@@ -26,21 +26,28 @@ export async function processChat(reqBody: any, res: VercelResponse) {
     }
 
     try {
-        // 2. Identificación rápida (Ping a la DB para mantener vivo)
-        const initIdPromise = (identificationId && String(identificationId).length > 10 && !leadId) 
-            ? findLeadByInitId(String(identificationId)).catch(() => null)
-            : Promise.resolve(null);
+        // 2. Identificación robusta del Lead
+        let leadToUse = null;
+        if (leadId) {
+            const rows = await sql`SELECT * FROM leads WHERE id = ${leadId} LIMIT 1`.catch(() => []);
+            leadToUse = rows[0] || null;
+        } else if (identificationId) {
+            // Buscar por identificación_id (UUID) o por initId
+            const rows = await sql`SELECT * FROM leads WHERE id::text = ${identificationId} OR identification_id = ${identificationId} LIMIT 1`.catch(() => []);
+            leadToUse = rows[0] || null;
+            if (!leadToUse && String(identificationId).length > 10) {
+                leadToUse = await findLeadByInitId(String(identificationId)).catch(() => null);
+            }
+        }
         
-        const leadByIdPromise = (identificationId && identificationId.includes('-') && !leadId)
-            ? sql`SELECT * FROM leads WHERE id = ${identificationId} LIMIT 1`.then(r => r[0] || null).catch(() => null)
-            : Promise.resolve(null);
-
-        const [fetchedLead, leadById] = await Promise.all([initIdPromise, leadByIdPromise]);
-        const leadToUse = fetchedLead || leadById;
-        
-        let activeLeadId = leadId || leadToUse?.id || null;
+        let activeLeadId = leadToUse?.id || leadId || null;
         let currentState: ChatState = leadToUse?.current_state || { stage: '1' };
         let currentStage = String(currentState.stage || '1');
+
+        // Bloqueo de seguridad: Si ya tiene nombre, no puede estar en Etapa 1
+        if (currentStage === '1' && (leadToUse?.client_name || currentState.clientName)) {
+            currentStage = '2';
+        }
 
         // 3. ENVIAR ID DE LEAD INMEDIATAMENTE SI EXISTE
         if (activeLeadId) {
@@ -52,7 +59,7 @@ export async function processChat(reqBody: any, res: VercelResponse) {
         const servicesPromise = sql`SELECT s.id, s.title, s.category_id FROM services s WHERE s.active = true`.catch(() => []);
         
         // 5. CLASIFICACIÓN (En paralelo con las consultas de soporte)
-        const classificationPromise = classifyIntent(text, activeLeadId, currentStage, messages);
+        const classificationPromise = classifyIntent(text, !!activeLeadId, currentStage, messages, await categoriesPromise);
         
         const [categories, services, classification] = await Promise.all([
             categoriesPromise, 
@@ -125,23 +132,33 @@ export async function processChat(reqBody: any, res: VercelResponse) {
     }
 }
 
-async function classifyIntent(text: string, hasLead: boolean, stage: string, history: any[]): Promise<ClassificationResult> {
+async function classifyIntent(text: string, hasLead: boolean, stage: string, history: any[], categories: any[]): Promise<ClassificationResult> {
     // Clasificación rápida por keywords
     const low = text.toLowerCase();
     if (!hasLead && /hola|buen/i.test(low)) return { intent: 'SALUDO', detected_categories: [], is_negation: false };
     
     // Si no es obvio, usamos IA
     try {
+        const categoryNames = categories.map((c: any) => c.name).join(', ');
         const response = await openai.chat.completions.create({
             model: 'google/gemini-2.0-flash-001',
             messages: [{ 
                 role: 'system', 
                 content: `Clasifica la intención del usuario para KÂLON Estética. 
-                Responde JSON: { "intent": "SALUDO"|"REGISTRO"|"CONSULTA_SERVICIO"|"TURNO"|"OTRO", "detected_categories": [], "detected_name": "...", "is_negation": false }
+                Categorías disponibles: [${categoryNames}]
+                Referencia Temporal (Hoy): ${new Date().toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} a las ${new Date().toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}.
+                Responde ÚNICAMENTE JSON: { 
+                  "intent": "SALUDO"|"REGISTRO"|"CONSULTA_SERVICIO"|"TURNO"|"OTRO", 
+                  "detected_categories": ["Nombre Exacto"], 
+                  "detected_name": "...", 
+                  "is_negation": false,
+                  "detected_date": "YYYY-MM-DD",
+                  "detected_time": "HH:mm"
+                }
                 Etapa actual: ${stage}` 
             }, { role: 'user', content: text }],
             response_format: { type: 'json_object' }
-        }, { timeout: 3000 });
+        }, { timeout: 4000 });
 
         return JSON.parse(response.choices[0].message.content || '{}');
     } catch {
@@ -151,15 +168,23 @@ async function classifyIntent(text: string, hasLead: boolean, stage: string, his
 
 function getSystemPrompt(stage: string, name: string, context: string) {
     return `## IDENTIDAD KÂLON
-Sos KÂLON, la asistente boutique de "Kâlon Estética Avanzada" en Córdoba. Hablás con elegancia, calidez y voseo cordobés.
+Sos KÂLON, la asistente boutique de "Kâlon Estética Avanzada". Hablás con elegancia, calidez y voseo cordobés.
+Nombre del cliente: ${name}. 
 
-## CONTEXTO
-Nombre: ${name}. Etapa Actual: ${stage}. ${context}
+## REGLAS DE FLUJO (ESTRICTO)
+Tu etapa actual es: ${stage}. NO puedes saltar de etapa ni pedir información de etapas futuras.
 
-## REGLAS
-- ETAPA 1: Solo pedí nombre y apellido.
-- ETAPA 2/3: El sistema YA ENVIÓ el catálogo/presupuesto. NO lo menciones como algo futuro, hablá de lo que el cliente YA ESTÁ VIENDO.
-- ETAPA 4: Ofrecé horarios y ayudá a elegir.
-- ETAPA 5/6: Guía el pago y confirma.
-- Sé concisa (máx 2-3 oraciones). No uses tecnicismos.`;
+- ETAPA 1 (Registro): Solo saluda y pide nombre/apellido.
+- ETAPA 2 (Información): El cliente ya recibió la imagen del catálogo de su área de interés. Comenta sobre los servicios que ve en la imagen y pregunta qué le gustaría probar. No hables de precios totales todavía.
+- ETAPA 3 (Presupuesto): El cliente ya recibió la imagen de su presupuesto con el total. Pregunta si desea agendar un turno para esos servicios.
+- ETAPA 4 (Agenda): Ayuda a elegir un horario disponible. 
+- ETAPA 5/6 (Pago/Confirmación): Guía el envío del comprobante y finaliza con elegancia.
+
+## CONTEXTO ADICIONAL
+${context}
+
+## REGLAS DE RESPUESTA
+- Sé concisa (2-3 oraciones). 
+- **CRÍTICO:** El sistema acaba de enviar las imágenes del catálogo solicitado. Tú NO envías las imágenes, el sistema lo hace. Tu trabajo es confirmar que las estás viendo con el cliente (ej: "Ahí te pasé el catálogo de depilación, ¿viste qué buenas opciones?") y guiar la conversación.
+- Nunca inventes precios ni horarios que no estén en el contexto.`;
 }

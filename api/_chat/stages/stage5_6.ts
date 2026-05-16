@@ -1,5 +1,5 @@
 import { updateLeadState, createAppointment } from '../../_services/db.js';
-import type { StageContext } from '../types';
+import type { StageContext } from '../types.js';
 
 export async function handleStage5And6(ctx: StageContext, mediaUrl?: string): Promise<{ assistantContext: string; nextStage?: string }> {
     const { text, leadId, currentState, stage } = ctx;
@@ -21,11 +21,36 @@ export async function handleStage5And6(ctx: StageContext, mediaUrl?: string): Pr
         const finalPhone = phoneMatch ? phoneMatch[0] : (currentState.clientPhone || null);
 
         if (leadId && String(leadId).length > 5) {
-            // Crear la cita "fantasma" que el admin confirmará
-            await createAppointment(String(leadId), null, new Date().toISOString(), "Servicio Confirmado", 0, 60, []).catch(() => null);
-            await updateLeadState(String(leadId), { ...currentState, stage: '6', clientPhone: finalPhone });
+            console.log(`[Stage 5-6] Finalizing appointment for Lead: ${leadId}. Media: ${!!mediaUrl}`);
+            
+            const appointmentDate = currentState.pendingDate && currentState.pendingTime 
+                ? `${currentState.pendingDate}T${currentState.pendingTime}:00-03:00`
+                : new Date().toISOString();
+
+            // Usar datos reales del estado
+            const price = currentState.totalPrice || 0;
+            const duration = currentState.totalDuration || 60;
+
+            await createAppointment(
+                String(leadId), 
+                null, 
+                appointmentDate, 
+                "Servicio Kalon", 
+                price, 
+                duration, 
+                [], 
+                currentState.staffId || null
+            ).catch(e => console.error("Error creating appointment:", e));
+
+            await updateLeadState(String(leadId), { 
+                ...currentState, 
+                stage: '6', 
+                clientPhone: finalPhone,
+                status: 'paid' 
+            });
+
             return { 
-                assistantContext: `TURNO CONFIRMADO EXITOSAMENTE. Fin del flujo.`,
+                assistantContext: `TURNO CONFIRMADO EXITOSAMENTE. El comprobante fue recibido (${mediaUrl || 'por texto'}). Fin del flujo. Saludar y cerrar.`,
                 nextStage: '6'
             };
         }

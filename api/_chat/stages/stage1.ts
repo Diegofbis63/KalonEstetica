@@ -1,5 +1,5 @@
 import { createLead, updateLeadState, sql } from '../../_services/db.js';
-import type { StageContext } from '../types';
+import type { StageContext } from '../types.js';
 
 export async function handleStage1(ctx: StageContext): Promise<{ assistantContext: string; nextStage?: string }> {
     const { text, identificationId, classification } = ctx;

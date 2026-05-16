@@ -341,6 +341,14 @@ export default function KalonChat() {
         )}
 
         <form onSubmit={handleSend} className="flex items-center gap-2 bg-cream/5 border border-cream/10 rounded-full p-1.5 focus-within:border-gold/30 transition-all">
+          <button 
+            type="button"
+            onClick={handleFileUpload}
+            className="p-2.5 text-cream/40 hover:text-gold transition-colors"
+            title="Adjuntar comprobante"
+          >
+            <Paperclip className="w-4 h-4" />
+          </button>
           <input
             className="flex-1 bg-transparent border-none text-cream text-sm px-4 py-2 outline-none placeholder:text-cream/25 disabled:opacity-50"
             ref={inputRef}

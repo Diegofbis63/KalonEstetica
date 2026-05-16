@@ -1,5 +1,5 @@
 import { updateLeadState, sql } from '../../_services/db.js';
-import type { StageContext } from '../types';
+import type { StageContext } from '../types.js';
 
 export async function handleStage2And3(ctx: StageContext): Promise<{ assistantContext: string; nextStage?: string }> {
     const { text, leadId, classification, categories, services, currentState } = ctx;
@@ -20,23 +20,26 @@ export async function handleStage2And3(ctx: StageContext): Promise<{ assistantCo
     }
 
     if (intent === 'CONSULTA_SERVICIO' || effectiveCatIds.length > 0) {
-        console.log(`[Stage 2/3] Procesando consulta de servicios: ${effectiveCatIds.join(',')}`);
+        console.log(`[Stage 2/3] Procesando consulta: cats_in=${effectiveCatIds.join(',')}`);
         
-        const allServices = await sql`SELECT s.id, s.title, s.price, s.category_id, c.name as category_name 
-            FROM services s LEFT JOIN categories c ON s.category_id = c.id 
-            WHERE s.active = true`.catch(() => []);
+        // 1. BUSCAR SERVICIOS ESPECÍFICOS PRIMERO (INTENTO DE ETAPA 3)
+        const allServices = await sql`SELECT s.id, s.title, s.price, s.category_id 
+            FROM services s WHERE s.active = true`.catch(() => []);
         
         const matchedServices = allServices.filter((s: any) => {
             const t = (s.title || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-            return userNorm.includes(t) || t.includes(userNorm) || effectiveCatIds.includes(String(s.category_id));
+            // Match más flexible: si el usuario menciona partes del título
+            return userNorm.includes(t) && t.length > 3;
         });
 
         if (matchedServices.length > 0) {
+            console.log(`[Stage 2/3] Servicios matcheados: ${matchedServices.map(s => s.title).join(', ')}`);
             const receiptItems = matchedServices.slice(0, 8).map((s: any) => ({ 
                 label: s.title, 
                 price: `$${Number(s.price).toLocaleString('es-AR')}` 
             }));
             const totalPrice = matchedServices.reduce((acc: number, s: any) => acc + Number(s.price), 0);
+            const totalDuration = matchedServices.reduce((acc: number, s: any) => acc + (parseInt(String(s.duration_min)) || 30), 0);
             receiptItems.push({ label: 'TOTAL ESTIMADO', price: `$${totalPrice.toLocaleString('es-AR')}` });
             
             const satoriData = Buffer.from(JSON.stringify(receiptItems)).toString('base64');
@@ -45,34 +48,48 @@ export async function handleStage2And3(ctx: StageContext): Promise<{ assistantCo
             ctx.mediaUrls.push(receiptUrl);
             
             if (leadId) {
+                const categoryId = matchedServices[0]?.category_id;
                 await updateLeadState(String(leadId), { 
                     ...currentState, 
                     stage: '3', 
-                    selectedServiceIds: matchedServices.map((s: any) => String(s.id)) 
+                    selectedServiceIds: matchedServices.map((s: any) => String(s.id)),
+                    currentCategoryId: categoryId ? String(categoryId) : currentState.currentCategoryId,
+                    totalPrice: totalPrice,
+                    totalDuration: totalDuration
                 });
                 return { 
-                    assistantContext: `PRESUPUESTO GENERADO para: ${matchedServices.map((s: any) => s.title).join(', ')}.`,
+                    assistantContext: `SISTEMA: PRESUPUESTO GENERADO con los servicios: ${matchedServices.map((s: any) => s.title).join(', ')}. El total es $${totalPrice.toLocaleString('es-AR')}.`,
                     nextStage: '3'
                 };
             }
-        } else {
-            // Si no hay servicios específicos, enviar el catálogo de la categoría
-            const matchedCats = categories.filter(c => effectiveCatIds.includes(String(c.id)));
-            let sentCatalog = false;
-            for (const cat of matchedCats) {
-                if (cat.price_list_url) {
-                    ctx.mediaUrls.push(cat.price_list_url);
-                    sentCatalog = true;
-                }
-            }
+        }
+
+        // 2. SI NO HAY SERVICIOS, RESOLVER CATEGORÍAS (ETAPA 2)
+        const matchedCats = categories.filter(c => {
+            const catIdStr = String(c.id);
+            const catNameNorm = c.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
             
-            if (sentCatalog) {
-                if (leadId) await updateLeadState(String(leadId), { ...currentState, stage: '2' });
-                return { 
-                    assistantContext: `SISTEMA: Se enviaron los catálogos de área solicitados.`,
-                    nextStage: '2'
-                };
+            return effectiveCatIds.some(input => {
+                const inputStr = String(input);
+                const inputNorm = inputStr.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                return inputStr === catIdStr || inputNorm === catNameNorm || catNameNorm.includes(inputNorm);
+            });
+        });
+
+        let sentCategoryCatalog = false;
+        for (const cat of matchedCats) {
+            if (cat.price_list_url) {
+                ctx.mediaUrls.push(cat.price_list_url);
+                sentCategoryCatalog = true;
             }
+        }
+
+        if (sentCategoryCatalog) {
+            if (leadId) await updateLeadState(String(leadId), { ...currentState, stage: '2' });
+            return { 
+                assistantContext: `SISTEMA: Se enviaron las imágenes de catálogo existentes para las áreas: ${matchedCats.map(c => c.name).join(', ')}.`,
+                nextStage: '2'
+            };
         }
     }
 

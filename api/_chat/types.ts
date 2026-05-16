@@ -19,6 +19,8 @@ export interface ClassificationResult {
     detected_categories: string[];
     detected_name?: string;
     is_negation: boolean;
+    detected_date?: string; // ISO format YYYY-MM-DD
+    detected_time?: string; // HH:mm format
 }
 
 export interface StageContext {
@@ -30,4 +32,5 @@ export interface StageContext {
     categories: any[];
     services: any[];
     mediaUrls: string[];
+    stage: string;
 }

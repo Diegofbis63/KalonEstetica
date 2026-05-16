@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { processChat } from './_chat/engine';
+import { processChat } from './_chat/engine.js';
 
 export const config = {
   maxDuration: 60,
