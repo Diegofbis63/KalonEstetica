@@ -4,32 +4,40 @@ import type { StageContext } from '../types.js';
 export async function handleStage2(ctx: StageContext): Promise<{ assistantContext: string; nextStage?: string }> {
     const { text, leadId, currentState, categories } = ctx;
 
-    console.log(`[Stage 2] Procesando selección de categoría para lead: ${leadId}`);
+    console.log(`[Stage 2] Procesando selección de categoría(s) para lead: ${leadId}`);
 
-    // Buscar si el texto menciona alguna categoría
-    const detectedCategory = categories.find(cat => 
+    // Buscar TODAS las categorías mencionadas en el texto
+    const detectedCategories = categories.filter(cat => 
         text.toLowerCase().includes(cat.name.toLowerCase()) || 
         (cat.slug && text.toLowerCase().includes(cat.slug.toLowerCase()))
     );
 
-    if (detectedCategory) {
-        console.log(`[Stage 2] Categoría detectada: ${detectedCategory.name}`);
+    if (detectedCategories.length > 0) {
+        console.log(`[Stage 2] Categorías detectadas: ${detectedCategories.map(c => c.name).join(', ')}`);
         
+        // Agregar las imágenes de catálogo de todas las categorías detectadas
+        detectedCategories.forEach(cat => {
+            if (cat.image_url) ctx.mediaUrls.push(cat.image_url);
+        });
+
         if (leadId) {
             await updateLeadState(String(leadId), { 
                 ...currentState, 
                 stage: '3', 
-                selectedCategoryId: detectedCategory.id 
+                selectedCategoryId: detectedCategories[0].id, // Guardamos la primera como referencia principal
+                justSelectedCategoryIds: detectedCategories.map(c => c.id)
             });
         }
 
+        const catNames = detectedCategories.map(c => c.name).join(' y ');
         return { 
-            assistantContext: `SISTEMA: El cliente eligió la categoría "${detectedCategory.name}". 
-            TU MISIÓN: Confirma la elección con elegancia y envía el CATALOGO ESPECÍFICO de esa área (que el sistema procesará ahora). 
-            Pregunta qué servicios de esa lista le interesan para armarle el presupuesto.`,
+            assistantContext: `SISTEMA: El cliente mostró interés en: ${catNames}. 
+            Se han enviado los catálogos de esas áreas. 
+            TU MISIÓN: Confirma que recibiste su pedido para esas áreas y preguntá qué servicios específicos de las listas le interesan para armarle el presupuesto total.`,
             nextStage: '3'
         };
     }
+
 
     return { 
         assistantContext: `SISTEMA: El usuario aún no elige un área clara. 
