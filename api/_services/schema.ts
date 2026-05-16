@@ -16,6 +16,9 @@ export interface ConvState {
   clientPhone: string | null;
   selectedServiceIds: string[];
   currentCategoryId: string | null;
+  selectedCategoryId?: string | number | null;
+  budgetImageUrl?: string | null;
+  paymentProofUrl?: string | null;
   pendingCategoryIds: string[];
   stage: string;
   pendingDate: string | null;
