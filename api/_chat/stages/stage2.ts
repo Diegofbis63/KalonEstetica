@@ -6,10 +6,11 @@ export async function handleStage2(ctx: StageContext): Promise<{ assistantContex
 
     console.log(`[Stage 2] Procesando selección de categoría(s) para lead: ${leadId}`);
 
-    // Buscar TODAS las categorías mencionadas en el texto
+    // Buscar TODAS las categorías mencionadas (usando el texto y la clasificación de la IA)
     const detectedCategories = categories.filter(cat => 
         text.toLowerCase().includes(cat.name.toLowerCase()) || 
-        (cat.slug && text.toLowerCase().includes(cat.slug.toLowerCase()))
+        (cat.slug && text.toLowerCase().includes(cat.slug.toLowerCase())) ||
+        ctx.classification.detected_categories?.some(dc => dc.toLowerCase().includes(cat.name.toLowerCase()) || cat.name.toLowerCase().includes(dc.toLowerCase()))
     );
 
     if (detectedCategories.length > 0) {
