@@ -3,104 +3,107 @@ import type { StageContext } from '../types.js';
 
 export async function handleStage4(ctx: StageContext): Promise<{ assistantContext: string; nextStage?: string }> {
     const { text, leadId, classification, currentState, categories, services } = ctx;
-    const { intent, detected_categories = [] } = classification;
+    const { intent, detected_date, detected_time } = classification;
 
-    if (intent === 'TURNO' || /turno|cita|agendar|mañana|hoy|lunes|martes|miercoles|jueves|viernes|sabado|domingo/i.test(text)) {
-        console.log(`[Stage 4] Consultando disponibilidad`);
-        
-        const now = new Date();
-        let startDate = new Date(now.getTime());
-        startDate.setHours(startDate.getHours() + 1); 
-        let endDate = new Date(startDate);
-        endDate.setDate(endDate.getDate() + 7);
+    console.log(`[Stage 4] Analizando Agenda. Fecha Detectada: ${detected_date}, Hora: ${detected_time}`);
 
-        // Si detectamos una fecha específica (ej: mañana), ajustar el rango de búsqueda
-        if (classification.detected_date) {
-            const requested = new Date(`${classification.detected_date}T00:00:00-03:00`);
-            startDate = requested > now ? requested : startDate;
-            endDate = new Date(startDate);
-            endDate.setHours(23, 59, 59, 999);
-        }
-        
-        let targetCatId = currentState.currentCategoryId;
-        
-        // Si no hay categoría en el estado, intentar buscar por las categorías del contexto
-        if (!targetCatId && detected_categories.length > 0) {
-            const found = categories.find(c => 
-                detected_categories.some(dc => String(dc).toLowerCase().includes(c.name.toLowerCase()) || String(c.id) === String(dc))
-            );
-            if (found) targetCatId = String(found.id);
-        }
+    // 1. Determinar Categoría (Prioridad: Servicios seleccionados > Categoría actual)
+    let targetCatId = currentState.selectedCategoryId;
+    if (!targetCatId && currentState.selectedServiceIds?.length > 0) {
+        const firstSvc = services.find(s => String(s.id) === String(currentState.selectedServiceIds[0]));
+        if (firstSvc) targetCatId = firstSvc.category_id;
+    }
 
-        // Si sigue vacío, buscar la categoría de los servicios seleccionados previamente
-        if (!targetCatId && currentState.selectedServiceIds?.length > 0) {
-            const firstSvc = services.find(s => String(s.id) === String(currentState.selectedServiceIds[0]));
-            if (firstSvc) targetCatId = String(firstSvc.category_id);
-        }
-        
-        if (!targetCatId) {
-            return { 
-                assistantContext: "SISTEMA: No se pudo determinar el área (categoría) para el turno. Preguntar al usuario qué servicio desea agendar.",
-                nextStage: '4'
-            };
-        }
+    if (!targetCatId) {
+        return { 
+            assistantContext: "SISTEMA: No sé para qué área es el turno. Preguntale al cliente para qué servicio o área desea agendar.",
+            nextStage: '4'
+        };
+    }
 
-        const slots = await getAvailableSlotsFromDB(targetCatId, startDate, endDate, 30).catch(() => []);
-        
-        // Si el cliente pidió una hora específica, verificar si está disponible y capturar el profesional
-        const requestedTime = classification.detected_time;
-        const matchingSlot = requestedTime && slots.find((s: any) => {
-            const d = new Date(s.slot_time);
-            const t = d.toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit', hour12: false });
-            return t === requestedTime;
-        });
-        const isRequestedAvailable = !!matchingSlot;
-        const staffId = matchingSlot ? (matchingSlot.staff_id || matchingSlot.professional_id) : null;
+    // 2. Rango de Fechas (Argentina UTC-3)
+    let startDate: Date;
+    let endDate: Date;
 
+    if (detected_date) {
+        startDate = new Date(`${detected_date}T00:00:00-03:00`);
+        endDate = new Date(`${detected_date}T23:59:59-03:00`);
+    } else {
+        // Por defecto: hoy y los próximos 7 días
+        const now = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Argentina/Buenos_Aires"}));
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        endDate = new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+    }
+
+    // 3. Consultar Disponibilidad Real
+    const slots = await getAvailableSlotsFromDB(targetCatId, startDate, endDate, currentState.totalDuration || 30).catch(() => []);
+    
+    if (slots.length === 0) {
+        return { 
+            assistantContext: `SISTEMA: No hay disponibilidad para el área ${targetCatId} en la fecha solicitada. 
+            TU MISION: Informá con calidez que no hay turnos libres para ese día y sugerí consultar para otro día de la semana.`,
+            nextStage: '4'
+        };
+    }
+
+    // 4. Clasificación por Periodos (Mañana, Tarde, Noche)
+    const mappedSlots = slots.map((s: any) => {
+        const d = new Date(s.slot_time);
+        const hour = d.getHours(); // Local hour
+        const timeStr = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false });
+        
+        let period: 'MAÑANA' | 'TARDE' | 'NOCHE' = 'MAÑANA';
+        if (hour >= 13 && hour < 17) period = 'TARDE';
+        if (hour >= 17) period = 'NOCHE';
+
+        return { 
+            time: timeStr, 
+            fullDate: d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }),
+            isoDate: d.toISOString().split('T')[0],
+            staffId: s.staff_id,
+            period 
+        };
+    });
+
+    // 5. Match Exacto o Sugerencia Triple
+    const exactMatch = detected_time ? mappedSlots.find(s => s.time.startsWith(detected_time.substring(0, 2))) : null;
+
+    if (exactMatch) {
         if (leadId) {
             await updateLeadState(String(leadId), { 
                 ...currentState, 
-                stage: '4', 
-                currentCategoryId: targetCatId,
-                pendingDate: classification.detected_date || currentState.pendingDate,
-                pendingTime: classification.detected_time || currentState.pendingTime,
-                staffId: staffId || currentState.staffId
+                staffId: String(exactMatch.staffId),
+                appointmentDate: exactMatch.isoDate,
+                appointmentTime: exactMatch.time
             });
         }
-
-        if (slots.length > 0) {
-
-            // Formatear slots para la IA forzando zona horaria Argentina
-            const formattedSlots = slots.slice(0, 15).map((s: any) => {
-                const d = new Date(s.slot_time);
-                const timeStr = d.toLocaleTimeString('es-AR', { 
-                    timeZone: 'America/Argentina/Buenos_Aires', 
-                    hour: '2-digit', 
-                    minute: '2-digit',
-                    hour12: false 
-                });
-                const dateStr = d.toLocaleDateString('es-AR', { 
-                    timeZone: 'America/Argentina/Buenos_Aires',
-                    weekday: 'long', 
-                    day: 'numeric' 
-                });
-                return `${dateStr} a las ${timeStr}hs`;
-            }).join(', ');
-
-            return { 
-                assistantContext: `SISTEMA: DISPONIBILIDAD REAL (Zona Horaria Argentina): ${formattedSlots}. 
-                El cliente preguntó por: "${text}" (${classification.detected_date || 'hoy/mañana'} ${classification.detected_time || ''}). 
-                ¿Está disponible lo que pidió?: ${isRequestedAvailable ? 'SÍ, CONFIRMAR' : 'NO, OFRECER ALTERNATIVAS'}.
-                Si el cliente pide un horario que ESTÁ en la lista, CONFÍRMALO. Si no está, ofrece alternativas de la lista.`,
-                nextStage: '4'
-            };
-        } else {
-            return { 
-                assistantContext: `SISTEMA: No hay turnos automáticos en la base de datos para esta área en los próximos 7 días. Pide al usuario un día/hora aproximado para consultar con las especialistas.`,
-                nextStage: '4'
-            };
-        }
+        return { 
+            assistantContext: `SISTEMA: El horario ${exactMatch.time} está DISPONIBLE. 
+            TU MISION: Confirmá este horario específico con entusiasmo y preguntá si desea reservarlo.`,
+            nextStage: '4'
+        };
     }
 
-    return { assistantContext: "SISTEMA: El usuario está en la etapa de agenda pero no ha solicitado un turno concreto todavía." };
+    // Seleccionar 3 opciones únicas por periodo
+    const suggestions: any[] = [];
+    ['MAÑANA', 'TARDE', 'NOCHE'].forEach(p => {
+        const slot = mappedSlots.find(s => s.period === p && !suggestions.find(already => already.time === s.time));
+        if (slot) suggestions.push(slot);
+    });
+
+    // Rellenar hasta 3 si faltan periodos
+    if (suggestions.length < 3) {
+        mappedSlots.forEach(s => {
+            if (suggestions.length < 3 && !suggestions.find(already => already.time === s.time)) suggestions.push(s);
+        });
+    }
+
+    const optionsText = suggestions.map(s => `- ${s.period}: ${s.time} (${s.fullDate})`).join('\n');
+
+    return { 
+        assistantContext: `SISTEMA: No encontré el horario exacto, pero hay estos 3 disponibles (Y SOLO ESTOS 3):
+        ${optionsText}
+        TU MISION: Ofrecé EXACTAMENTE estas 3 opciones categorizadas. Prohibido inventar otros horarios.`,
+        nextStage: '4'
+    };
 }

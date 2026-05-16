@@ -1,9 +1,11 @@
 import OpenAI from 'openai';
 import { sql, getCategories, findLeadByInitId } from '../_services/db.js';
 import { handleStage1 } from './stages/stage1.js';
-import { handleStage2And3 } from './stages/stage2_3.js';
+import { handleStage2 } from './stages/stage2.js';
+import { handleStage3 } from './stages/stage3.js';
 import { handleStage4 } from './stages/stage4.js';
-import { handleStage5And6 } from './stages/stage5_6.js';
+import { handleStage5 } from './stages/stage5.js';
+import { handleStage6 } from './stages/stage6.js';
 import type { ClassificationResult, StageContext, ChatState } from './types.js';
 import type { VercelResponse } from '@vercel/node';
 
@@ -79,18 +81,70 @@ export async function processChat(reqBody: any, res: VercelResponse) {
             stage: currentStage
         };
 
-        // 6. EJECUCIÓN DE LÓGICA DE ETAPA
-        let stageResult = { assistantContext: "" };
-        
-        if (currentStage === '1') {
-            stageResult = await handleStage1(ctx);
-        } else if (currentStage === '2' || currentStage === '3') {
-            stageResult = await handleStage2And3(ctx);
-        } else if (currentStage === '4') {
-            stageResult = await handleStage4(ctx);
-        } else if (currentStage === '5' || currentStage === '6') {
-            stageResult = await handleStage5And6(ctx, mediaUrl);
+        // 6. EJECUCIÓN DE LÓGICA DE ETAPA (CON SALTO INTELIGENTE)
+        let stageResult: { assistantContext: string; nextStage?: string } = { assistantContext: "" };
+        const isTurnoIntent = classification.intent === 'TURNO' || /turno|agendar|cita/i.test(text.toLowerCase());
+        const isBudgetIntent = classification.intent === 'CONSULTA_SERVICIO' || 
+                             /precio|cuanto|presupuesto/i.test(text.toLowerCase()) ||
+                             services.some(s => text.toLowerCase().includes(s.title.toLowerCase()));
+
+        // --- INTERCEPTOR GLOBAL DE ELIMINACIÓN ---
+        const isRemovalIntent = /sacar|quitar|borrar|no quiero|eliminar/i.test(text.toLowerCase());
+        if (isRemovalIntent && currentState.selectedServiceIds?.length > 0) {
+            const words = text.toLowerCase().split(' ');
+            const initialCount = currentState.selectedServiceIds.length;
+            
+            const updatedServiceIds = currentState.selectedServiceIds.filter(id => {
+                const svc = services.find(s => String(s.id) === String(id));
+                if (!svc) return false;
+                const match = words.some(w => w.length > 3 && svc.title.toLowerCase().includes(w));
+                return !match;
+            });
+
+            if (updatedServiceIds.length < initialCount) {
+                const removedSvc = services.find(s => !updatedServiceIds.includes(s.id) && currentState.selectedServiceIds.includes(s.id));
+                const newTotal = services.filter(s => updatedServiceIds.includes(s.id)).reduce((acc, s) => acc + (Number(s.price) || 0), 0);
+                const newDuration = services.filter(s => updatedServiceIds.includes(s.id)).reduce((acc, s) => acc + (s.duration_min || 0), 0);
+
+                await updateLeadState(activeLeadId!, { 
+                    ...currentState, 
+                    selectedServiceIds: updatedServiceIds, 
+                    totalPrice: newTotal,
+                    totalDuration: newDuration,
+                    stage: '3'
+                });
+                
+                // Procesar como Stage 3 para generar nuevo presupuesto
+                stageResult = await handleStage3({ ...ctx, currentState: { ...currentState, selectedServiceIds: updatedServiceIds, stage: '3' } });
+            }
         }
+
+        // Reglas de Enrutamiento Robusto (Unison)
+        if (stageResult.assistantContext) {
+            // Ya procesado por el eliminador
+        } else if (currentStage === '1') {
+            stageResult = await handleStage1(ctx);
+        } else if (isTurnoIntent && activeLeadId && !['5', '6'].includes(currentStage)) {
+            // Salto inteligente a Agenda si el cliente ya está registrado y pide turno
+            console.log(`[Engine] Salto inteligente a ETAPA 4 detectado`);
+            stageResult = await handleStage4(ctx);
+        } else if (isBudgetIntent && activeLeadId && currentStage === '2') {
+            // Salto inteligente a Presupuesto si pide precios
+            stageResult = await handleStage3(ctx);
+        } else {
+            // Flujo secuencial estándar
+            switch (currentStage) {
+                case '2': stageResult = await handleStage2(ctx); break;
+                case '3': stageResult = await handleStage3(ctx); break;
+                case '4': stageResult = await handleStage4(ctx); break;
+                case '5': stageResult = await handleStage5(ctx, mediaUrl); break;
+                case '6': stageResult = await handleStage6(ctx); break;
+                default: stageResult = await handleStage1(ctx);
+            }
+        }
+
+        // Sincronizar etapa final
+        const finalStage = stageResult.nextStage || currentStage;
 
         // Si la etapa cambió, actualizar
         if (ctx.leadId && ctx.leadId !== activeLeadId) {
@@ -99,7 +153,7 @@ export async function processChat(reqBody: any, res: VercelResponse) {
 
         // Enviar imágenes si se generaron
         for (const url of ctx.mediaUrls) {
-            res.write(`data: ${JSON.stringify({ media_url: url, stage: ctx.stage })}\n\n`);
+            res.write(`data: ${JSON.stringify({ media_url: url, stage: finalStage })}\n\n`);
         }
 
         // 7. STREAM DE IA
@@ -110,7 +164,7 @@ export async function processChat(reqBody: any, res: VercelResponse) {
             messages: [
                 { 
                     role: 'system', 
-                    content: getSystemPrompt(currentStage, currentLeadName, stageResult.assistantContext)
+                    content: getSystemPrompt(finalStage, currentLeadName, stageResult.assistantContext)
                 },
                 ...messages.map((m: any) => ({ role: m.role as any, content: m.content }))
             ],
@@ -168,23 +222,27 @@ async function classifyIntent(text: string, hasLead: boolean, stage: string, his
 
 function getSystemPrompt(stage: string, name: string, context: string) {
     return `## IDENTIDAD KÂLON
-Sos KÂLON, la asistente boutique de "Kâlon Estética Avanzada". Hablás con elegancia, calidez y voseo cordobés.
-Nombre del cliente: ${name}. 
+Sos KÂLON, la asistente virtual de "Kâlon Estética Avanzada". Tu personalidad es:
+- **Tono:** Boutique, elegante, profesional pero muy cálida.
+- **Voseo Cordobés:** Usá "vení", "mirá", "querés", "contame". Sé amable y empática.
+- **Nombre del cliente:** ${name}.
 
-## REGLAS DE FLUJO (ESTRICTO)
-Tu etapa actual es: ${stage}. NO puedes saltar de etapa ni pedir información de etapas futuras.
+## REGLAS DE ORO (INFALIBLES)
+1. **DETERMINISMO ABSOLUTO:** Seguí al pie de la letra las instrucciones del "SISTEMA:". No inventes datos que no estén allí.
+2. **ZERO ALUCINACIÓN:** Si el sistema no te da un precio, no lo inventes. Si no te da un horario, no lo ofrezcas. 
+3. **ESTRUCTURA UNISON:** Cada etapa tiene un objetivo único. No te adelantes ni retrocedas.
+   - **Etapa 1 (Registro):** Solo saluda y pide nombre.
+   - **Etapa 2 (Catálogo):** Mostrá las áreas. Tu meta es que elija UNA para ver precios.
+   - **Etapa 3 (Presupuesto):** El cliente ya tiene sus servicios y el total. Preguntá si quiere agendar.
+   - **Etapa 4 (Agenda):** Presentá EXACTAMENTE los 3 horarios del SISTEMA categorizados (Mañana/Tarde/Noche). Está prohibido ofrecer más o inventar otros.
+   - **Etapa 5 (Pago):** Pedí el comprobante de la seña.
+   - **Etapa 6 (Fin):** Despedida triunfal.
 
-- ETAPA 1 (Registro): Solo saluda y pide nombre/apellido.
-- ETAPA 2 (Información): El cliente ya recibió la imagen del catálogo de su área de interés. Comenta sobre los servicios que ve en la imagen y pregunta qué le gustaría probar. No hables de precios totales todavía.
-- ETAPA 3 (Presupuesto): El cliente ya recibió la imagen de su presupuesto con el total. Pregunta si desea agendar un turno para esos servicios.
-- ETAPA 4 (Agenda): Ayuda a elegir un horario disponible. 
-- ETAPA 5/6 (Pago/Confirmación): Guía el envío del comprobante y finaliza con elegancia.
-
-## CONTEXTO ADICIONAL
+## CONTEXTO DEL SISTEMA (FUENTE DE VERDAD)
 ${context}
 
 ## REGLAS DE RESPUESTA
-- Sé concisa (2-3 oraciones). 
-- **CRÍTICO:** El sistema acaba de enviar las imágenes del catálogo solicitado. Tú NO envías las imágenes, el sistema lo hace. Tu trabajo es confirmar que las estás viendo con el cliente (ej: "Ahí te pasé el catálogo de depilación, ¿viste qué buenas opciones?") y guiar la conversación.
-- Nunca inventes precios ni horarios que no estén en el contexto.`;
+- **Brevedad:** Máximo 2 o 3 oraciones por respuesta.
+- **Acción:** Siempre terminá con una pregunta o invitación a la acción según la etapa actual.
+- **Seguridad:** Si el cliente intenta cambiar de tema radicalmente, recordale con elegancia en qué punto de la reserva están.`;
 }

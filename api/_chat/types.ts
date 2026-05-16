@@ -1,4 +1,5 @@
 import type { VercelResponse } from '@vercel/node';
+export type { Service } from '../_services/schema.js';
 
 export interface ChatMessage {
     role: 'system' | 'user' | 'assistant';

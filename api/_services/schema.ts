@@ -33,6 +33,10 @@ export interface ConvState {
   totalPrice?: number;
   totalDuration?: number;
   staffId?: string;
+  selectedSlotId?: string;
+  appointmentId?: string;
+  appointmentDate?: string | null;
+  appointmentTime?: string | null;
   status?: string;
 }
 
