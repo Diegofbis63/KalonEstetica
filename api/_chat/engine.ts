@@ -7,6 +7,7 @@ import { handleStage4 } from './stages/stage4.js';
 import { handleStage5 } from './stages/stage5.js';
 import { handleStage6 } from './stages/stage6.js';
 import type { ClassificationResult, StageContext, ChatState } from './types.js';
+import { cleanString } from './utils.js';
 import type { VercelResponse } from '@vercel/node';
 
 const openai = new OpenAI({
@@ -89,20 +90,25 @@ export async function processChat(reqBody: any, res: VercelResponse) {
                              services.some(s => text.toLowerCase().includes(s.title.toLowerCase()));
 
         // --- INTERCEPTOR GLOBAL DE ELIMINACIÓN ---
-        const isRemovalIntent = /sacar|quitar|borrar|no quiero|eliminar/i.test(text.toLowerCase());
+        const isRemovalIntent = /sacar|quitar|borrar|no\s+quiero|eliminar/i.test(text.toLowerCase());
         if (isRemovalIntent && currentState.selectedServiceIds?.length > 0) {
-            const words = text.toLowerCase().split(' ');
+            const cleanedUserText = cleanString(text);
+            const userWords = cleanedUserText.split(/\s+/).filter(w => w.length > 2);
             const initialCount = currentState.selectedServiceIds.length;
             
             const updatedServiceIds = currentState.selectedServiceIds.filter(id => {
                 const svc = services.find(s => String(s.id) === String(id));
                 if (!svc) return false;
-                const match = words.some(w => w.length > 3 && svc.title.toLowerCase().includes(w));
+                const cleanedSvcTitle = cleanString(svc.title);
+                
+                const stopWords = new Set(["de", "con", "en", "para", "sacar", "quitar", "borrar", "eliminar", "quiero", "no", "un", "una", "y"]);
+                const svcWords = cleanedSvcTitle.split(/\s+/).filter(w => w.length > 2 && !stopWords.has(w));
+                
+                const match = userWords.some(w => svcWords.includes(w) && !stopWords.has(w));
                 return !match;
             });
 
             if (updatedServiceIds.length < initialCount) {
-                const removedSvc = services.find(s => !updatedServiceIds.includes(s.id) && currentState.selectedServiceIds.includes(s.id));
                 const newTotal = services.filter(s => updatedServiceIds.includes(s.id)).reduce((acc, s) => acc + (Number(s.price) || 0), 0);
                 const newDuration = services.filter(s => updatedServiceIds.includes(s.id)).reduce((acc, s) => acc + (s.duration_min || 0), 0);
 
