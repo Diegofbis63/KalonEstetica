@@ -18,7 +18,7 @@ export async function handleStage2(ctx: StageContext): Promise<{ assistantContex
         
         // Agregar las imágenes de catálogo de todas las categorías detectadas (buscando en ambos campos)
         detectedCategories.forEach(cat => {
-            const url = cat.image_url || cat.price_list_url;
+            const url = cat.price_list_url || cat.image_url;
             if (url) {
                 console.log(`[Stage 2] Agregando media URL para ${cat.name}: ${url}`);
                 ctx.mediaUrls.push(url);
