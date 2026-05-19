@@ -33,6 +33,7 @@ export interface ConvState {
   errorType?: string;
   optionMap?: Record<string, string>;
   justSelectedCategoryIds?: string[];
+  sentCategoryIds?: string[];
   totalPrice?: number;
   totalDuration?: number;
   staffId?: string;
