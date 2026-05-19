@@ -33,8 +33,8 @@ export async function handleStage3(ctx: StageContext): Promise<{ assistantContex
         for (const svc of allSelectedServices) {
             if (svc.category_id && !sentCategoryIds.has(svc.category_id)) {
                 const cat = categories.find(c => c.id === svc.category_id);
-                const url = cat?.price_list_url || cat?.image_url;
-                if (url) {
+                if (cat) {
+                    const url = `/api/catalog-image?id=${cat.id}`;
                     console.log(`[Stage 3] Injecting missing catalog image for ${cat.name}: ${url}`);
                     ctx.mediaUrls.push(url);
                     newlySentCategoryIds.push(svc.category_id);

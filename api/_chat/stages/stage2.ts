@@ -19,18 +19,14 @@ export async function handleStage2(ctx: StageContext): Promise<{ assistantContex
 
         // Agregar las imágenes de catálogo de todas las categorías detectadas
         detectedCategories.forEach(cat => {
-            const url = cat.price_list_url || cat.image_url;
-            if (url) {
-                if (!sentCategoryIds.has(cat.id)) {
-                    console.log(`[Stage 2] Agregando catalog URL para ${cat.name}: ${url}`);
-                    ctx.mediaUrls.push(url);
-                    newlySentCategoryIds.push(cat.id);
-                    sentCategoryIds.add(cat.id);
-                } else {
-                    console.log(`[Stage 2] Catálogo de ${cat.name} ya enviado previamente.`);
-                }
+            if (!sentCategoryIds.has(cat.id)) {
+                const url = `/api/catalog-image?id=${cat.id}`;
+                console.log(`[Stage 2] Agregando catalog URL para ${cat.name}: ${url}`);
+                ctx.mediaUrls.push(url);
+                newlySentCategoryIds.push(cat.id);
+                sentCategoryIds.add(cat.id);
             } else {
-                console.warn(`[Stage 2] La categoría ${cat.name} NO tiene imagen ni lista de precios cargada.`);
+                console.log(`[Stage 2] Catálogo de ${cat.name} ya enviado previamente.`);
             }
         });
 
