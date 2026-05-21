@@ -28,21 +28,26 @@ export const chatbotTools = (leadId: string | null, currentState: any, res: Verc
     }),
     
     obtener_lista_precios_por_categoria: tool({
-        description: 'Obtiene los sub-servicios específicos y envía la lista de precios visual (imagen) de una categoría padre. Úsalo SIEMPRE que el cliente elija un área (ej. Depilación) para mostrarle los precios.',
+        description: 'Obtiene los sub-servicios específicos y envía la lista de precios visual (imagen) de una categoría padre. Úsalo SIEMPRE que el cliente elija un área para mostrarle los precios. Si el cliente menciona múltiples categorías (ej. "Depilación y Pestañas"), llama esta herramienta UNA VEZ POR CADA categoría por separado.',
         parameters: z.object({
-            categoria_id: z.string().describe('El ID de la categoría padre obtenida previamente.')
+            categoria_id: z.string().describe('El nombre o ID de la categoría. Podés pasar el nombre en español tal cual lo dijo el cliente (ej. "Depilación", "Pestañas", "Masajes") o el ID obtenido previamente. El sistema buscará la coincidencia automáticamente.')
         }),
         execute: async ({ categoria_id }) => {
-            const catUrl = `/api/catalog-image?id=${categoria_id}`;
-            res.write(`data: ${JSON.stringify({ media_url: catUrl })}\n\n`);
-            
+            // Primero resolvemos la categoría por nombre o ID usando la búsqueda fuzzy
             const data = await getServicesByCategory(categoria_id);
             if (!data || !data.category) {
-                return { error: "Categoría no encontrada" };
+                return { error: `Categoría no encontrada para: "${categoria_id}". Pedile al cliente que aclare el nombre.` };
             }
+            
+            // Usamos el ID real (UUID) para la URL de la imagen
+            const realCategoryId = data.category.id;
+            const catUrl = `/api/catalog-image?id=${realCategoryId}`;
+            res.write(`data: ${JSON.stringify({ media_url: catUrl })}\n\n`);
+            
             return {
                 mensaje: "[SISTEMA: La imagen con la lista de precios ya se envió al cliente automáticamente. Está TERMINANTEMENTE PROHIBIDO que vuelvas a enlistar o repetir los sub-servicios, precios o duraciones en tu respuesta de texto. Hazle una pregunta muy breve sobre cuál desea agendar]",
                 categoria: data.category.name,
+                categoria_id_real: realCategoryId,
                 sub_servicios: data.services.map(s => ({
                     id: s.id,
                     nombre: s.name,
