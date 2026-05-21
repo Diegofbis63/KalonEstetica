@@ -21,7 +21,7 @@ export const chatbotTools = (leadId: string | null, currentState: any, res: Verc
             
             const cats = await getCategories();
             return {
-                mensaje: "Estas son las categorías principales disponibles",
+                mensaje: "[SISTEMA: La imagen del catálogo principal ya se envió al cliente de forma automática. Está TERMINANTEMENTE PROHIBIDO que enlistes, repitas o menciones estas categorías en tu respuesta de texto. Salúdalo y pregúntale de forma muy breve qué área le gustaría explorar]",
                 categorias: cats.map(c => ({ id: c.id, nombre: c.name, descripcion: c.description }))
             };
         }
@@ -41,6 +41,7 @@ export const chatbotTools = (leadId: string | null, currentState: any, res: Verc
                 return { error: "Categoría no encontrada" };
             }
             return {
+                mensaje: "[SISTEMA: La imagen con la lista de precios ya se envió al cliente automáticamente. Está TERMINANTEMENTE PROHIBIDO que vuelvas a enlistar o repetir los sub-servicios, precios o duraciones en tu respuesta de texto. Hazle una pregunta muy breve sobre cuál desea agendar]",
                 categoria: data.category.name,
                 sub_servicios: data.services.map(s => ({
                     id: s.id,
