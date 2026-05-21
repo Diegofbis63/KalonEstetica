@@ -7,11 +7,18 @@ import {
     updateLeadState 
 } from '../_services/db.js';
 
-export const chatbotTools = (leadId: string | null, currentState: any) => ({
+import { sql } from '../_services/db.js';
+import type { VercelResponse } from '@vercel/node';
+
+export const chatbotTools = (leadId: string | null, currentState: any, res: VercelResponse) => ({
     obtener_categorias_padre: tool({
-        description: 'Obtiene la lista de categorías principales de servicios (ej. Pestañas, Depilación, Masajes). Úsalo cuando el cliente pregunta qué hacen o para ofrecer opciones generales.',
+        description: 'Obtiene la lista de categorías principales de servicios (ej. Pestañas, Depilación, Masajes). Úsalo obligatoriamente al inicio para enviar el catálogo visual, o cuando el cliente pregunta qué hacen.',
         parameters: z.object({}),
         execute: async () => {
+            const configRows = await sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`.catch(() => []);
+            const mainImageUrl = configRows?.[0]?.value || 'https://ijltsqfshvunmngvbeue.supabase.co/storage/v1/object/public/kalon-services/CATALOGO%20KALON.png';
+            res.write(`data: ${JSON.stringify({ media_url: mainImageUrl })}\n\n`);
+            
             const cats = await getCategories();
             return {
                 mensaje: "Estas son las categorías principales disponibles",
@@ -21,11 +28,14 @@ export const chatbotTools = (leadId: string | null, currentState: any) => ({
     }),
     
     obtener_lista_precios_por_categoria: tool({
-        description: 'Obtiene los sub-servicios específicos, precios y duraciones de una categoría padre. Úsalo cuando el cliente ya eligió un área (ej. Depilación) y necesita saber precios de axilas, bozo, etc.',
+        description: 'Obtiene los sub-servicios específicos y envía la lista de precios visual (imagen) de una categoría padre. Úsalo SIEMPRE que el cliente elija un área (ej. Depilación) para mostrarle los precios.',
         parameters: z.object({
             categoria_id: z.string().describe('El ID de la categoría padre obtenida previamente.')
         }),
         execute: async ({ categoria_id }) => {
+            const catUrl = `/api/catalog-image?id=${categoria_id}`;
+            res.write(`data: ${JSON.stringify({ media_url: catUrl })}\n\n`);
+            
             const data = await getServicesByCategory(categoria_id);
             if (!data || !data.category) {
                 return { error: "Categoría no encontrada" };
