@@ -7,8 +7,6 @@ import {
     getAvailableSlotsFromDB, 
     updateLeadState 
 } from '../_services/db.js';
-import { generateMenuImage } from '../_services/imageGenerator.js';
-import { createClient } from '@supabase/supabase-js';
 import { matchServicesGreedily } from './utils.js';
 import { sql } from '../_services/db.js';
 import type { VercelResponse } from '@vercel/node';
@@ -85,42 +83,59 @@ export const chatbotTools = (leadId: string | null, currentState: any, res: Verc
                 };
             }
             
-            // 3. Calcular totales
+            // 3. Calcular totales (usando campo 'title' que es el campo correcto en Service)
             const total = matched.reduce((acc: number, s: any) => acc + (Number(s.price) || 0), 0);
             const duration = matched.reduce((acc: number, s: any) => acc + (s.duration_min || 0), 0);
             const sena = Math.round(total / 2);
             
-            // 4. Generar imagen de presupuesto con Satori
+            // 4. Generar imagen de presupuesto via /api/satori-image (aislado para no crashear este módulo)
             const budgetItems = [
-                ...matched.map((s: any) => ({ label: s.title || s.name, price: Number(s.price) || 0 })),
-                { label: '─────────────────────', price: '' as any },
+                ...matched.map((s: any) => ({ label: s.title, price: Number(s.price) || 0 })),
                 { label: 'TOTAL', price: total },
-                { label: `SEÑA REQUERIDA (50%)`, price: sena }
+                { label: 'SEÑA REQUERIDA (50%)', price: sena }
             ];
             
             let budgetImageUrl = '';
             
             try {
-                const imageBuffer = await generateMenuImage('TU PRESUPUESTO KÂLON', budgetItems);
+                const encoded = Buffer.from(JSON.stringify(budgetItems)).toString('base64');
+                const baseUrl = process.env.VERCEL_URL 
+                    ? `https://${process.env.VERCEL_URL}` 
+                    : (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000');
                 
-                if (imageBuffer && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-                    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-                    const fileName = `budget_${leadId || 'anon'}_${Date.now()}.png`;
-                    const { data, error } = await supabase.storage
-                        .from('kalon-services')
-                        .upload(`budgets/${fileName}`, imageBuffer, { contentType: 'image/png', upsert: true });
+                const satoriRes = await fetch(`${baseUrl}/api/satori-image`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: 'TU PRESUPUESTO KÂLON', data: encoded }),
+                    signal: AbortSignal.timeout(15000)
+                });
+                
+                if (satoriRes.ok) {
+                    const imageBuffer = Buffer.from(await satoriRes.arrayBuffer());
                     
-                    if (data && !error) {
-                        budgetImageUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/kalon-services/budgets/${fileName}`;
-                        // Enviar imagen via SSE al frontend
-                        res.write(`data: ${JSON.stringify({ media_url: budgetImageUrl })}\n\n`);
-                        console.log('[Tool] Budget image generated and sent:', budgetImageUrl);
-                    } else {
-                        console.warn('[Tool] Supabase upload failed:', error);
+                    // Subir a Supabase
+                    if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+                        const { createClient } = await import('@supabase/supabase-js');
+                        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+                        const fileName = `budget_${leadId || 'anon'}_${Date.now()}.png`;
+                        const { data, error } = await supabase.storage
+                            .from('kalon-services')
+                            .upload(`budgets/${fileName}`, imageBuffer, { contentType: 'image/png', upsert: true });
+                        
+                        if (data && !error) {
+                            budgetImageUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/kalon-services/budgets/${fileName}`;
+                            res.write(`data: ${JSON.stringify({ media_url: budgetImageUrl })}\n\n`);
+                            console.log('[Tool] Budget image generated and sent:', budgetImageUrl);
+                        } else {
+                            console.warn('[Tool] Supabase upload failed:', error);
+                        }
                     }
+                } else {
+                    console.warn('[Tool] satori-image endpoint returned:', satoriRes.status);
                 }
-            } catch (e) {
-                console.error('[Tool] Error generating budget image:', e);
+            } catch (e: any) {
+                console.error('[Tool] Error generating budget image:', e?.message || e);
+                // No re-throw — el presupuesto en texto es un fallback aceptable
             }
             
             // 5. Actualizar estado del lead
@@ -136,10 +151,10 @@ export const chatbotTools = (leadId: string | null, currentState: any, res: Verc
             }
             
             return {
-                mensaje: `[SISTEMA: ${budgetImageUrl ? 'El recibo visual con el presupuesto ya se envió al cliente.' : 'No se pudo generar la imagen del recibo, presentá el presupuesto en texto.'} La seña requerida es del 50% del total.]`,
+                mensaje: `[SISTEMA: ${budgetImageUrl ? 'El recibo visual con el presupuesto ya se envió al cliente.' : 'No se pudo generar la imagen del recibo, presentá el presupuesto en texto con los servicios, total y seña.'} La seña requerida es del 50% del total.]`,
                 servicios_encontrados: matched.map((s: any) => ({ 
                     id: s.id, 
-                    nombre: s.title || s.name, 
+                    nombre: s.title, 
                     precio: s.price,
                     duracion_minutos: s.duration_min 
                 })),
