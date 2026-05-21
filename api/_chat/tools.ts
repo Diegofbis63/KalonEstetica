@@ -2,11 +2,14 @@ import { tool } from 'ai';
 import { z } from 'zod';
 import { 
     getCategories, 
+    getActiveServices,
     getServicesByCategory, 
     getAvailableSlotsFromDB, 
     updateLeadState 
 } from '../_services/db.js';
-
+import { generateMenuImage } from '../_services/imageGenerator.js';
+import { createClient } from '@supabase/supabase-js';
+import { matchServicesGreedily } from './utils.js';
 import { sql } from '../_services/db.js';
 import type { VercelResponse } from '@vercel/node';
 
@@ -59,19 +62,91 @@ export const chatbotTools = (leadId: string | null, currentState: any, res: Verc
         }
     }),
 
-    calcular_presupuesto: tool({
-        description: 'Suma los precios de los sub-servicios seleccionados para darle al cliente un total final.',
+    generar_presupuesto: tool({
+        description: 'Busca en la base de datos los servicios específicos que el cliente solicitó, calcula el total y genera un recibo visual (imagen) con el presupuesto. Úsalo SIEMPRE que el cliente indique qué servicios quiere (ej. "tiro y lifting de pestañas"). NUNCA calcules precios de memoria, siempre buscá en la base de datos primero.',
         parameters: z.object({
-            nombres_servicios: z.array(z.string()).describe('Lista con los nombres exactos de los sub-servicios elegidos.'),
-            precios: z.array(z.number()).describe('Lista con los precios correspondientes a cada servicio elegidos.')
+            servicios_solicitados: z.array(z.string()).describe('Lista de nombres de los servicios que el cliente pidió, tal como los mencionó. Ej: ["tiro de pestañas", "lifting de pestañas"]')
         }),
-        execute: async ({ nombres_servicios, precios }) => {
-            const total = precios.reduce((a, b) => a + b, 0);
+        execute: async ({ servicios_solicitados }) => {
+            // 1. Traer todos los servicios activos de la base de datos
+            const [allServices, allCategories] = await Promise.all([
+                getActiveServices(),
+                getCategories()
+            ]);
+            
+            // 2. Hacer fuzzy matching para cada servicio solicitado
+            const queryText = servicios_solicitados.join(' ');
+            const matched = matchServicesGreedily(queryText, allServices, allCategories);
+            
+            if (!matched || matched.length === 0) {
+                return {
+                    error: 'No encontré esos servicios exactos en la base de datos.',
+                    mensaje_para_ia: 'No se encontraron servicios que coincidan. Pedile al cliente que elija de la lista de precios que ya le enviaste.'
+                };
+            }
+            
+            // 3. Calcular totales
+            const total = matched.reduce((acc: number, s: any) => acc + (Number(s.price) || 0), 0);
+            const duration = matched.reduce((acc: number, s: any) => acc + (s.duration_min || 0), 0);
+            const sena = Math.round(total / 2);
+            
+            // 4. Generar imagen de presupuesto con Satori
+            const budgetItems = [
+                ...matched.map((s: any) => ({ label: s.title || s.name, price: Number(s.price) || 0 })),
+                { label: '─────────────────────', price: '' as any },
+                { label: 'TOTAL', price: total },
+                { label: `SEÑA REQUERIDA (50%)`, price: sena }
+            ];
+            
+            let budgetImageUrl = '';
+            
+            try {
+                const imageBuffer = await generateMenuImage('TU PRESUPUESTO KÂLON', budgetItems);
+                
+                if (imageBuffer && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+                    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+                    const fileName = `budget_${leadId || 'anon'}_${Date.now()}.png`;
+                    const { data, error } = await supabase.storage
+                        .from('kalon-services')
+                        .upload(`budgets/${fileName}`, imageBuffer, { contentType: 'image/png', upsert: true });
+                    
+                    if (data && !error) {
+                        budgetImageUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/kalon-services/budgets/${fileName}`;
+                        // Enviar imagen via SSE al frontend
+                        res.write(`data: ${JSON.stringify({ media_url: budgetImageUrl })}\n\n`);
+                        console.log('[Tool] Budget image generated and sent:', budgetImageUrl);
+                    } else {
+                        console.warn('[Tool] Supabase upload failed:', error);
+                    }
+                }
+            } catch (e) {
+                console.error('[Tool] Error generating budget image:', e);
+            }
+            
+            // 5. Actualizar estado del lead
+            if (leadId) {
+                await updateLeadState(leadId, {
+                    ...currentState,
+                    selectedServiceIds: matched.map((s: any) => String(s.id)),
+                    totalPrice: total,
+                    totalDuration: duration,
+                    budgetImageUrl: budgetImageUrl || currentState.budgetImageUrl,
+                    stage: '4'
+                });
+            }
+            
             return {
-                servicios: nombres_servicios,
+                mensaje: `[SISTEMA: ${budgetImageUrl ? 'El recibo visual con el presupuesto ya se envió al cliente.' : 'No se pudo generar la imagen del recibo, presentá el presupuesto en texto.'} La seña requerida es del 50% del total.]`,
+                servicios_encontrados: matched.map((s: any) => ({ 
+                    id: s.id, 
+                    nombre: s.title || s.name, 
+                    precio: s.price,
+                    duracion_minutos: s.duration_min 
+                })),
                 total_pagar: total,
-                seña_requerida: total / 2,
-                mensaje: "Presupuesto calculado correctamente."
+                sena_requerida: sena,
+                duracion_total_minutos: duration,
+                imagen_enviada: !!budgetImageUrl
             };
         }
     }),
