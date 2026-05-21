@@ -104,6 +104,7 @@ export async function streamKalonChat({
 
         try {
           const parsed = JSON.parse(jsonStr);
+          if (parsed.error && onError) { onError(parsed.error); streamDone = true; break; }
           if (parsed.stage && onStage) onStage(parsed.stage);
           if (parsed.media_url && onMedia) onMedia(parsed.media_url);
           if (parsed.leadId && onIdUpdate) onIdUpdate(parsed.leadId);

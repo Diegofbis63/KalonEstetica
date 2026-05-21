@@ -67,8 +67,9 @@ export async function processChat(reqBody: any, res: VercelResponse) {
             content: m.content
         }));
 
-        const todayDate = new Date().toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Cordoba', year: 'numeric', month: '2-digit', day: '2-digit' });
-        const todayISO = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Cordoba' })).toISOString().split('T')[0];
+        // Fecha actual en zona horaria Argentina para pasarla al system prompt
+        const todayISO = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Cordoba' });
+        // Resultado: "2026-05-21" (en-CA usa YYYY-MM-DD nativo y confiable en Node.js)
 
         const result = streamText({
             model: openrouter('openai/gpt-4o-mini'),
