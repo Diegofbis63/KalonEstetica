@@ -21,6 +21,21 @@ export async function handleStage4(ctx: StageContext): Promise<{ assistantContex
         };
     }
 
+    // 1.5. Verificar si el cliente está confirmando un turno previamente ofrecido
+    const isConfirmation = /si|sí|dale|perfecto|ok|genial|agendame|reservame|confirm|avancemos/i.test(text);
+    const isSameTime = detected_time && currentState.appointmentTime && currentState.appointmentTime.startsWith(detected_time.substring(0, 2));
+
+    if (currentState.appointmentTime && currentState.appointmentDate && !classification.is_negation && (isConfirmation || isSameTime)) {
+        if (leadId) {
+            await updateLeadState(String(leadId), { ...currentState, stage: '5' });
+        }
+        return {
+            assistantContext: `SISTEMA: El cliente confirmó el horario ofrecido (${currentState.appointmentDate} a las ${currentState.appointmentTime}). Avanzamos a ETAPA 5.
+            TU MISION: Confirmá amablemente que el horario quedó pre-reservado. Pedile su número de celular/WhatsApp y una foto del comprobante de transferencia por el 50% de la seña para bloquear el lugar definitivamente.`,
+            nextStage: '5'
+        };
+    }
+
     // 2. Rango de Fechas (Argentina UTC-3)
     let startDate: Date;
     let endDate: Date;
