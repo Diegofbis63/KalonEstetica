@@ -16,6 +16,7 @@ export const chatbotTools = (leadId: string | null, currentState: any, res: Verc
         description: 'Obtiene la lista de categorías principales de servicios (ej. Pestañas, Depilación, Masajes). Úsalo obligatoriamente al inicio para enviar el catálogo visual, o cuando el cliente pregunta qué hacen.',
         parameters: z.object({}),
         execute: async () => {
+            console.log('[Tool] Executing obtener_categorias_padre');
             const configRows = await sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`.catch(() => []);
             const mainImageUrl = configRows?.[0]?.value || 'https://ijltsqfshvunmngvbeue.supabase.co/storage/v1/object/public/kalon-services/CATALOGO%20KALON.png';
             res.write(`data: ${JSON.stringify({ media_url: mainImageUrl })}\n\n`);
