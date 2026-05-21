@@ -152,34 +152,84 @@ export const chatbotTools = (leadId: string | null, currentState: any, res: Verc
     }),
 
     consultar_horarios_disponibles: tool({
-        description: 'Busca horarios reales disponibles en la agenda de los profesionales para una categoría específica y una fecha determinada.',
+        description: 'Busca horarios reales disponibles en la agenda de los profesionales para un servicio o categoría y una fecha determinada. Usalo cuando el cliente pregunte por disponibilidad o quiera elegir un horario.',
         parameters: z.object({
-            categoria_id: z.string().describe('El ID de la categoría (necesario para buscar al profesional correcto).'),
-            fecha: z.string().describe('Fecha en formato YYYY-MM-DD.'),
-            duracion_minutos: z.number().describe('Duración total estimada de los servicios elegidos en minutos.')
+            categoria_nombre: z.string().describe('El nombre del servicio o categoría elegida por el cliente (ej. "Pestañas", "laminado de cejas", "Depilación"). El sistema resolverá automáticamente la categoría correcta.'),
+            fecha: z.string().describe('Fecha en formato YYYY-MM-DD. Si el cliente dice "hoy", usá la fecha actual real. Si dice "mañana", calculá correctamente. Nunca inventes fechas.'),
+            duracion_minutos: z.number().optional().describe('Duración total estimada de los servicios elegidos en minutos. Si no la sabés exactamente, usá 60 como valor por defecto.')
         }),
-        execute: async ({ categoria_id, fecha, duracion_minutos }) => {
-            const startDate = new Date(`${fecha}T00:00:00-03:00`);
-            const endDate = new Date(`${fecha}T23:59:59-03:00`);
-            const slots = await getAvailableSlotsFromDB(categoria_id, startDate, endDate, duracion_minutos);
-            
-            if (!slots || slots.length === 0) {
-                return { mensaje: "No hay disponibilidad para esa fecha." };
-            }
+        execute: async ({ categoria_nombre, fecha, duracion_minutos = 60 }) => {
+            try {
+                // 1. Resolver la categoría padre por nombre usando fuzzy matching
+                const allCategories = await getCategories();
+                const normalized = categoria_nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                
+                // Buscar la categoría que mejor coincida
+                let resolvedCategoryId: string | null = null;
+                let resolvedCategoryName: string = categoria_nombre;
+                
+                for (const cat of allCategories) {
+                    const catNorm = cat.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    if (catNorm.includes(normalized) || normalized.includes(catNorm)) {
+                        resolvedCategoryId = cat.id;
+                        resolvedCategoryName = cat.name;
+                        break;
+                    }
+                }
+                
+                // Si no encontró por nombre de categoría, buscar por nombre de servicio
+                if (!resolvedCategoryId) {
+                    const data = await getServicesByCategory(categoria_nombre);
+                    if (data?.category) {
+                        resolvedCategoryId = data.category.id;
+                        resolvedCategoryName = data.category.name;
+                    }
+                }
+                
+                if (!resolvedCategoryId) {
+                    return { 
+                        mensaje: `No pude identificar la categoría para "${categoria_nombre}". Pedile al cliente que confirme qué servicio eligió.`,
+                        turnos_disponibles: []
+                    };
+                }
+                
+                console.log(`[Tool] Checking slots for category: ${resolvedCategoryName} (${resolvedCategoryId}), date: ${fecha}, duration: ${duracion_minutos}min`);
+                
+                // 2. Consultar slots disponibles con el UUID correcto
+                const startDate = new Date(`${fecha}T00:00:00-03:00`);
+                const endDate = new Date(`${fecha}T23:59:59-03:00`);
+                const slots = await getAvailableSlotsFromDB(resolvedCategoryId, startDate, endDate, duracion_minutos);
+                
+                if (!slots || slots.length === 0) {
+                    return { 
+                        mensaje: `No hay disponibilidad para ${resolvedCategoryName} el ${fecha}. Sugerí otra fecha o consultá si prefiere otro día.`,
+                        categoria_resuelta: resolvedCategoryName,
+                        turnos_disponibles: []
+                    };
+                }
 
-            const formatSlot = (s: any) => {
-                const d = new Date(s.slot_time);
-                return {
-                    hora: d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }),
-                    staff_id: s.staff_id,
-                    iso: s.slot_time
+                const formatSlot = (s: any) => {
+                    const d = new Date(s.slot_time);
+                    return {
+                        hora: d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }),
+                        staff_id: s.staff_id,
+                        iso: s.slot_time
+                    };
                 };
-            };
 
-            return {
-                mensaje: "Horarios disponibles encontrados",
-                turnos_disponibles: slots.map(formatSlot).slice(0, 10) // Retornar max 10 para no saturar contexto
-            };
+                return {
+                    mensaje: `Horarios disponibles para ${resolvedCategoryName} el ${fecha}`,
+                    categoria_resuelta: resolvedCategoryName,
+                    categoria_id: resolvedCategoryId,
+                    turnos_disponibles: slots.map(formatSlot).slice(0, 10)
+                };
+            } catch (err: any) {
+                console.error('[Tool] consultar_horarios_disponibles error:', err?.message || err);
+                return {
+                    mensaje: 'Hubo un error al consultar la agenda. Pedile al cliente que reintente.',
+                    turnos_disponibles: []
+                };
+            }
         }
     }),
 

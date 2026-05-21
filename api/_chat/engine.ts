@@ -67,9 +67,12 @@ export async function processChat(reqBody: any, res: VercelResponse) {
             content: m.content
         }));
 
+        const todayDate = new Date().toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Cordoba', year: 'numeric', month: '2-digit', day: '2-digit' });
+        const todayISO = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Cordoba' })).toISOString().split('T')[0];
+
         const result = streamText({
             model: openrouter('openai/gpt-4o-mini'),
-            system: getSystemPrompt(currentLeadName),
+            system: getSystemPrompt(currentLeadName, todayISO),
             messages: coreMessages,
             tools: chatbotTools(activeLeadId, currentState, res),
             maxSteps: 8, // Aumentado: permite múltiples tool calls (una por cada categoría mencionada + procesamiento)
@@ -98,12 +101,13 @@ export async function processChat(reqBody: any, res: VercelResponse) {
     }
 }
 
-function getSystemPrompt(name: string) {
+function getSystemPrompt(name: string, todayISO: string = new Date().toISOString().split('T')[0]) {
     return `## IDENTIDAD KÂLON
 Sos KÂLON, la asistente virtual de "KÂLON Multiespacio Estético".
 - **Tono:** Boutique, elegante, profesional pero muy cálida.
 - **Voseo Cordobés:** Usá "vení", "mirá", "querés", "contame".
 - **Cliente actual:** ${name !== 'cliente' ? name : 'No sabemos su nombre aún, pregúntalo sutilmente'}.
+- **Fecha actual (IMPORTANTE):** Hoy es ${todayISO} (formato YYYY-MM-DD). Cuando el cliente diga "hoy" usá exactamente esta fecha. Cuando diga "mañana" sumá 1 día a esta fecha.
 
 ## TU MISIÓN: CERRAR RESERVAS
 Sos una vendedora y recepcionista de élite. Tu objetivo es llevar al cliente desde la consulta inicial hasta la reserva del turno.
