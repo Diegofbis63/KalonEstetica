@@ -72,7 +72,7 @@ export async function processChat(reqBody: any, res: VercelResponse) {
         // Resultado: "2026-05-21" (en-CA usa YYYY-MM-DD nativo y confiable en Node.js)
 
         const result = streamText({
-            model: openrouter('openai/gpt-4o-mini'),
+            model: openrouter('google/gemini-2.0-flash-001'),
             system: getSystemPrompt(currentLeadName, todayISO),
             messages: coreMessages,
             tools: chatbotTools(activeLeadId, currentState, res),
