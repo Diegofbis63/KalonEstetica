@@ -71,6 +71,16 @@ export async function processChat(reqBody: any, res: VercelResponse) {
         const todayISO = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Cordoba' });
         // Resultado: "2026-05-21" (en-CA usa YYYY-MM-DD nativo y confiable en Node.js)
 
+        // GARANTÍA: Si es el primer mensaje del cliente, enviar catálogo proactivamente.
+        // Gemini 2.0 Flash a veces no llama la herramienta aunque el prompt lo indique.
+        // Esta solución es determinística: no dependemos de la IA para enviar la imagen inicial.
+        if (coreMessages.length === 1) {
+            const configRows = await sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`.catch(() => []);
+            const catalogUrl = (configRows as any)?.[0]?.value || 'https://ijltsqfshvunmngvbeue.supabase.co/storage/v1/object/public/kalon-services/CATALOGO%20KALON.png';
+            res.write(`data: ${JSON.stringify({ media_url: catalogUrl })}\n\n`);
+            console.log('[Engine] Catalog sent proactively on first message');
+        }
+
         const result = streamText({
             model: openrouter('google/gemini-2.0-flash-001'),
             system: getSystemPrompt(currentLeadName, todayISO),
