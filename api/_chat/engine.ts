@@ -1,7 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { streamText } from 'ai';
-import { sql, findLeadByInitId, updateLeadState, getActiveServices, getCategories } from '../_services/db.js';
-import { matchServicesGreedily } from './utils.js';
+import { sql, findLeadByInitId, updateLeadState } from '../_services/db.js';
 import type { ChatState } from './types.js';
 import type { VercelResponse } from '@vercel/node';
 import { chatbotTools } from './tools.js';
@@ -86,61 +85,10 @@ export async function processChat(reqBody: any, res: VercelResponse) {
             }
         });
 
-        // 6. Consumir el TextStream con detección de código Python como fallback
-        let accumulatedText = '';
-        let pythonFallback = false;
-
+        // 6. Consumir el TextStream y formatearlo para el frontend (Retrocompatibilidad SSE)
         for await (const chunk of result.textStream) {
-            if (!chunk) continue;
-            accumulatedText += chunk;
-
-            // Detectar si Gemini escribió Python en vez de llamar la herramienta
-            if (!pythonFallback && accumulatedText.includes('print(') && accumulatedText.includes('generar_presupuesto')) {
-                pythonFallback = true;
-                console.warn('[Engine] Python fallback detected - computing budget server-side');
-                continue; // No enviar el código Python al frontend
-            }
-
-            if (!pythonFallback) {
+            if (chunk) {
                 res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n\n`);
-            }
-        }
-
-        // Si Gemini escribió Python, calcular el presupuesto directamente en el servidor
-        if (pythonFallback) {
-            try {
-                // Extraer servicios del código Python con regex
-                const listMatch = accumulatedText.match(/servicios(?:_solicitados)?=\[([^\]]+)\]/);
-                const strMatch  = accumulatedText.match(/servicios=["']([^"']+)["']/);
-                let serviceText = '';
-                if (listMatch) {
-                    serviceText = listMatch[1].replace(/["']/g, '').split(',').map((s: string) => s.trim()).join(' ');
-                } else if (strMatch) {
-                    serviceText = strMatch[1];
-                }
-
-                if (serviceText) {
-                    const [allSvcs, allCats] = await Promise.all([getActiveServices(), getCategories()]);
-                    const matched = matchServicesGreedily(serviceText, allSvcs, allCats);
-
-                    if (matched && matched.length > 0) {
-                        const total = matched.reduce((acc: number, s: any) => acc + (Number(s.price) || 0), 0);
-                        const sena = Math.round(total / 2);
-                        const lines = matched.map((s: any) => `✨ ${s.title}: $${Number(s.price).toLocaleString('es-AR')}`).join('\n');
-                        const budgetText = `📋 Tu presupuesto KÂLON:\n${lines}\n\n💰 Total: $${total.toLocaleString('es-AR')}\n💳 Seña requerida (50%): $${sena.toLocaleString('es-AR')}\n\n¿Sumamos algo más o pasamos a elegir el turno? 📅`;
-                        if (activeLeadId) {
-                            await updateLeadState(activeLeadId, { ...currentState, selectedServiceIds: matched.map((s: any) => String(s.id)), totalPrice: total, stage: '4' });
-                        }
-                        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: budgetText } }] })}\n\n`);
-                    } else {
-                        const txt = 'No encontré esos servicios exactos. ¿Podés decirme cuál elegiste de las imágenes que te mandé?';
-                        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: txt } }] })}\n\n`);
-                    }
-                }
-            } catch (err: any) {
-                console.error('[Engine] Budget fallback error:', err?.message);
-                const txt = 'Hubo un error calculando el presupuesto. ¿Podés decirme de nuevo qué servicios querés?';
-                res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: txt } }] })}\n\n`);
             }
         }
 
@@ -169,7 +117,7 @@ Sos una vendedora y recepcionista de élite. Tu objetivo es llevar al cliente de
 1. **NO INVENTES NADA:** Tenés herramientas (Tools) para consultar la base de datos. Si te piden precios, USÁ LA HERRAMIENTA. Si te piden horarios, USÁ LA HERRAMIENTA.
 2. **ENVÍA EL CATÁLOGO VISUAL SIEMPRE (PROHIBIDO CATÁLOGO EN TEXTO):** Cuando el cliente se presenta (te da su nombre), tu PRIMERA ACCIÓN OBLIGATORIA debe ser llamar a la herramienta \`obtener_categorias_padre\`. Esto disparará automáticamente el catálogo maestro visual (imagen) al cliente. **ESTÁ TERMINANTEMENTE PROHIBIDO que enlistes, repitas o menciones las categorías en forma de lista o viñetas en tu respuesta de texto** (no escribas 'Depilación', 'Reiki', 'Facial', etc., en el texto). La imagen ya lo muestra todo de forma muy estética. Solo dale una bienvenida cálida, indícale amigablemente que arriba puede ver el catálogo en la imagen, y pregúntale muy brevemente qué área le gustaría explorar hoy.
 3. **MUESTRA LISTAS DE PRECIOS VISUALES (PROHIBIDO PRECIOS O SUB-SERVICIOS EN TEXTO):** Cuando el cliente elija una o más áreas (ej. "Depilación y Pestañas"), DEBES llamar a \`obtener_lista_precios_por_categoria\` UNA VEZ POR CADA CATEGORÍA MENCIONADA (dos llamadas si menciona dos, tres si menciona tres, etc). NUNCA respondas diciendo que ya enviaste las imágenes sin haber ejecutado la herramienta primero. **ESTÁ TERMINANTEMENTE PROHIBIDO volver a enlistar, nombrar o detallar los sub-servicios, precios o duraciones en tu respuesta de texto**, ya que satura la pantalla y la imagen ya los contiene. Solo hazle una pregunta súper breve y amigable sobre cuál de los servicios de las imágenes le gustaría realizarse.
-4. **GENERA PRESUPUESTO VISUAL OBLIGATORIO:** Cuando el cliente especifique los servicios que desea (ej. "tiro y lifting de pestañas", "depilación de piernas y cejas"), tu PRIMERA ACCIÓN OBLIGATORIA es llamar a la herramienta \`generar_presupuesto\` con los nombres de los servicios en el campo \`servicios\` (separados por coma). Esta herramienta buscará los servicios en la base de datos y calculará el total real y la seña del 50%. NUNCA calcules precios de memoria ni inventes montos. Después confirmá los servicios con calidez, mencioná el total y la seña, y preguntá: "¿Sumamos algo más o pasamos a elegir el turno?"
+4. **GENERA PRESUPUESTO VISUAL OBLIGATORIO:** Cuando el cliente especifique los servicios que desea (ej. "tiro y lifting de pestañas", "depilación de piernas y cejas"), tu PRIMERA ACCIÓN OBLIGATORIA es llamar a la herramienta \`generar_presupuesto\` pasando los nombres en el campo \`servicios\`. Esta herramienta buscará los servicios en la base de datos, calculará el total real y la seña del 50%. NUNCA calcules precios de memoria ni inventes montos. Después confirmá los servicios, mencioná el total y la seña requerida, y preguntá: "¿Sumamos algo más o pasamos a elegir el turno?"
 5. **NO ESCRIBAS CÓDIGO:** NUNCA escribas código Python ni \`print()\` en el chat. Cuando uses una herramienta, debes invocarla mediante el esquema JSON interno provisto, NO escribiendo la función en tu respuesta de texto.
 6. **NO ALUCINES:** Si la herramienta de horarios te dice que solo hay a las 10:00 y a las 15:00, NO OFREZCAS LAS 11:00.
 7. **PAGA SEÑA:** Todo turno requiere una seña del 50%. Cuando el cliente confirme un horario, debés usar la herramienta \`pre_reservar_turno\` y luego indicarle al cliente que pase una foto del comprobante de transferencia para confirmarlo.
