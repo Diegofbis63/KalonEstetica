@@ -62,19 +62,20 @@ export const chatbotTools = (leadId: string | null, currentState: any, res: Verc
     }),
 
     generar_presupuesto: tool({
-        description: 'Busca en la base de datos los servicios específicos que el cliente solicitó, calcula el total y genera un recibo visual (imagen) con el presupuesto. Úsalo SIEMPRE que el cliente indique qué servicios quiere (ej. "tiro y lifting de pestañas"). NUNCA calcules precios de memoria, siempre buscá en la base de datos primero.',
+        description: 'Calcula el presupuesto de los servicios elegidos por el cliente y lo presenta. Llamá esta herramienta SIEMPRE que el cliente mencione qué servicios quiere (ej: "quiero el cavado completo y laminado de cejas"). NUNCA calcules precios de memoria.',
         parameters: z.object({
-            servicios_solicitados: z.array(z.string()).describe('Lista de nombres de los servicios que el cliente pidió, tal como los mencionó. Ej: ["tiro de pestañas", "lifting de pestañas"]')
+            servicios: z.string().describe('Los servicios que pidió el cliente separados por coma. Escribilos tal como los mencionó. Ej: "cavado completo, laminado de cejas"')
         }),
-        execute: async ({ servicios_solicitados }) => {
+        execute: async ({ servicios }) => {
+            console.log('[Tool] Executing generar_presupuesto, servicios:', servicios);
             // 1. Traer todos los servicios activos de la base de datos
             const [allServices, allCategories] = await Promise.all([
                 getActiveServices(),
                 getCategories()
             ]);
             
-            // 2. Hacer fuzzy matching para cada servicio solicitado
-            const queryText = servicios_solicitados.join(' ');
+            // 2. Fuzzy matching — el campo es una sola string con comas
+            const queryText = servicios;
             const matched = matchServicesGreedily(queryText, allServices, allCategories);
             
             if (!matched || matched.length === 0) {
