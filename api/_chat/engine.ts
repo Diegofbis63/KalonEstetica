@@ -1,12 +1,15 @@
-import { openai } from '@ai-sdk/openai';
+import { createOpenAI } from '@ai-sdk/openai';
 import { streamText } from 'ai';
 import { sql, findLeadByInitId, updateLeadState } from '../_services/db.js';
 import type { ChatState } from './types.js';
 import type { VercelResponse } from '@vercel/node';
 import { chatbotTools } from './tools.js';
 
-// Usa el proveedor nativo de OpenAI (OPENAI_API_KEY en variables de entorno de Vercel)
-// Esto evita los problemas de compatibilidad de OpenRouter con tool calling + streaming
+// OpenRouter como proveedor unificado de IA
+const openrouter = createOpenAI({
+    baseURL: 'https://openrouter.ai/api/v1',
+    apiKey: process.env.OPENROUTER_API_KEY || '',
+});
 
 export async function processChat(reqBody: any, res: VercelResponse) {
     const { messages = [], leadId, identificationId, message, mediaUrl } = reqBody;
@@ -69,8 +72,18 @@ export async function processChat(reqBody: any, res: VercelResponse) {
         const todayISO = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Cordoba' });
         // Resultado: "2026-05-21" (en-CA usa YYYY-MM-DD nativo y confiable en Node.js)
 
+        // GARANTÍA CATÁLOGO: Enviar imagen del catálogo ANTES de llamar a Gemini.
+        // Gemini es no-determinístico con tool calling, esto garantiza que el catálogo
+        // siempre llegue al cliente independientemente de si Gemini llama la herramienta.
+        if (coreMessages.length === 1) {
+            const configRows = await sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`.catch(() => []);
+            const catalogUrl = (configRows as any)?.[0]?.value || 'https://ijltsqfshvunmngvbeue.supabase.co/storage/v1/object/public/kalon-services/CATALOGO%20KALON.png';
+            res.write(`data: ${JSON.stringify({ media_url: catalogUrl })}\n\n`);
+            console.log('[Engine] Catalog proactively sent:', catalogUrl.slice(-30));
+        }
+
         const result = streamText({
-            model: openai('gpt-4o-mini'),
+            model: openrouter('google/gemini-2.0-flash-001'),
             system: getSystemPrompt(currentLeadName, todayISO),
             messages: coreMessages,
             tools: chatbotTools(activeLeadId, currentState, res),

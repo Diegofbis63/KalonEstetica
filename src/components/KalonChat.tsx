@@ -53,6 +53,7 @@ export default function KalonChat() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const pendingMediaUrls = useRef<string[]>([]);
 
   // Auto-scroll
   useEffect(() => {
@@ -96,17 +97,28 @@ export default function KalonChat() {
 
     const upsertAssistant = (chunk: string) => {
       assistantSoFar += chunk;
+      // Consume any pending media URLs (from proactive catalog send or mid-stream tool calls)
+      const urlsToAttach = [...pendingMediaUrls.current];
+      pendingMediaUrls.current = [];
       setMessages((prev) => {
         const lastIdx = prev.length - 1;
         if (lastIdx >= 0 && prev[lastIdx].role === "assistant") {
           const newMessages = [...prev];
+          const existingUrls = newMessages[lastIdx].media_urls || (newMessages[lastIdx].media_url ? [newMessages[lastIdx].media_url!] : []);
+          const newUrls = urlsToAttach.filter(u => !existingUrls.includes(u));
+          const allUrls = [...existingUrls, ...newUrls];
           newMessages[lastIdx] = { 
             ...newMessages[lastIdx], 
-            content: assistantSoFar 
+            content: assistantSoFar,
+            ...(allUrls.length > 0 ? { media_urls: allUrls, media_url: allUrls[allUrls.length - 1] } : {})
           };
           return newMessages;
         }
-        return [...prev, { role: "assistant", content: assistantSoFar }];
+        return [...prev, { 
+          role: "assistant", 
+          content: assistantSoFar,
+          ...(urlsToAttach.length > 0 ? { media_urls: urlsToAttach, media_url: urlsToAttach[urlsToAttach.length - 1] } : {})
+        }];
       });
     };
 
@@ -125,19 +137,25 @@ export default function KalonChat() {
         sessionStorage.setItem('kalon_lead_id', newId);
       },
       onStage: (s) => setCurrentStage(s),
-      onMedia: (url) => setMessages(prev => {
-        const last = prev[prev.length - 1];
-        if (last && last.role === 'assistant') {
-          const currentUrls = last.media_urls || (last.media_url ? [last.media_url] : []);
-          if (!currentUrls.includes(url)) {
-            return prev.map((m, idx) => 
-              idx === prev.length - 1 ? { ...m, media_urls: [...currentUrls, url], media_url: url } : m
-            );
+      onMedia: (url) => {
+        // Store URL in ref — will be consumed by the next upsertAssistant call
+        if (!pendingMediaUrls.current.includes(url)) {
+          pendingMediaUrls.current.push(url);
+        }
+        // Also try to attach immediately if there's already an assistant message
+        setMessages(prev => {
+          const last = prev[prev.length - 1];
+          if (last && last.role === 'assistant') {
+            const currentUrls = last.media_urls || (last.media_url ? [last.media_url] : []);
+            if (!currentUrls.includes(url)) {
+              return prev.map((m, idx) => 
+                idx === prev.length - 1 ? { ...m, media_urls: [...currentUrls, url], media_url: url } : m
+              );
+            }
           }
           return prev;
-        }
-        return [...prev, { role: 'assistant', content: '', media_urls: [url], media_url: url }];
-      }),
+        });
+      },
       onDone: () => setIsLoading(false),
       onError: (err) => {
         setError(err);
