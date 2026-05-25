@@ -1,18 +1,16 @@
-import { createOpenAI } from '@ai-sdk/openai';
+import { openai } from '@ai-sdk/openai';
 import { streamText } from 'ai';
 import { sql, findLeadByInitId, updateLeadState } from '../_services/db.js';
 import type { ChatState } from './types.js';
 import type { VercelResponse } from '@vercel/node';
 import { chatbotTools } from './tools.js';
 
-// Configuración de OpenRouter para usar Gemini 2.0 Flash a través del SDK de Vercel AI
-const openrouter = createOpenAI({
-    baseURL: 'https://openrouter.ai/api/v1',
-    apiKey: process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY || 'sk-or-dummy',
-});
+// Usa el proveedor nativo de OpenAI (OPENAI_API_KEY en variables de entorno de Vercel)
+// Esto evita los problemas de compatibilidad de OpenRouter con tool calling + streaming
 
 export async function processChat(reqBody: any, res: VercelResponse) {
     const { messages = [], leadId, identificationId, message, mediaUrl } = reqBody;
+    console.log('[Engine] processChat start. OPENAI_API_KEY set:', !!process.env.OPENAI_API_KEY, '| identificationId:', identificationId?.slice(0, 8));
     
     // 1. Iniciar Stream SSE de inmediato
     if (!res.headersSent) {
@@ -72,7 +70,7 @@ export async function processChat(reqBody: any, res: VercelResponse) {
         // Resultado: "2026-05-21" (en-CA usa YYYY-MM-DD nativo y confiable en Node.js)
 
         const result = streamText({
-            model: openrouter('openai/gpt-4o-mini'),
+            model: openai('gpt-4o-mini'),
             system: getSystemPrompt(currentLeadName, todayISO),
             messages: coreMessages,
             tools: chatbotTools(activeLeadId, currentState, res),
