@@ -100,21 +100,12 @@ export const chatbotTools = (leadId: string | null, currentState: any, res: Verc
             let budgetImageUrl = '';
             
             try {
-                const encoded = Buffer.from(JSON.stringify(budgetItems)).toString('base64');
-                const baseUrl = process.env.VERCEL_URL 
-                    ? `https://${process.env.VERCEL_URL}` 
-                    : (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000');
+                console.log('[Tool] Generating budget image locally...');
+                const { generateMenuImage } = await import('../_services/imageGenerator.js');
+                const imageBuffer = await generateMenuImage('TU PRESUPUESTO KÂLON', budgetItems);
                 
-                const satoriRes = await fetch(`${baseUrl}/api/satori-image`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ title: 'TU PRESUPUESTO KÂLON', data: encoded }),
-                    signal: AbortSignal.timeout(15000)
-                });
-                
-                if (satoriRes.ok) {
-                    const imageBuffer = Buffer.from(await satoriRes.arrayBuffer());
-                    
+                if (imageBuffer) {
+                    console.log('[Tool] Budget image generated locally, uploading to Supabase...');
                     // Subir a Supabase
                     if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
                         const { createClient } = await import('@supabase/supabase-js');
@@ -133,10 +124,10 @@ export const chatbotTools = (leadId: string | null, currentState: any, res: Verc
                         }
                     }
                 } else {
-                    console.warn('[Tool] satori-image endpoint returned:', satoriRes.status);
+                    console.warn('[Tool] Local image generator returned null');
                 }
             } catch (e: any) {
-                console.error('[Tool] Error generating budget image:', e?.message || e);
+                console.error('[Tool] Error generating budget image locally:', e?.message || e);
                 // No re-throw — el presupuesto en texto es un fallback aceptable
             }
             
