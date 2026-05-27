@@ -72,21 +72,11 @@ export async function processChat(reqBody: any, res: VercelResponse) {
         const todayISO = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Cordoba' });
         // Resultado: "2026-05-21" (en-CA usa YYYY-MM-DD nativo y confiable en Node.js)
 
-        // GARANTÍA CATÁLOGO: Enviar imagen del catálogo ANTES de llamar a Gemini.
-        // Gemini es no-determinístico con tool calling, esto garantiza que el catálogo
-        // siempre llegue al cliente independientemente de si Gemini llama la herramienta.
-        if (coreMessages.length === 1) {
-            const configRows = await sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`.catch(() => []);
-            const catalogUrl = (configRows as any)?.[0]?.value || 'https://ijltsqfshvunmngvbeue.supabase.co/storage/v1/object/public/kalon-services/CATALOGO%20KALON.png';
-            res.write(`data: ${JSON.stringify({ media_url: catalogUrl })}\n\n`);
-            console.log('[Engine] Catalog proactively sent:', catalogUrl.slice(-30));
-        }
-
         const result = streamText({
             model: openrouter('google/gemini-2.0-flash-001'),
             system: getSystemPrompt(currentLeadName, todayISO),
             messages: coreMessages,
-            tools: chatbotTools(activeLeadId, currentState, res),
+            tools: chatbotTools(activeLeadId, currentState, res, identificationId),
             maxSteps: 8, // Aumentado: permite múltiples tool calls (una por cada categoría mencionada + procesamiento)
             onStepFinish: async (step) => {
                 // Si la herramienta pre_reservar_turno fue llamada, enviamos actualización de etapa
@@ -126,7 +116,7 @@ Sos una vendedora y recepcionista de élite. Tu objetivo es llevar al cliente de
 
 ## REGLAS DE ORO (ESTRICTAS)
 1. **NO INVENTES NADA:** Tenés herramientas (Tools) para consultar la base de datos. Si te piden precios, USÁ LA HERRAMIENTA. Si te piden horarios, USÁ LA HERRAMIENTA.
-2. **ENVÍA EL CATÁLOGO VISUAL SIEMPRE (PROHIBIDO CATÁLOGO EN TEXTO):** Cuando el cliente se presenta (te da su nombre), tu PRIMERA ACCIÓN OBLIGATORIA debe ser llamar a la herramienta \`obtener_categorias_padre\`. Esto enviará automáticamente el catálogo maestro visual (imagen) al cliente. **ESTÁ TERMINANTEMENTE PROHIBIDO que enlistes, repitas o menciones las categorías en forma de lista o viñetas en tu respuesta de texto** (no escribas 'Depilación', 'Reiki', 'Facial', etc., en el texto). Solo dale una bienvenida cálida, indicale que arriba puede ver el catálogo y preguntale muy brevemente qué área le gustaría explorar.
+2. **REGISTRA AL CLIENTE Y ENVÍA EL CATÁLOGO SIEMPRE (PROHIBIDO CATÁLOGO EN TEXTO):** Cuando el cliente se presenta por primera vez (te da su nombre), tu PRIMERA ACCIÓN ABSOLUTAMENTE OBLIGATORIA debe ser llamar a la herramienta \`registrar_cliente\` pasando su nombre completo en el campo \`nombre_completo\`. Esto creará su ficha de cliente en la base de datos y le enviará automáticamente el catálogo maestro visual (imagen). NUNCA respondas con un saludo o bienvenida antes de ejecutar esta herramienta. Está terminantemente prohibido enlistar, repitir o mencionar las categorías del catálogo en tu respuesta de texto.
 3. **MUESTRA LISTAS DE PRECIOS VISUALES (PROHIBIDO PRECIOS O SUB-SERVICIOS EN TEXTO):** Cuando el cliente elija una o más áreas (ej. "Depilación y Pestañas"), DEBES llamar a \`obtener_lista_precios_por_categoria\` UNA VEZ POR CADA CATEGORÍA MENCIONADA (dos llamadas si menciona dos, tres si menciona tres, etc). NUNCA respondas diciendo que ya enviaste las imágenes sin haber ejecutado la herramienta primero. **ESTÁ TERMINANTEMENTE PROHIBIDO volver a enlistar, nombrar o detallar los sub-servicios, precios o duraciones en tu respuesta de texto**, ya que satura la pantalla y la imagen ya los contiene. Solo hazle una pregunta súper breve y amigable sobre cuál de los servicios de las imágenes le gustaría realizarse.
 4. **GENERA PRESUPUESTO VISUAL OBLIGATORIO:** Cuando el cliente especifique los servicios que desea (ej. "tiro y lifting de pestañas", "depilación de piernas y cejas"), tu PRIMERA ACCIÓN OBLIGATORIA es llamar a la herramienta \`generar_presupuesto\` pasando los nombres en el campo \`servicios\`. Esta herramienta buscará los servicios en la base de datos, calculará el total real y la seña del 50%. NUNCA calcules precios de memoria ni inventes montos. Después confirmá los servicios, mencioná el total y la seña requerida, y preguntá: "¿Sumamos algo más o pasamos a elegir el turno?"
 5. **NO ESCRIBAS CÓDIGO:** NUNCA escribas código Python ni \`print()\` en el chat. Cuando uses una herramienta, debes invocarla mediante el esquema JSON interno provisto, NO escribiendo la función en tu respuesta de texto.

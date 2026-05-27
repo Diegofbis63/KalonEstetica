@@ -5,13 +5,57 @@ import {
     getActiveServices,
     getServicesByCategory, 
     getAvailableSlotsFromDB, 
-    updateLeadState 
+    updateLeadState,
+    createLead
 } from '../_services/db.js';
 import { matchServicesGreedily } from './utils.js';
 import { sql } from '../_services/db.js';
 import type { VercelResponse } from '@vercel/node';
 
-export const chatbotTools = (leadId: string | null, currentState: any, res: VercelResponse) => ({
+export const chatbotTools = (leadId: string | null, currentState: any, res: VercelResponse, identificationId?: string | null) => ({
+    registrar_cliente: tool({
+        description: 'ETAPA 1 (REGISTRO): Registra al cliente con su nombre y apellido en la base de datos y envía el catálogo principal. Llamá esta herramienta obligatoriamente como tu primera acción cuando el cliente te diga su nombre por primera vez.',
+        parameters: z.object({
+            nombre_completo: z.string().describe('El nombre y apellido completo del cliente. Capitalizá las primeras letras. Ej: "Selena Ortega"')
+        }),
+        execute: async ({ nombre_completo }) => {
+            console.log('[Tool] Executing registrar_cliente:', nombre_completo);
+            try {
+                // 1. Crear el lead en la base de datos
+                const tempPhone = `anon_${identificationId || Date.now()}`;
+                const newLead = await createLead(null, nombre_completo, { 
+                    phone: tempPhone, 
+                    source: "chatbot", 
+                    initId: identificationId || null 
+                }) as any;
+                
+                const newLeadId = newLead?.id || `temp_${Date.now()}`;
+                
+                // 2. Enviar ID de lead inmediatamente al frontend
+                res.write(`data: ${JSON.stringify({ leadId: newLeadId })}\n\n`);
+                
+                // 3. Enviar imagen del catálogo principal
+                const configRows = await sql`SELECT value FROM business_config WHERE key = 'MAIN_CATALOG_IMAGE_URL' LIMIT 1`.catch(() => []);
+                const catalogUrl = (configRows as any)?.[0]?.value || 'https://ijltsqfshvunmngvbeue.supabase.co/storage/v1/object/public/kalon-services/CATALOGO%20KALON.png';
+                res.write(`data: ${JSON.stringify({ media_url: catalogUrl })}\n\n`);
+                
+                console.log('[Tool] Registered lead:', newLeadId, 'and sent catalog image.');
+                
+                return {
+                    success: true,
+                    leadId: newLeadId,
+                    mensaje: `[SISTEMA: El cliente ha sido registrado con éxito en la base de datos con el ID ${newLeadId} y la imagen del catálogo ya fue enviada visualmente. Dale una bienvenida muy cálida por su nombre y pregúntale brevemente qué área o tratamiento le gustaría explorar hoy. Está TERMINANTEMENTE PROHIBIDO listar las categorías principales en texto.]`
+                };
+            } catch (err: any) {
+                console.error('[Tool] Error in registrar_cliente:', err?.message || err);
+                return {
+                    success: false,
+                    error: 'No se pudo registrar el cliente en la base de datos.'
+                };
+            }
+        }
+    }),
+
     obtener_categorias_padre: tool({
         description: 'Obtiene la lista de categorías principales de servicios (ej. Pestañas, Depilación, Masajes). Úsalo obligatoriamente al inicio para enviar el catálogo visual, o cuando el cliente pregunta qué hacen.',
         parameters: z.object({}),
