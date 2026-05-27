@@ -1,9 +1,10 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { streamText } from 'ai';
-import { sql, findLeadByInitId, updateLeadState } from '../_services/db.js';
+import { sql, findLeadByInitId, updateLeadState, getCategories, getActiveServices, getServicesByCategory } from '../_services/db.js';
 import type { ChatState } from './types.js';
 import type { VercelResponse } from '@vercel/node';
 import { chatbotTools } from './tools.js';
+import { detectCategories } from './utils.js';
 
 // OpenRouter como proveedor unificado de IA
 const openrouter = createOpenAI({
@@ -13,7 +14,7 @@ const openrouter = createOpenAI({
 
 export async function processChat(reqBody: any, res: VercelResponse) {
     const { messages = [], leadId, identificationId, message, mediaUrl } = reqBody;
-    console.log('[Engine] processChat start. OPENAI_API_KEY set:', !!process.env.OPENAI_API_KEY, '| identificationId:', identificationId?.slice(0, 8));
+    console.log('[Engine] processChat start. identificationId:', identificationId?.slice(0, 8));
     
     // 1. Iniciar Stream SSE de inmediato
     if (!res.headersSent) {
@@ -24,7 +25,7 @@ export async function processChat(reqBody: any, res: VercelResponse) {
     }
 
     try {
-        // 2. Identificación robusta del Lead (Mantenido por retrocompatibilidad y seguridad)
+        // 2. Identificación robusta del Lead
         let leadToUse = null;
         if (leadId) {
             const rows = await sql`SELECT * FROM leads WHERE id = ${leadId} LIMIT 1`.catch(() => []);
@@ -46,7 +47,6 @@ export async function processChat(reqBody: any, res: VercelResponse) {
         }
 
         // 4. Lógica de Pago por Comprobante (Etapa 5)
-        // Mantenemos este pequeño interceptor porque manejar archivos adjuntos en el LLM es más complejo.
         if (mediaUrl) {
             if (activeLeadId) {
                 await updateLeadState(activeLeadId, { ...currentState, stage: '6' });
@@ -59,34 +59,89 @@ export async function processChat(reqBody: any, res: VercelResponse) {
             return;
         }
 
-        // 5. ORQUESTACIÓN AGENTICA (Vercel AI SDK + Tools)
+        // 5. INTERCEPTOR PROGRAMÁTICO DE CATEGORÍAS
+        // Si el usuario menciona una o más categorías, enviamos las imágenes ANTES del LLM
+        // para garantizar que siempre lleguen, independientemente de si el modelo llama la tool.
+        const lastUserMessage = message || (messages.length > 0 ? messages[messages.length - 1]?.content : '');
+        let categoryInterceptionNote = ''; // nota que se inyectará en el system prompt
+        
+        // Solo interceptamos si parece una selección de categoría y no es el primer mensaje (registro)
+        // El stage '1' es registro, donde el lead aún no existe. Solo interceptamos en etapas posteriores.
+        const isLikelyCategorySelection = lastUserMessage && lastUserMessage.length > 2;
+        const isNotRegistrationStage = currentState.stage !== '1' || !!activeLeadId;
+        
+        if (isLikelyCategorySelection && isNotRegistrationStage) {
+            try {
+                const [allCategories, allServices] = await Promise.all([
+                    getCategories(),
+                    getActiveServices()
+                ]);
+                
+                const detectedCats = detectCategories(lastUserMessage, allCategories, allServices);
+                
+                if (detectedCats.length > 0) {
+                    console.log(`[Engine] INTERCEPTOR: Detected ${detectedCats.length} categories in user message:`, detectedCats.map(c => c.name));
+                    
+                    const sentCategoryNames: string[] = [];
+                    
+                    for (const cat of detectedCats) {
+                        // Construir URL de imagen de catálogo. 
+                        // Primero intentamos price_list_url directo de la categoría,
+                        // luego fallback a la URL dinámica de nuestro endpoint.
+                        const imageUrl = cat.price_list_url || `/api/catalog-image?id=${cat.id}`;
+                        res.write(`data: ${JSON.stringify({ media_url: imageUrl })}\n\n`);
+                        sentCategoryNames.push(cat.name);
+                        console.log(`[Engine] INTERCEPTOR: Sent image for category "${cat.name}" -> ${imageUrl}`);
+                    }
+                    
+                    // Actualizar estado del lead con las categorías detectadas
+                    if (activeLeadId && detectedCats.length > 0) {
+                        const firstCat = detectedCats[0];
+                        const pendingIds = detectedCats.slice(1).map(c => c.id);
+                        await updateLeadState(activeLeadId, {
+                            ...currentState,
+                            stage: '3',
+                            currentCategoryId: firstCat.id,
+                            pendingCategoryIds: pendingIds,
+                        }).catch(e => console.warn('[Engine] INTERCEPTOR: updateLeadState failed:', e?.message));
+                    }
+                    
+                    // Construir nota para el system prompt
+                    const catNamesStr = sentCategoryNames.join(' y ');
+                    categoryInterceptionNote = `\n\n## ⚡ ACCIÓN AUTOMÁTICA YA EJECUTADA ⚡\n[SISTEMA: Las imágenes de lista de precios de ${catNamesStr} YA FUERON ENVIADAS AUTOMÁTICAMENTE al cliente ANTES de que respondas. ABSOLUTAMENTE PROHIBIDO usar la herramienta obtener_lista_precios_por_categoria para esas categorías. ABSOLUTAMENTE PROHIBIDO listar sub-servicios, precios o duraciones en texto. SOLO hacé una pregunta súper breve y amigable preguntándole cuál de los servicios de las imágenes le gustaría realizarse.]`;
+                }
+            } catch (interceptorErr: any) {
+                console.warn('[Engine] INTERCEPTOR: Category detection failed (non-critical):', interceptorErr?.message);
+                // No re-throw: el LLM sigue como fallback
+            }
+        }
+
+        // 6. ORQUESTACIÓN AGÉNTICA (Vercel AI SDK + Tools)
         const currentLeadName = (leadToUse as any)?.client_name || currentState.clientName || 'cliente';
         
-        // Formatear mensajes para el AI SDK (asegurar que solo tengan role y content válidos)
+        // Formatear mensajes para el AI SDK
         const coreMessages = messages.map((m: any) => ({
             role: m.role,
             content: m.content
         }));
 
-        // Fecha actual en zona horaria Argentina para pasarla al system prompt
+        // Fecha actual en zona horaria Argentina
         const todayISO = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Cordoba' });
-        // Resultado: "2026-05-21" (en-CA usa YYYY-MM-DD nativo y confiable en Node.js)
 
         const result = streamText({
             model: openrouter('google/gemini-2.0-flash-001'),
-            system: getSystemPrompt(currentLeadName, todayISO),
+            system: getSystemPrompt(currentLeadName, todayISO) + categoryInterceptionNote,
             messages: coreMessages,
             tools: chatbotTools(activeLeadId, currentState, res, identificationId),
-            maxSteps: 8, // Aumentado: permite múltiples tool calls (una por cada categoría mencionada + procesamiento)
+            maxSteps: 8,
             onStepFinish: async (step) => {
-                // Si la herramienta pre_reservar_turno fue llamada, enviamos actualización de etapa
                 if (step.toolCalls.some(tc => tc.toolName === 'pre_reservar_turno')) {
                     res.write(`data: ${JSON.stringify({ stage: '5' })}\n\n`);
                 }
             }
         });
 
-        // 6. Consumir el TextStream y formatearlo para el frontend (Retrocompatibilidad SSE)
+        // 7. Consumir el TextStream y formatearlo para el frontend (SSE)
         for await (const chunk of result.textStream) {
             if (chunk) {
                 res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n\n`);
@@ -117,7 +172,7 @@ Sos una vendedora y recepcionista de élite. Tu objetivo es llevar al cliente de
 ## REGLAS DE ORO (ESTRICTAS)
 1. **NO INVENTES NADA:** Tenés herramientas (Tools) para consultar la base de datos. Si te piden precios, USÁ LA HERRAMIENTA. Si te piden horarios, USÁ LA HERRAMIENTA.
 2. **REGISTRA AL CLIENTE Y ENVÍA EL CATÁLOGO SIEMPRE (PROHIBIDO CATÁLOGO EN TEXTO):** Cuando el cliente se presenta por primera vez (te da su nombre), tu PRIMERA ACCIÓN ABSOLUTAMENTE OBLIGATORIA debe ser llamar a la herramienta \`registrar_cliente\` pasando su nombre completo en el campo \`nombre_completo\`. Esto creará su ficha de cliente en la base de datos y le enviará automáticamente el catálogo maestro visual (imagen). NUNCA respondas con un saludo o bienvenida antes de ejecutar esta herramienta. Está terminantemente prohibido enlistar, repitir o mencionar las categorías del catálogo en tu respuesta de texto.
-3. **MUESTRA LISTAS DE PRECIOS VISUALES (PROHIBIDO PRECIOS O SUB-SERVICIOS EN TEXTO):** Cuando el cliente elija una o más áreas (ej. "Depilación y Pestañas"), DEBES llamar a \`obtener_lista_precios_por_categoria\` UNA VEZ POR CADA CATEGORÍA MENCIONADA (dos llamadas si menciona dos, tres si menciona tres, etc). NUNCA respondas diciendo que ya enviaste las imágenes sin haber ejecutado la herramienta primero. **ESTÁ TERMINANTEMENTE PROHIBIDO volver a enlistar, nombrar o detallar los sub-servicios, precios o duraciones en tu respuesta de texto**, ya que satura la pantalla y la imagen ya los contiene. Solo hazle una pregunta súper breve y amigable sobre cuál de los servicios de las imágenes le gustaría realizarse.
+3. **MUESTRA LISTAS DE PRECIOS VISUALES (PROHIBIDO PRECIOS O SUB-SERVICIOS EN TEXTO):** Cuando el cliente elija una o más áreas (ej. "Depilación y Pestañas"), el sistema ya habrá enviado las imágenes automáticamente. Si por alguna razón no se enviaron aún, llamá a \`obtener_lista_precios_por_categoria\` UNA VEZ POR CADA CATEGORÍA. **ESTÁ TERMINANTEMENTE PROHIBIDO enlistar, nombrar o detallar los sub-servicios, precios o duraciones en texto.** Solo hacé una pregunta súper breve y amigable sobre cuál de los servicios de las imágenes le gustaría realizarse.
 4. **GENERA PRESUPUESTO VISUAL OBLIGATORIO:** Cuando el cliente especifique los servicios que desea (ej. "tiro y lifting de pestañas", "depilación de piernas y cejas"), tu PRIMERA ACCIÓN OBLIGATORIA es llamar a la herramienta \`generar_presupuesto\` pasando los nombres en el campo \`servicios\`. Esta herramienta buscará los servicios en la base de datos, calculará el total real y la seña del 50%. NUNCA calcules precios de memoria ni inventes montos. Después confirmá los servicios, mencioná el total y la seña requerida, y preguntá: "¿Sumamos algo más o pasamos a elegir el turno?"
 5. **NO ESCRIBAS CÓDIGO:** NUNCA escribas código Python ni \`print()\` en el chat. Cuando uses una herramienta, debes invocarla mediante el esquema JSON interno provisto, NO escribiendo la función en tu respuesta de texto.
 6. **NO ALUCINES:** Si la herramienta de horarios te dice que solo hay a las 10:00 y a las 15:00, NO OFREZCAS LAS 11:00.
