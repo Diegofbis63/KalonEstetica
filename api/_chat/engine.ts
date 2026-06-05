@@ -65,12 +65,17 @@ export async function processChat(reqBody: any, res: VercelResponse) {
         const lastUserMessage = message || (messages.length > 0 ? messages[messages.length - 1]?.content : '');
         let categoryInterceptionNote = ''; // nota que se inyectará en el system prompt
         
-        // Solo interceptamos si parece una selección de categoría y no es el primer mensaje (registro)
-        // El stage '1' es registro, donde el lead aún no existe. Solo interceptamos en etapas posteriores.
+        // Solo interceptamos si parece una selección de categoría y estamos en stage 2.
+        // En stage 3+, el usuario ya eligió las categorías y está seleccionando sub-servicios
+        // específicos para el presupuesto → NO re-enviamos catálogos, dejamos que el LLM
+        // llame a generar_presupuesto directamente.
         const isLikelyCategorySelection = lastUserMessage && lastUserMessage.length > 2;
-        const isNotRegistrationStage = currentState.stage !== '1' || !!activeLeadId;
+        const currentStage = currentState.stage || '1';
+        // El interceptor solo aplica en stage 2 (selección de categoría padre).
+        // Si el lead no tiene stage aún (primer mensaje con nombre), también aplica.
+        const isCategorySelectionStage = currentStage === '2' || (!activeLeadId && currentStage === '1');
         
-        if (isLikelyCategorySelection && isNotRegistrationStage) {
+        if (isLikelyCategorySelection && isCategorySelectionStage) {
             try {
                 const [allCategories, allServices] = await Promise.all([
                     getCategories(),
