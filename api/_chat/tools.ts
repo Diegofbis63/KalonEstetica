@@ -96,7 +96,7 @@ export const chatbotTools = (leadId: string | null, currentState: any, res: Verc
                 categoria_id_real: realCategoryId,
                 sub_servicios: data.services.map(s => ({
                     id: s.id,
-                    nombre: s.name,
+                    nombre: s.title,
                     precio: s.price,
                     duracion: s.duration,
                     descripcion: s.description
