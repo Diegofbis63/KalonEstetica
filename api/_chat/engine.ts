@@ -129,7 +129,7 @@ export async function processChat(reqBody: any, res: VercelResponse) {
         const todayISO = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Cordoba' });
 
         const result = streamText({
-            model: openrouter('google/gemini-2.0-flash-001'),
+            model: openrouter('google/gemini-2.5-flash'),
             system: getSystemPrompt(currentLeadName, todayISO) + categoryInterceptionNote,
             messages: coreMessages,
             tools: chatbotTools(activeLeadId, currentState, res, identificationId),

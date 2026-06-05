@@ -17,7 +17,7 @@ async function main() {
     console.log("=== TEST con maxTokens: 2048 ===\n");
     try {
         const result = streamText({
-            model: openrouter('google/gemini-2.0-flash-001'),
+            model: openrouter('google/gemini-2.5-flash'),
             messages: [{ role: 'user', content: 'Hola, soy Maria Lopez' }],
             maxTokens: 2048,
         });
