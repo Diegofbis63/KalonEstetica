@@ -238,6 +238,22 @@ export const chatbotTools = (leadId: string | null, currentState: any, res: Verc
                     }
                 }
                 
+                // Fallback: Si sigue sin resolverse, usar los servicios pre-seleccionados del estado del lead
+                if (!resolvedCategoryId && currentState?.selectedServiceIds && currentState.selectedServiceIds.length > 0) {
+                    const allServices = await getActiveServices();
+                    const selected = allServices.filter(s => currentState.selectedServiceIds.includes(s.id));
+                    if (selected.length > 0) {
+                        // Tomamos el servicio con mayor duración para determinar la especialidad de staff
+                        const primaryService = selected.sort((a, b) => (b.duration_min || 0) - (a.duration_min || 0))[0];
+                        if (primaryService && primaryService.category_id) {
+                            resolvedCategoryId = primaryService.category_id;
+                            const cat = allCategories.find(c => c.id === resolvedCategoryId);
+                            resolvedCategoryName = cat ? cat.name : "Servicio";
+                            console.log(`[Tool] Resolved category from currentState.selectedServiceIds: ${resolvedCategoryName} (${resolvedCategoryId})`);
+                        }
+                    }
+                }
+                
                 if (!resolvedCategoryId) {
                     return { 
                         mensaje: `No pude identificar la categoría para "${categoria_nombre}". Pedile al cliente que confirme qué servicio eligió.`,
