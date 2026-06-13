@@ -82,10 +82,10 @@ export function detectCategories(text: string, categories: any[], services: any[
 }
 
 export function matchServicesGreedily(text: string, services: any[], categories: any[]): any[] {
-    const cleanedText = cleanString(text);
-    
-    // Split the input into parts by typical separators (y, o, comas, etc)
-    const parts = cleanedText.split(/\b(?:y|o|,)\b/).map(p => p.trim()).filter(Boolean);
+    // Split the input into parts by typical separators (y, o, comas, +, etc) BEFORE cleaning to preserve them.
+    // We use \b for word boundaries on literal Spanish conjunctions (y, o, u) so we don't split inside words like "hoy".
+    // Comma (,) and plus (+) are non-word characters, so they don't use word boundaries.
+    const parts = text.split(/\b(?:y|o|u)\b|,|\+/i).map(p => cleanString(p).trim()).filter(Boolean);
     
     const matched: any[] = [];
     const matchedIds = new Set<string>();
@@ -124,8 +124,10 @@ export function matchServicesGreedily(text: string, services: any[], categories:
 
             // 2. Part contains full service title
             if (part.includes(svcTitleClean) && svcTitleClean.length > 3) {
-                bestMatch = svc;
-                bestScore = 90;
+                if (90 > bestScore) {
+                    bestMatch = svc;
+                    bestScore = 90;
+                }
                 continue;
             }
 
@@ -158,6 +160,7 @@ export function matchServicesGreedily(text: string, services: any[], categories:
 
     // Fallback: If no matches were found using split parts, try matching against the whole cleanedText
     if (matched.length === 0) {
+        const cleanedText = cleanString(text);
         for (const svc of sortedServices) {
             const svcTitleClean = cleanString(svc.title);
             if (svcTitleClean && cleanedText.includes(svcTitleClean)) {
@@ -170,6 +173,7 @@ export function matchServicesGreedily(text: string, services: any[], categories:
         
         // Final fallback: Core terms check on whole text
         if (matched.length === 0) {
+            const cleanedText = cleanString(text);
             const textWords = cleanedText.split(' ').filter(w => w.length >= 3);
             for (const svc of sortedServices) {
                 const svcWords = cleanString(svc.title).split(' ').filter(w => w.length >= 3 && w !== 'con' && w !== 'sin' && w !== 'para');
