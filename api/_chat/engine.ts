@@ -41,6 +41,9 @@ export async function processChat(reqBody: any, res: VercelResponse) {
         const activeLeadId = leadToUse?.id || leadId || null;
         let currentState: ChatState = leadToUse?.current_state || { stage: '1' };
 
+        // Extraer el último mensaje del usuario para análisis
+        const lastUserMessage = message || (messages.length > 0 ? messages[messages.length - 1]?.content : '');
+
         // 2.5. Actualizar teléfono si se proporcionó o extraer con Regex del último mensaje
         let newPhone = clientPhone;
         if (!newPhone && lastUserMessage) {
@@ -79,7 +82,6 @@ export async function processChat(reqBody: any, res: VercelResponse) {
         // 5. INTERCEPTOR PROGRAMÁTICO DE CATEGORÍAS
         // Si el usuario menciona una o más categorías, enviamos las imágenes ANTES del LLM
         // para garantizar que siempre lleguen, independientemente de si el modelo llama la tool.
-        const lastUserMessage = message || (messages.length > 0 ? messages[messages.length - 1]?.content : '');
         let categoryInterceptionNote = ''; // nota que se inyectará en el system prompt
         
         // Solo interceptamos si parece una selección de categoría y estamos en stage 2.
