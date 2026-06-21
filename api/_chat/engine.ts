@@ -1,6 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { streamText } from 'ai';
-import { sql, findLeadByInitId, updateLeadState, getCategories, getActiveServices, getServicesByCategory } from '../_services/db.js';
+import { sql, findLeadByInitId, updateLeadState, getCategories, getActiveServices, getServicesByCategory, saveChatLog } from '../_services/db.js';
 import type { ChatState } from './types.js';
 import type { VercelResponse } from '@vercel/node';
 import { chatbotTools } from './tools.js';
@@ -13,7 +13,7 @@ const openrouter = createOpenAI({
 });
 
 export async function processChat(reqBody: any, res: VercelResponse) {
-    const { messages = [], leadId, identificationId, message, mediaUrl } = reqBody;
+    const { messages = [], leadId, identificationId, message, mediaUrl, clientPhone } = reqBody;
     console.log('[Engine] processChat start. identificationId:', identificationId?.slice(0, 8));
     
     // 1. Iniciar Stream SSE de inmediato
@@ -39,7 +39,24 @@ export async function processChat(reqBody: any, res: VercelResponse) {
         }
         
         const activeLeadId = leadToUse?.id || leadId || null;
-        const currentState: ChatState = leadToUse?.current_state || { stage: '1' };
+        let currentState: ChatState = leadToUse?.current_state || { stage: '1' };
+
+        // 2.5. Actualizar teléfono si se proporcionó o extraer con Regex del último mensaje
+        let newPhone = clientPhone;
+        if (!newPhone && lastUserMessage) {
+            const phoneRegex = /(?:15|351|0351|354|0354)?[-. ]?([0-9]{2,4})[-. ]?([0-9]{4,6})/;
+            const match = lastUserMessage.match(phoneRegex);
+            if (match && match[0].replace(/\D/g, '').length >= 8) {
+                newPhone = match[0].replace(/\D/g, '');
+            }
+        }
+
+        if (activeLeadId && newPhone) {
+            if (leadToUse?.phone !== newPhone && leadToUse?.phone?.startsWith('anon_')) {
+                await sql`UPDATE leads SET phone = ${newPhone} WHERE id = ${activeLeadId}`.catch(e => console.warn('[Engine] Error updating phone', e));
+                if (leadToUse) leadToUse.phone = newPhone;
+            }
+        }
 
         // 3. ENVIAR ID DE LEAD INMEDIATAMENTE SI EXISTE
         if (activeLeadId) {
@@ -121,6 +138,11 @@ export async function processChat(reqBody: any, res: VercelResponse) {
             }
         }
 
+        // 5.1 Guardar mensaje de usuario entrante en la BD de forma asíncrona
+        if (activeLeadId && lastUserMessage) {
+            await saveChatLog(activeLeadId, 'user', lastUserMessage);
+        }
+
         // 6. ORQUESTACIÓN AGÉNTICA (Vercel AI SDK + Tools)
         const currentLeadName = (leadToUse as any)?.client_name || currentState.clientName || 'cliente';
         
@@ -147,10 +169,17 @@ export async function processChat(reqBody: any, res: VercelResponse) {
         });
 
         // 7. Consumir el TextStream y formatearlo para el frontend (SSE)
+        let fullAssistantMessage = '';
         for await (const chunk of result.textStream) {
             if (chunk) {
+                fullAssistantMessage += chunk;
                 res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n\n`);
             }
+        }
+
+        // 8. Guardar la respuesta final del asistente
+        if (activeLeadId && fullAssistantMessage.trim()) {
+            await saveChatLog(activeLeadId, 'assistant', fullAssistantMessage);
         }
 
         res.write('data: [DONE]\n\n');
@@ -180,9 +209,10 @@ Sos una vendedora y recepcionista de élite. Tu objetivo es llevar al cliente de
 3. **MUESTRA LISTAS DE PRECIOS VISUALES (PROHIBIDO PRECIOS O SUB-SERVICIOS EN TEXTO):** Cuando el cliente elija una o más áreas (ej. "Depilación y Pestañas"), el sistema ya habrá enviado las imágenes automáticamente. Si por alguna razón no se enviaron aún, llamá a \`obtener_lista_precios_por_categoria\` UNA VEZ POR CADA CATEGORÍA. **ESTÁ TERMINANTEMENTE PROHIBIDO enlistar, nombrar o detallar los sub-servicios, precios o duraciones en texto.** Solo hacé una pregunta súper breve y amigable sobre cuál de los servicios de las imágenes le gustaría realizarse.
 4. **GENERA PRESUPUESTO VISUAL OBLIGATORIO:** Cuando el cliente especifique los servicios que desea (ej. "tiro y lifting de pestañas", "depilación de piernas y cejas"), tu PRIMERA ACCIÓN OBLIGATORIA es llamar a la herramienta \`generar_presupuesto\` pasando los nombres en el campo \`servicios\`. Esta herramienta buscará los servicios en la base de datos, calculará el total real y la seña del 50%. NUNCA calcules precios de memoria ni inventes montos. Después confirmá los servicios, mencioná el total y la seña requerida, y preguntá: "¿Sumamos algo más o pasamos a elegir el turno?"
 5. **NO ESCRIBAS CÓDIGO:** NUNCA escribas código Python ni \`print()\` en el chat. Cuando uses una herramienta, debes invocarla mediante el esquema JSON interno provisto, NO escribiendo la función en tu respuesta de texto.
-6. **NO ALUCINES:** Si la herramienta de horarios te dice que solo hay a las 10:00 y a las 15:00, NO OFREZCAS LAS 11:00.
-7. **PAGA SEÑA:** Todo turno requiere una seña del 50%. Cuando el cliente confirme un horario, debés usar la herramienta \`pre_reservar_turno\` y luego indicarle al cliente que pase una foto del comprobante de transferencia para confirmarlo.
-8. **BREVEDAD:** Tus respuestas deben ser cortas, claras y fáciles de leer en un celular. Máximo 3 oraciones. Está prohibido duplicar información que ya aparece en las imágenes enviadas.
-9. **FLUJO NATURAL:** 
+6. **NO ALUCINES IDs:** Al usar \`pre_reservar_turno\`, estás ESTRICTAMENTE OBLIGADA a pasar en \`staff_id\` exactamente el mismo ID largo (UUID) que te devolvió \`consultar_horarios_disponibles\`. Prohibido inventar IDs cortos o falsos. Si no te dio un ID válido, no llames a la herramienta.
+7. **NO ALUCINES HORARIOS:** Si la herramienta de horarios te dice que solo hay a las 10:00 y a las 15:00, NO OFREZCAS LAS 11:00.
+8. **PAGA SEÑA:** Todo turno requiere una seña del 50%. Cuando el cliente confirme un horario, debés usar la herramienta \`pre_reservar_turno\` y luego indicarle al cliente que pase una foto del comprobante de transferencia para confirmarlo.
+9. **BREVEDAD:** Tus respuestas deben ser cortas, claras y fáciles de leer en un celular. Máximo 3 oraciones. Está prohibido duplicar información que ya aparece en las imágenes enviadas.
+10. **FLUJO NATURAL:** 
    - Siempre guiá al usuario hacia el siguiente paso con una pregunta.`;
 }

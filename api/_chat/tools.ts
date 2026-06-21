@@ -6,10 +6,12 @@ import {
     getServicesByCategory, 
     getAvailableSlotsFromDB, 
     updateLeadState,
-    createLead
+    createLead,
+    db,
+    schema,
+    sql
 } from '../_services/db.js';
 import { matchServicesGreedily } from './utils.js';
-import { sql } from '../_services/db.js';
 import type { VercelResponse } from '@vercel/node';
 
 export const chatbotTools = (leadId: string | null, currentState: any, res: VercelResponse, identificationId?: string | null) => ({
@@ -310,6 +312,16 @@ export const chatbotTools = (leadId: string | null, currentState: any, res: Verc
             servicios_elegidos: z.array(z.string()).describe('Lista de nombres de servicios elegidos')
         }),
         execute: async ({ staff_id, fecha_iso, hora_legible, servicios_elegidos }) => {
+            // FIX: Validar si el staff_id tiene formato UUID válido para evitar crashear la base de datos
+            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            if (!uuidRegex.test(staff_id)) {
+                console.warn(`[Engine] Bloqueada inserción por Staff ID alucinado: ${staff_id}`);
+                return {
+                    estado: "ERROR",
+                    mensaje_para_ia: "ERROR CRÍTICO: El staff_id que intentaste usar NO es válido. ESTÁ PROHIBIDO INVENTAR IDs. Debes buscar el ID exacto y largo en el historial de llamadas a consultar_horarios_disponibles y usar ese mismo."
+                };
+            }
+
             const newState = {
                 ...currentState,
                 staffId: staff_id,
@@ -320,6 +332,27 @@ export const chatbotTools = (leadId: string | null, currentState: any, res: Verc
             
             if (leadId) {
                 await updateLeadState(leadId, newState);
+
+                // FIX: Insertar el turno en la base de datos de citas
+                try {
+                    const servicesDetails = currentState.selectedServiceIds ? 
+                        currentState.selectedServiceIds.map((id: string) => ({ id })) : 
+                        servicios_elegidos.map(title => ({ title }));
+
+                    await db.insert(schema.appointments).values({
+                        lead_id: leadId,
+                        staff_id: staff_id,
+                        date_time: new Date(fecha_iso),
+                        service_type: servicios_elegidos.join(' + '),
+                        category_id: currentState.currentCategoryId || null,
+                        status: 'pending',
+                        total_price: currentState.totalPrice || 0,
+                        total_duration: currentState.totalDuration || 0,
+                        selected_services: servicesDetails
+                    });
+                } catch(e) {
+                    console.error('[Engine] Error inserting appointment:', e);
+                }
             }
             
             return {

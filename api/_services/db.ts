@@ -35,16 +35,14 @@ export const db = connectionString ? drizzle(sql, { schema }) : null as any;
 export async function saveChatLog(leadId: string, role: 'user' | 'assistant', content: string) {
     if (!db || !leadId || !content) return;
     try {
-        // Ejecutamos el insert sin esperar (o al menos sin bloquear el flujo principal si falla)
-        db.insert(schema.chat_logs).values({
+        await db.insert(schema.chat_logs).values({
             lead_id: leadId,
             role,
             content,
             created_at: new Date()
-        }).catch(e => console.warn('[db.ts] Deferred log saving failed:', e.message));
-    } catch (e) {
-        // Fallar aquí no debería romper la experiencia del usuario
-        console.warn(`[db.ts] Non-blocking chat log error ignored.`);
+        });
+    } catch (e: any) {
+        console.warn(`[db.ts] Non-blocking chat log error ignored:`, e.message);
     }
 }
 
