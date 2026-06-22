@@ -171,6 +171,22 @@ Por favor, envíame una captura clara del comprobante de la transferencia de la 
                     const userContent = lastUserMessage || "📸 [Archivo adjunto]";
                     await saveChatLog(activeLeadId, 'user', userContent, mediaUrl);
                     await saveChatLog(activeLeadId, 'assistant', rejectMsg);
+                    
+                    // Mark the pre-reserved appointment as 'canceled' because the receipt was rejected
+                    const appts = await sql`
+                        SELECT id FROM appointments 
+                        WHERE lead_id = ${activeLeadId} 
+                        ORDER BY created_at DESC 
+                        LIMIT 1
+                    `.catch(() => []);
+
+                    if (appts.length > 0) {
+                        await sql`
+                            UPDATE appointments 
+                            SET status = 'canceled' 
+                            WHERE id = ${appts[0].id}
+                        `.catch(e => console.error('[Engine] Error canceling appointment on reject:', e));
+                    }
                 }
                 res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: rejectMsg } }] })}\n\n`);
                 res.write('data: [DONE]\n\n');

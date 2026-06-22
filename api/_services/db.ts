@@ -232,9 +232,21 @@ export async function createLead(orgId: string | null, name: string, contactInfo
 // --- UPDATES ---
 export async function updateLeadState(leadId: string, state: Partial<ConvState>) {
     console.log(`[db.ts] Updating lead ${leadId} current_state`);
+    const stageStr = String(state?.stage || '');
+    const updatePayload: any = { current_state: state, updated_at: new Date() };
+    if (stageStr) {
+        let score = 0;
+        if (stageStr === '1') score = 15;
+        else if (stageStr === '2') score = 30;
+        else if (stageStr === '3') score = 50;
+        else if (stageStr === '4') score = 75;
+        else if (stageStr === '5') score = 90;
+        else if (stageStr === '6') score = 100;
+        updatePayload.intent_score = score;
+    }
     return await withTimeout(
         db.update(schema.leads)
-            .set({ current_state: state, updated_at: new Date() })
+            .set(updatePayload)
             .where(eq(schema.leads.id, leadId)),
         3000, null
     );
