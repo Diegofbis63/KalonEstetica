@@ -6,6 +6,9 @@ export function cleanString(str: string): string {
         .replace(/[\u0300-\u036f]/g, "") // removes accents/diacritics
         .replace(/bozo/g, "bozo")       // keep bozo unchanged
         .replace(/ñ/g, "n")             // ñ -> n
+        .replace(/\bfemenina\b/g, "femenino")
+        .replace(/\bmasculina\b/g, "masculino")
+        .replace(/\bzonas\b/g, "zona")
         .replace(/[^a-z0-9\s]/g, "")    // strips punctuation
         .trim();
 }
@@ -94,7 +97,7 @@ export function matchServicesGreedily(text: string, services: any[], categories:
     const sortedServices = [...services].sort((a, b) => b.title.length - a.title.length);
 
     for (const part of parts) {
-        const partWords = part.split(' ').filter(w => w.length >= 3 && w !== 'con' && w !== 'sin' && w !== 'para');
+        const partWords = part.split(' ').filter(w => (w.length >= 3 || /^\d+$/.test(w)) && w !== 'con' && w !== 'sin' && w !== 'para');
         if (partWords.length === 0) {
             // Special handling for short 2-character words like "bozo" or "tiro"
             const shortWords = part.split(' ').filter(w => w === 'bozo' || w === 'tiro' || w === 'cejas' || w === 'pies');
@@ -109,7 +112,7 @@ export function matchServicesGreedily(text: string, services: any[], categories:
             if (matchedIds.has(svc.id)) continue;
 
             const svcTitleClean = cleanString(svc.title);
-            const svcWords = svcTitleClean.split(' ').filter(w => w.length >= 3 && w !== 'con' && w !== 'sin' && w !== 'para');
+            const svcWords = svcTitleClean.split(' ').filter(w => (w.length >= 3 || /^\d+$/.test(w)) && w !== 'con' && w !== 'sin' && w !== 'para');
 
             // Include short key words in comparison
             const svcShortWords = svcTitleClean.split(' ').filter(w => w === 'bozo' || w === 'tiro' || w === 'cejas' || w === 'pies');

@@ -102,7 +102,8 @@ export async function processChat(reqBody: any, res: VercelResponse) {
                                     type: 'text', 
                                     text: `Estás auditando un comprobante de pago para KÂLON Estética. Analizá esta imagen detalladamente.
 ¿Es un comprobante de transferencia bancaria, pago de billetera virtual (Mercado Pago, etc.) o ticket de depósito válido?
-El monto esperado aproximado de la seña es de $${expectedSena} (pesos argentinos).
+El monto total de los servicios es de $${currentState.totalPrice || 0} y la seña mínima esperada es de $${expectedSena} (pesos argentinos).
+El comprobante se considera VÁLIDO ("es_comprobante": true) si el monto transferido/pagado es igual o mayor a la seña esperada ($${expectedSena}) y menor o igual al total ($${currentState.totalPrice || 0}) (o aproximado, ej. si pagó de más o el total).
 Respondé únicamente un objeto JSON con esta estructura exacta, sin markdown, comentarios ni texto adicional:
 {
   "es_comprobante": true o false,
