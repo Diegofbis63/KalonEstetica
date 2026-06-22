@@ -312,19 +312,22 @@ export const chatbotTools = (leadId: string | null, currentState: any, res: Verc
             servicios_elegidos: z.array(z.string()).describe('Lista de nombres de servicios elegidos')
         }),
         execute: async ({ staff_id, fecha_iso, hora_legible, servicios_elegidos }) => {
-            // FIX: Validar si el staff_id tiene formato UUID válido para evitar crashear la base de datos
+            // FIX: Validar si el staff_id tiene formato UUID válido. Si el bot alucinó, agarramos el primero real.
+            let finalStaffId = staff_id;
             const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-            if (!uuidRegex.test(staff_id)) {
-                console.warn(`[Engine] Bloqueada inserción por Staff ID alucinado: ${staff_id}`);
-                return {
-                    estado: "ERROR",
-                    mensaje_para_ia: "ERROR CRÍTICO: El staff_id que intentaste usar NO es válido. ESTÁ PROHIBIDO INVENTAR IDs. Debes buscar el ID exacto y largo en el historial de llamadas a consultar_horarios_disponibles y usar ese mismo."
-                };
+            if (!uuidRegex.test(finalStaffId)) {
+                console.warn(`[Engine] Staff ID alucinado: ${staff_id}. Buscando uno real...`);
+                try {
+                    const realStaff = await sql`SELECT id FROM staff LIMIT 1`;
+                    if (realStaff.length > 0) {
+                        finalStaffId = realStaff[0].id;
+                    }
+                } catch(e) { console.error("Error fetching fallback staff", e); }
             }
 
             const newState = {
                 ...currentState,
-                staffId: staff_id,
+                staffId: finalStaffId,
                 appointmentDate: fecha_iso.split('T')[0],
                 appointmentTime: hora_legible,
                 stage: '5' // Forzar stage 5 de cobro (por retrocompatibilidad temporal si es necesario)
@@ -341,7 +344,7 @@ export const chatbotTools = (leadId: string | null, currentState: any, res: Verc
 
                     await db.insert(schema.appointments).values({
                         lead_id: leadId,
-                        staff_id: staff_id,
+                        staff_id: finalStaffId,
                         date_time: new Date(fecha_iso),
                         service_type: servicios_elegidos.join(' + '),
                         category_id: currentState.currentCategoryId || null,

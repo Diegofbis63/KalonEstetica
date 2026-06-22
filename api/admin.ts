@@ -346,6 +346,74 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         // --- CLIENTES COMPLETO (LEADS + STATS) ---
         if (sec === 'leads' || sec === 'clients' || sec === 'tracking') {
+            const leadId = (req.query.leadId || req.query.leadid) as string;
+
+            if (sec === 'tracking' || leadId) {
+                if (req.method === 'GET') {
+                    if (!leadId) return res.status(400).json({ error: 'leadId es requerido para el historial de chat' });
+                    
+                    const [lead] = await db.select()
+                        .from(schema.leads)
+                        .where(eq(schema.leads.id, leadId));
+                    
+                    if (!lead) return res.status(404).json({ error: 'Lead no encontrado' });
+
+                    const logs = await db.select()
+                        .from(schema.chat_logs)
+                        .where(eq(schema.chat_logs.lead_id, leadId))
+                        .orderBy(asc(schema.chat_logs.created_at));
+
+                    return res.status(200).json({
+                        history: logs.map(l => ({
+                            role: l.role,
+                            content: l.content,
+                            media_url: l.media_url,
+                            media_data: l.media_data,
+                            created_at: l.created_at ? l.created_at.toISOString() : null
+                        })),
+                        is_bot_enabled: lead.is_bot_enabled ?? true
+                    });
+                }
+                
+                if (req.method === 'POST') {
+                    const action = req.query.action as string;
+                    if (!leadId) return res.status(400).json({ error: 'leadId es requerido' });
+
+                    if (action === 'toggle-bot') {
+                        const { isBotEnabled } = req.body;
+                        await db.update(schema.leads)
+                            .set({ is_bot_enabled: isBotEnabled })
+                            .where(eq(schema.leads.id, leadId));
+                        return res.status(200).json({ success: true, is_bot_enabled: isBotEnabled });
+                    }
+
+                    if (action === 'reply') {
+                        const { message, mediaData } = req.body;
+                        
+                        await db.insert(schema.chat_logs).values({
+                            lead_id: leadId,
+                            role: 'admin',
+                            content: message || '',
+                            media_url: null,
+                            media_data: mediaData || null,
+                            sent_to_whatsapp: false
+                        });
+
+                        // Desactivamos el bot automáticamente cuando responde el admin
+                        await db.update(schema.leads)
+                            .set({ 
+                                is_bot_enabled: false,
+                                last_interaction: new Date()
+                            })
+                            .where(eq(schema.leads.id, leadId));
+
+                        return res.status(200).json({ success: true });
+                    }
+
+                    return res.status(400).json({ error: 'Acción no válida' });
+                }
+            }
+
             if (req.method === 'GET') {
                 const results = await db.select({
                     id: schema.leads.id,
