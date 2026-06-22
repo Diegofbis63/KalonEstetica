@@ -81,12 +81,11 @@ export default function KalonChat() {
     const userMsg: Msg = { 
       role: "user", 
       content: content || (selectedFile ? "📸 Comprobante adjunto" : ""),
-      mediaUrl: previewUrl || undefined,
-      media_url: selectedFile ? `https://simulated.com/${selectedFile.name}` : undefined
+      media_url: previewUrl || undefined
     };
     
     // Clear inputs immediately for fluid feel
-    const mediaToSend = userMsg.media_url;
+    const mediaToSend = previewUrl || undefined;
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setPreviewUrl(null);
@@ -167,15 +166,18 @@ export default function KalonChat() {
   const handleFileUpload = () => {
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
-    fileInput.accept = 'image/*,application/pdf';
+    fileInput.accept = 'image/*';
     fileInput.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
         setSelectedFile(file);
-        const url = URL.createObjectURL(file);
-        setPreviewUrl(url);
-        if (!input.trim()) setInput("Adjunto comprobante de pago");
-        toast.success(`Comprobante listo: ${file.name}`);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setPreviewUrl(reader.result as string);
+          if (!input.trim()) setInput("Adjunto comprobante de pago");
+          toast.success(`Comprobante listo: ${file.name}`);
+        };
+        reader.readAsDataURL(file);
       }
     };
     fileInput.click();

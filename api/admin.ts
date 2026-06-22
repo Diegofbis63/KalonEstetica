@@ -234,7 +234,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 category_name: sql<string>`COALESCE(${schema.categories.name}, 'General')`,
                 date_time: schema.appointments.date_time,
                 status: schema.appointments.status,
-                total_price: schema.appointments.total_price
+                total_price: schema.appointments.total_price,
+                total_duration: schema.appointments.total_duration,
+                selected_services: schema.appointments.selected_services
             })
             .from(schema.appointments)
             .leftJoin(schema.leads, eq(schema.appointments.lead_id, schema.leads.id))

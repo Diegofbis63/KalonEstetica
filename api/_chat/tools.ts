@@ -325,6 +325,15 @@ export const chatbotTools = (leadId: string | null, currentState: any, res: Verc
                 } catch(e) { console.error("Error fetching fallback staff", e); }
             }
 
+            // Enforce timezone correction for America/Argentina/Cordoba (GMT-3)
+            let appointmentDate = new Date(fecha_iso);
+            const isoMatch = fecha_iso.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
+            if (isoMatch) {
+                const ymd = isoMatch[1];
+                const hm = isoMatch[2];
+                appointmentDate = new Date(`${ymd}T${hm}:00-03:00`);
+            }
+
             const newState = {
                 ...currentState,
                 staffId: finalStaffId,
@@ -369,7 +378,7 @@ export const chatbotTools = (leadId: string | null, currentState: any, res: Verc
                     await db.insert(schema.appointments).values({
                         lead_id: leadId,
                         staff_id: finalStaffId,
-                        date_time: new Date(fecha_iso),
+                        date_time: appointmentDate,
                         service_type: servicios_elegidos.join(' + '),
                         category_id: currentState.currentCategoryId || null,
                         status: 'pending',
