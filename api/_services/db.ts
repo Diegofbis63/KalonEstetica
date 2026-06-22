@@ -29,16 +29,15 @@ export const sql = connectionString ? neon(connectionString) : (() => {
 
 export const db = connectionString ? drizzle(sql, { schema }) : null as any;
 
-/**
- * Helper para guardar logs de chat de forma asíncrona.
- */
-export async function saveChatLog(leadId: string, role: 'user' | 'assistant', content: string) {
-    if (!db || !leadId || !content) return;
+export async function saveChatLog(leadId: string, role: 'user' | 'assistant', content: string, mediaUrl?: string | null, mediaData?: string | null) {
+    if (!db || !leadId) return;
     try {
         await db.insert(schema.chat_logs).values({
             lead_id: leadId,
             role,
-            content,
+            content: content || '',
+            media_url: mediaUrl || null,
+            media_data: mediaData || null,
             created_at: new Date()
         });
     } catch (e: any) {

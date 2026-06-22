@@ -68,11 +68,43 @@ export async function processChat(reqBody: any, res: VercelResponse) {
 
         // 4. Lógica de Pago por Comprobante (Etapa 5)
         if (mediaUrl) {
+            const finalMsg = "¡Recibí tu comprobante perfectamente! 🎉 Ya he confirmado tu turno de manera oficial. Te esperamos en Kâlon Estética. Si tenés alguna duda antes de venir, escribime. ¡Que tengas un hermoso día!";
+            
             if (activeLeadId) {
+                // Guardar log del mensaje de usuario con comprobante
+                const userContent = lastUserMessage || "📸 [Comprobante de pago]";
+                await saveChatLog(activeLeadId, 'user', userContent, mediaUrl);
+
+                // Guardar log de la respuesta del bot
+                await saveChatLog(activeLeadId, 'assistant', finalMsg);
+
+                // Actualizar estado del lead
                 await updateLeadState(activeLeadId, { ...currentState, stage: '6' });
+
+                // Buscar y actualizar la cita más reciente
+                const appts = await sql`
+                    SELECT id FROM appointments 
+                    WHERE lead_id = ${activeLeadId} 
+                    ORDER BY created_at DESC 
+                    LIMIT 1
+                `.catch(() => []);
+
+                if (appts.length > 0) {
+                    await sql`
+                        UPDATE appointments 
+                        SET status = 'confirmed', receipt_url = ${mediaUrl} 
+                        WHERE id = ${appts[0].id}
+                    `.catch(e => console.error('[Engine] Error updating appointment status:', e));
+                }
+
+                // Actualizar el status del lead a 'converted'
+                await sql`
+                    UPDATE leads 
+                    SET status = 'converted' 
+                    WHERE id = ${activeLeadId}
+                `.catch(e => console.error('[Engine] Error updating lead status:', e));
             }
             res.write(`data: ${JSON.stringify({ stage: '6' })}\n\n`);
-            const finalMsg = "¡Recibí tu comprobante perfectamente! 🎉 Ya he confirmado tu turno de manera oficial. Te esperamos en Kâlon Estética. Si tenés alguna duda antes de venir, escribime. ¡Que tengas un hermoso día!";
             res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: finalMsg } }] })}\n\n`);
             res.write('data: [DONE]\n\n');
             res.end();
@@ -159,7 +191,7 @@ export async function processChat(reqBody: any, res: VercelResponse) {
 
         const result = streamText({
             model: openrouter('google/gemini-2.5-flash'),
-            system: getSystemPrompt(currentLeadName, todayISO) + categoryInterceptionNote,
+            system: getSystemPrompt(currentLeadName) + categoryInterceptionNote,
             messages: coreMessages,
             tools: chatbotTools(activeLeadId, currentState, res, identificationId),
             maxSteps: 8,
