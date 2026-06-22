@@ -338,9 +338,33 @@ export const chatbotTools = (leadId: string | null, currentState: any, res: Verc
 
                 // FIX: Insertar el turno en la base de datos de citas
                 try {
-                    const servicesDetails = currentState.selectedServiceIds ? 
-                        currentState.selectedServiceIds.map((id: string) => ({ id })) : 
-                        servicios_elegidos.map(title => ({ title }));
+                    // Obtener los detalles completos de los servicios para almacenarlos en la columna JSONB
+                    let servicesDetails: any[] = [];
+                    try {
+                        const allServices = await getActiveServices();
+                        if (currentState.selectedServiceIds && currentState.selectedServiceIds.length > 0) {
+                            const matched = allServices.filter(s => currentState.selectedServiceIds.includes(s.id));
+                            servicesDetails = matched.map((s: any) => ({
+                                id: s.id,
+                                title: s.title || s.name || 'Servicio',
+                                price: Number(s.price) || 0,
+                                duration: s.duration || `${s.duration_min || 30} min`,
+                                duration_min: Number(s.duration_min || 30)
+                            }));
+                        }
+                    } catch (e) {
+                        console.error('[Engine] Error matching service details in pre_reservar_turno:', e);
+                    }
+
+                    if (servicesDetails.length === 0) {
+                        servicesDetails = servicios_elegidos.map(title => ({
+                            id: null,
+                            title: title,
+                            price: 0,
+                            duration: "30 min",
+                            duration_min: 30
+                        }));
+                    }
 
                     await db.insert(schema.appointments).values({
                         lead_id: leadId,

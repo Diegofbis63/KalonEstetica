@@ -1,5 +1,5 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import { streamText } from 'ai';
+import { streamText, generateText } from 'ai';
 import { sql, findLeadByInitId, updateLeadState, getCategories, getActiveServices, getServicesByCategory, saveChatLog } from '../_services/db.js';
 import type { ChatState } from './types.js';
 import type { VercelResponse } from '@vercel/node';
@@ -67,48 +67,115 @@ export async function processChat(reqBody: any, res: VercelResponse) {
         }
 
         // 4. Lógica de Pago por Comprobante (Etapa 5)
+        // 4. Lógica de Pago por Comprobante (Etapa 5)
         if (mediaUrl) {
-            const finalMsg = "¡Recibí tu comprobante perfectamente! 🎉 Ya he confirmado tu turno de manera oficial. Te esperamos en Kâlon Estética. Si tenés alguna duda antes de venir, escribime. ¡Que tengas un hermoso día!";
+            console.log('[Engine] Analyzing media image as receipt:', mediaUrl.slice(0, 100));
+            let isReceipt = false;
             
-            if (activeLeadId) {
-                // Guardar log del mensaje de usuario con comprobante
-                const userContent = lastUserMessage || "📸 [Comprobante de pago]";
-                await saveChatLog(activeLeadId, 'user', userContent, mediaUrl);
-
-                // Guardar log de la respuesta del bot
-                await saveChatLog(activeLeadId, 'assistant', finalMsg);
-
-                // Actualizar estado del lead
-                await updateLeadState(activeLeadId, { ...currentState, stage: '6' });
-
-                // Buscar y actualizar la cita más reciente
-                const appts = await sql`
-                    SELECT id FROM appointments 
-                    WHERE lead_id = ${activeLeadId} 
-                    ORDER BY created_at DESC 
-                    LIMIT 1
-                `.catch(() => []);
-
-                if (appts.length > 0) {
-                    await sql`
-                        UPDATE appointments 
-                        SET status = 'confirmed', receipt_url = ${mediaUrl} 
-                        WHERE id = ${appts[0].id}
-                    `.catch(e => console.error('[Engine] Error updating appointment status:', e));
+            try {
+                // Formatear la parte de la imagen para el AI SDK
+                let imagePart: any;
+                if (mediaUrl.startsWith('data:')) {
+                    const mimeType = mediaUrl.split(';')[0].split(':')[1];
+                    const base64Data = mediaUrl.split(',')[1];
+                    imagePart = {
+                        type: 'image',
+                        image: Buffer.from(base64Data, 'base64'),
+                        mimeType
+                    };
+                } else {
+                    imagePart = {
+                        type: 'image',
+                        image: new URL(mediaUrl)
+                    };
                 }
 
-                // Actualizar el status del lead a 'converted'
-                await sql`
-                    UPDATE leads 
-                    SET status = 'converted' 
-                    WHERE id = ${activeLeadId}
-                `.catch(e => console.error('[Engine] Error updating lead status:', e));
+                const expectedSena = Math.round((currentState.totalPrice || 0) / 2);
+
+                const response = await generateText({
+                    model: openrouter('google/gemini-2.5-flash'),
+                    messages: [
+                        {
+                            role: 'user',
+                            content: [
+                                { 
+                                    type: 'text', 
+                                    text: `Estás auditando un comprobante de pago para KÂLON Estética. Analizá esta imagen detalladamente.
+¿Es un comprobante de transferencia bancaria, pago de billetera virtual (Mercado Pago, etc.) o ticket de depósito válido?
+El monto esperado aproximado de la seña es de $${expectedSena} (pesos argentinos).
+Respondé únicamente un objeto JSON con esta estructura exacta, sin markdown, comentarios ni texto adicional:
+{
+  "es_comprobante": true o false,
+  "monto_detectado": número del monto que figura en el ticket (o null si no lo ves),
+  "razon": "explicación muy breve de por qué es válido o no"
+}`
+                                },
+                                imagePart
+                            ]
+                        }
+                    ]
+                });
+
+                console.log('[Engine] Receipt analysis response:', response.text);
+                const cleanJson = response.text.trim().replace(/^```json/, '').replace(/```$/, '').trim();
+                const resultJson = JSON.parse(cleanJson);
+                isReceipt = !!resultJson.es_comprobante;
+            } catch (e: any) {
+                console.error('[Engine] Error analyzing receipt with Gemini:', e);
+                // Fallback de seguridad: si hay un error con el modelo de visión, permitimos agendar
+                isReceipt = true; 
             }
-            res.write(`data: ${JSON.stringify({ stage: '6' })}\n\n`);
-            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: finalMsg } }] })}\n\n`);
-            res.write('data: [DONE]\n\n');
-            res.end();
-            return;
+
+            if (isReceipt) {
+                const finalMsg = "¡Recibí tu comprobante perfectamente! 🎉 Ya he confirmado tu turno de manera oficial. Te esperamos en Kâlon Estética. Si tenés alguna duda antes de venir, escribime. ¡Que tengas un hermoso día!";
+                
+                if (activeLeadId) {
+                    const userContent = lastUserMessage || "📸 [Comprobante de pago]";
+                    await saveChatLog(activeLeadId, 'user', userContent, mediaUrl);
+                    await saveChatLog(activeLeadId, 'assistant', finalMsg);
+                    await updateLeadState(activeLeadId, { ...currentState, stage: '6' });
+
+                    const appts = await sql`
+                        SELECT id FROM appointments 
+                        WHERE lead_id = ${activeLeadId} 
+                        ORDER BY created_at DESC 
+                        LIMIT 1
+                    `.catch(() => []);
+
+                    if (appts.length > 0) {
+                        await sql`
+                            UPDATE appointments 
+                            SET status = 'confirmed', receipt_url = ${mediaUrl} 
+                            WHERE id = ${appts[0].id}
+                        `.catch(e => console.error('[Engine] Error updating appointment status:', e));
+                    }
+
+                    await sql`
+                        UPDATE leads 
+                        SET status = 'converted' 
+                        WHERE id = ${activeLeadId}
+                    `.catch(e => console.error('[Engine] Error updating lead status:', e));
+                }
+                res.write(`data: ${JSON.stringify({ stage: '6' })}\n\n`);
+                res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: finalMsg } }] })}\n\n`);
+                res.write('data: [DONE]\n\n');
+                res.end();
+                return;
+            } else {
+                const rejectMsg = `Disculpame, pero la imagen que enviaste no parece ser un comprobante de pago o transferencia bancaria válido. 
+
+Por favor, envíame una captura clara del comprobante de la transferencia de la seña ($${Math.round((currentState.totalPrice || 0) / 2)}) para poder confirmar tu turno oficial. ¡Muchas gracias!`;
+                
+                if (activeLeadId) {
+                    const userContent = lastUserMessage || "📸 [Archivo adjunto]";
+                    await saveChatLog(activeLeadId, 'user', userContent, mediaUrl);
+                    await saveChatLog(activeLeadId, 'assistant', rejectMsg);
+                }
+                res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: rejectMsg } }] })}\n\n`);
+                res.write('data: [DONE]\n\n');
+                res.end();
+                return;
+            }
         }
 
         // 5. INTERCEPTOR PROGRAMÁTICO DE CATEGORÍAS
@@ -249,7 +316,7 @@ Sos una vendedora y recepcionista de élite. Tu objetivo es llevar al cliente de
 3. **MUESTRA LISTAS DE PRECIOS VISUALES (PROHIBIDO PRECIOS O SUB-SERVICIOS EN TEXTO):** Cuando el cliente elija una o más áreas (ej. "Depilación y Pestañas"), el sistema ya habrá enviado las imágenes automáticamente. Si por alguna razón no se enviaron aún, llamá a \`obtener_lista_precios_por_categoria\` UNA VEZ POR CADA CATEGORÍA. **ESTÁ TERMINANTEMENTE PROHIBIDO enlistar, nombrar o detallar los sub-servicios, precios o duraciones en texto.** Solo hacé una pregunta súper breve y amigable sobre cuál de los servicios de las imágenes le gustaría realizarse.
 4. **GENERA PRESUPUESTO VISUAL OBLIGATORIO:** Cuando el cliente especifique los servicios que desea (ej. "tiro y lifting de pestañas", "depilación de piernas y cejas"), tu PRIMERA ACCIÓN OBLIGATORIA es llamar a la herramienta \`generar_presupuesto\` pasando los nombres en el campo \`servicios\`. Esta herramienta buscará los servicios en la base de datos, calculará el total real y la seña del 50%. NUNCA calcules precios de memoria ni inventes montos. Después confirmá los servicios, mencioná el total y la seña requerida, y preguntá: "¿Sumamos algo más o pasamos a elegir el turno?"
 5. **NO ESCRIBAS CÓDIGO:** NUNCA escribas código Python ni \`print()\` en el chat.
-6. **PROHIBIDO INVENTAR HORARIOS:** ANTES de confirmar cualquier fecha o turno, estás OBLIGADA a usar la herramienta \`consultar_horarios_disponibles\`. NUNCA asumas disponibilidad ni ofrezcas un horario sin usar primero la herramienta.
+6. PROHIBIDO DECIR SI O NO A UN HORARIO SIN LA HERRAMIENTA: Ante cualquier consulta de un horario específico (ej: "hoy a las 18hs tenés?", "puede ser mañana a las 10:00?"), estás OBLIGADA a llamar a consultar_horarios_disponibles para esa fecha exacta. Está estrictamente prohibido responder de memoria o inventar si hay o no lugar.
 7. **PAGA SEÑA:** Todo turno requiere una seña del 50%. Cuando el cliente confirme un horario, debés usar la herramienta \`pre_reservar_turno\` y luego indicarle al cliente que pase una foto del comprobante de transferencia para confirmarlo.
 9. **BREVEDAD:** Tus respuestas deben ser cortas, claras y fáciles de leer en un celular. Máximo 3 oraciones. Está prohibido duplicar información que ya aparece en las imágenes enviadas.
 10. **FLUJO NATURAL:** 
