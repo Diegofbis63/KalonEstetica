@@ -218,7 +218,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, true)`,
                 created_at: schema.leads.created_at,
                 last_interaction: schema.leads.last_interaction,
-                category_name: sql<string>`COALESCE(${schema.categories.name}, 'Sin categoría')`
+                category_name: sql<string>`COALESCE(${schema.categories.name}, 'Sin categoría')`,
+                intent_score: sql<number>`COALESCE(${schema.leads.intent_score}, 0)::int`
             })
             .from(schema.leads)
             .leftJoin(schema.categories, eq(schema.leads.category_id, schema.categories.id))
@@ -425,13 +426,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     created_at: schema.leads.created_at,
                     last_interaction: schema.leads.last_interaction,
                     is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, true)`,
+                    intent_score: sql<number>`COALESCE(${schema.leads.intent_score}, 0)::int`,
                     total_appointments: sql<number>`COUNT(${schema.appointments.id})::int`,
                     pending_appointments: sql<number>`COUNT(CASE WHEN LOWER(${schema.appointments.status}) NOT IN ('realizada', 'completed', 'finalizada', 'canceled', 'cancelled', 'anulado', 'anulada', 'cancelado', 'cancelada') THEN 1 END)::int`,
                     total_spent: sql<number>`SUM(COALESCE(${schema.appointments.total_price}, 0))::float`
                 })
                 .from(schema.leads)
                 .leftJoin(schema.appointments, eq(schema.leads.id, schema.appointments.lead_id))
-                .groupBy(schema.leads.id, schema.leads.client_name, schema.leads.phone, schema.leads.contact_info, schema.leads.status, schema.leads.created_at, schema.leads.last_interaction)
+                .groupBy(schema.leads.id, schema.leads.client_name, schema.leads.phone, schema.leads.contact_info, schema.leads.status, schema.leads.created_at, schema.leads.last_interaction, schema.leads.intent_score)
                 .orderBy(desc(schema.leads.last_interaction || schema.leads.created_at))
                 .limit(limit)
                 .offset(offset);
@@ -456,6 +458,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     total_appointments: Number(c.total_appointments || 0),
                     pending_appointments: Number(c.pending_appointments || 0),
                     total_spent: Number(c.total_spent || 0),
+                    intent_score: Number(c.intent_score || 0),
                     note: ''
                 }));
 
