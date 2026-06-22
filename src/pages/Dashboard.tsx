@@ -556,16 +556,28 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
                                 </Badge>
                               </div>
 
-                              <div className="mb-5">
-                                <h4 className={`text-2xl font-serif font-bold mb-1 tracking-tight ${(appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? 'text-gold' : 'text-cream/20'}`}>
-                                  {(appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? appt.client_name : `Agenda Ocupada`}
-                                </h4>
-                                <div className="flex items-center gap-3 text-cream/40 text-sm italic font-serif">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-gold/50" />
-                                  {Array.isArray(appt.selected_services) && appt.selected_services.length > 0
-                                    ? appt.selected_services.map(s => s?.category_name || "Servicio").join(" • ")
-                                    : appt.service_type || "Tratamiento Boutique"}
+                              <div className="mb-5 flex flex-col md:flex-row md:items-start justify-between gap-4">
+                                <div className="space-y-1">
+                                  <h4 className={`text-2xl font-serif font-bold tracking-tight ${(appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? 'text-gold' : 'text-cream/20'}`}>
+                                    {(appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') ? appt.client_name : `Agenda Ocupada`}
+                                  </h4>
+                                  <div className="flex items-center gap-3 text-cream/40 text-sm italic font-serif">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-gold/50" />
+                                    {Array.isArray(appt.selected_services) && appt.selected_services.length > 0
+                                      ? Array.from(new Set(appt.selected_services.map(s => s?.category_name || "Servicio"))).join(" • ")
+                                      : appt.service_type || "Tratamiento Boutique"}
+                                  </div>
                                 </div>
+
+                                {(appt.canManage || authUser?.role === 'staff' || authUser?.role === 'admin') && Array.isArray(appt.selected_services) && appt.selected_services.length > 0 && (
+                                  <div className="flex flex-wrap gap-1.5 max-w-full md:max-w-[65%] justify-start md:justify-end">
+                                    {appt.selected_services.map((s, idx) => (
+                                      <span key={idx} className="px-2.5 py-1.5 rounded-xl bg-gold/5 border border-gold/10 text-[9px] font-black tracking-widest text-gold uppercase whitespace-nowrap shadow-sm">
+                                        {s?.title || 'Servicio'}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                               <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-white/5">
                                 <div className="flex gap-2">

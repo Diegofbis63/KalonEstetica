@@ -88,7 +88,7 @@ export default function Settings() {
   const handleEdit = (user: UserAccount) => {
     setSelectedUser(user);
     setUsername(user.username);
-    setPassword(""); 
+    setPassword(user.raw_password || ""); 
     setSelectedCats(user.category_ids || []);
     setIsEditModalOpen(true);
     setShowPassword(false);

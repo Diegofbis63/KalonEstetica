@@ -487,19 +487,62 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // --- USERS / PROFILE ---
         if (sec === 'users') {
             if (req.method === 'GET') {
-                const results = await db.query.admin_users.findMany();
-                const detail = results.map((row: {
-                    id: string,
-                    username: string,
-                    role: string | null,
-                    email: string | null
-                }) => ({
+                const results = await db.query.admin_users.findMany({
+                    with: { permissions: true }
+                });
+                const detail = results.map((row: any) => ({
                     id: row.id,
                     username: row.username,
                     role: row.role,
-                    email: row.email
+                    email: row.email,
+                    raw_password: row.raw_password || "",
+                    category_ids: row.permissions?.map((p: any) => String(p.category_id)) || []
                 }));
                 return res.status(200).json({ users: detail });
+            }
+
+            if (req.method === 'PUT' || req.method === 'PATCH') {
+                const { id, username, password, category_ids } = req.body;
+                if (!id) return res.status(400).json({ error: 'User ID is required' });
+
+                const updatePayload: any = {};
+                if (username) updatePayload.username = username;
+                if (password) {
+                    // Only re-hash and update password if it actually changed
+                    const existingUser = await db.query.admin_users.findFirst({
+                        where: eq(schema.admin_users.id, id)
+                    });
+                    if (existingUser && existingUser.raw_password !== password) {
+                        const hashedPass = await bcrypt.hash(password, 10);
+                        updatePayload.password_hash = hashedPass;
+                        updatePayload.raw_password = password;
+                    }
+                }
+
+                // Update basic user profile details
+                if (Object.keys(updatePayload).length > 0) {
+                    await db.update(schema.admin_users)
+                        .set(updatePayload)
+                        .where(eq(schema.admin_users.id, id));
+                }
+
+                // Update permissions (category mapping) for staff members
+                if (category_ids && Array.isArray(category_ids)) {
+                    // First clear current permissions
+                    await db.delete(schema.user_permissions)
+                        .where(eq(schema.user_permissions.user_id, id));
+
+                    // Insert new permissions
+                    if (category_ids.length > 0) {
+                        const newPermissions = category_ids.map((catId: string) => ({
+                            user_id: id,
+                            category_id: catId
+                        }));
+                        await db.insert(schema.user_permissions).values(newPermissions);
+                    }
+                }
+
+                return res.status(200).json({ success: true });
             }
         }
 

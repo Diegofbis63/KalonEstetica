@@ -117,6 +117,7 @@ export const UserAccountSchema = z.object({
   email: z.string().email().optional().nullable(),
   role: z.string(),
   category_ids: z.array(z.string()).default([]),
+  raw_password: z.string().optional().nullable(),
 });
 
 export const UsersResponseSchema = z.object({
