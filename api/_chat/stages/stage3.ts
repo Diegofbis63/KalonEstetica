@@ -2,7 +2,7 @@ import { updateLeadState } from '../../_services/db.js';
 import { generateMenuImage } from '../../_services/imageGenerator.js';
 import { createClient } from '@supabase/supabase-js';
 import type { StageContext, Service } from '../types.js';
-import { cleanString, matchServicesGreedily } from '../utils.js';
+import { cleanString, matchServicesGreedily, detectCategories } from '../utils.js';
 
 export async function handleStage3(ctx: StageContext): Promise<{ assistantContext: string; nextStage?: string }> {
     const { text, leadId, currentState, services, categories } = ctx;
@@ -114,8 +114,36 @@ export async function handleStage3(ctx: StageContext): Promise<{ assistantContex
         };
     }
 
+    // 2.5. Intercept general category keywords in Stage 3 to guide the client
+    const detectedCats = detectCategories(text, categories, services);
+    if (detectedCats.length > 0) {
+        const firstCat = detectedCats[0];
+        const catServices = services.filter(s => s.category_id === firstCat.id && s.active);
+        const servicesListText = catServices.map(s => `✨ *${s.title}* - $${Number(s.price).toLocaleString('es-AR')}`).join('\n');
+        
+        // Inject catalog image automatically
+        const url = firstCat.price_list_url || `/api/catalog-image?id=${firstCat.id}`;
+        console.log(`[Stage 3] Category query detected for: "${firstCat.name}". Injecting catalog: ${url}`);
+        ctx.mediaUrls.push(url);
+        
+        // Keep in stage 3, but set current category to track
+        if (leadId) {
+            await updateLeadState(String(leadId), {
+                ...currentState,
+                currentCategoryId: firstCat.id
+            });
+        }
+        
+        return {
+            assistantContext: `SISTEMA: El cliente solicitó la categoría "${firstCat.name}" (o un sinónimo). Le enviamos automáticamente la imagen del catálogo de precios de esa sección.
+            Servicios disponibles en la categoría:
+            ${servicesListText}
+            TU MISIÓN: Dile amablemente al cliente que le enviaste la lista de precios de la sección "${firstCat.name}" y pregúntale cuál o cuáles de los servicios que se ven en la imagen le gustaría agendar.`
+        };
+    }
+
     return { 
         assistantContext: `SISTEMA: El usuario pidió algo que no encontré en la base de datos de servicios.
-        TU MISIÓN: Sé sumamente amable y cálida, decile que no encontraste exactamente esa opción en tu lista e invitala a ver el catálogo de precios enviado para elegir el servicio exacto.` 
+        TU MISIÓN: Sé sumamente amable y de manera muy cálida y atenta, decile al cliente que no encontraste exactamente esa opción en tu lista, e invitala a ver el catálogo de precios enviado para elegir el servicio exacto de la lista.` 
     };
 }

@@ -29,6 +29,13 @@ export function getCoreServiceTerms(title: string, categories: any[]): string[] 
     return cleaned.split(' ').filter(word => word.length >= 3);
 }
 
+const CATEGORY_SYNONYMS: Record<string, string[]> = {
+    "depilacion": ["laser", "lazer", "definitiva", "tradicional", "soprano", "depila", "depilar"],
+    "facial": ["limpieza", "cutis", "peeling", "botox", "hialuronico", "microdermoabrasion", "rostro", "cara"],
+    "pestanas": ["lifting", "pestana", "cejas", "perfilado", "microblading", "lamina", "laminado"],
+    "masajes": ["masaje", "descontracturante", "relajante", "piedras", "masajista"],
+};
+
 export function detectCategories(text: string, categories: any[], services: any[], classification?: any): any[] {
     const cleanedText = cleanString(text);
     const textWords = cleanedText.split(' ').filter(w => w.length >= 3);
@@ -47,6 +54,20 @@ export function detectCategories(text: string, categories: any[], services: any[
             if (!detectedIds.has(cat.id)) {
                 detected.push(cat);
                 detectedIds.add(cat.id);
+            }
+        }
+    }
+
+    // 1.5. Synonym matching
+    for (const cat of categories) {
+        const cleanedName = cleanString(cat.name);
+        const synonyms = CATEGORY_SYNONYMS[cleanedName] || [];
+        for (const syn of synonyms) {
+            if (cleanedText.includes(syn)) {
+                if (!detectedIds.has(cat.id)) {
+                    detected.push(cat);
+                    detectedIds.add(cat.id);
+                }
             }
         }
     }
