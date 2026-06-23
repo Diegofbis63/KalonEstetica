@@ -117,70 +117,94 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return res.status(200).json({ [catalogType]: formatted });
         }
 
-        // --- 2. AUTHENTICATION (POST /api/admin?section=auth) ---
-        if (sec === 'auth' && req.method === 'POST') {
-            const { username, password } = req.body;
-            
-            // AUTO-SEED: Solo si el ambiente no es producción y no hay usuarios
-            const usersCount = await db.select({ count: count() }).from(schema.admin_users);
-            if (usersCount[0].count === 0) {
-                console.log('[admin Auth] Auto-seeding first admin user');
-                const hashedPass = await bcrypt.hash(process.env.ADMIN_PASSWORD || 'Kalon2024!', 10);
-                await db.insert(schema.admin_users).values({
-                    username: 'admin',
-                    password_hash: hashedPass,
-                    role: 'admin',
-                    email: 'admin@kalon.com'
+        // --- 2. AUTHENTICATION (POST/GET /api/admin?section=auth) ---
+        if (sec === 'auth') {
+            if (req.method === 'POST') {
+                const { username, password } = req.body;
+                
+                // AUTO-SEED: Solo si el ambiente no es producción y no hay usuarios
+                const usersCount = await db.select({ count: count() }).from(schema.admin_users);
+                if (usersCount[0].count === 0) {
+                    console.log('[admin Auth] Auto-seeding first admin user');
+                    const hashedPass = await bcrypt.hash(process.env.ADMIN_PASSWORD || 'Kalon2024!', 10);
+                    await db.insert(schema.admin_users).values({
+                        username: 'admin',
+                        password_hash: hashedPass,
+                        role: 'admin',
+                        email: 'admin@kalon.com'
+                    });
+                }
+
+                // Buscar usuario
+                const user = await db.query.admin_users.findFirst({
+                    where: eq(schema.admin_users.username, username)
+                });
+
+                if (!user) {
+                    return res.status(401).json({ error: 'Usuario no encontrado' });
+                }
+
+                // Verificar password (bcrypt hash o raw fallback si no hay hash)
+                let isMatch = false;
+                if (user.password_hash && user.password_hash.startsWith('$2')) {
+                    isMatch = await bcrypt.compare(password, user.password_hash);
+                } else {
+                    // Fallback para usuarios legacy o raw_password si existe
+                    isMatch = (password === user.password_hash) || (password === user.raw_password);
+                }
+
+                if (!isMatch) {
+                    return res.status(401).json({ error: 'Credenciales inválidas' });
+                }
+
+                // Generar Token
+                const token = jwt.sign({ 
+                    id: user.id, 
+                    username: user.username, 
+                    role: user.role 
+                }, JWT_SECRET, { expiresIn: '24h' });
+
+                // Set Cookie
+                res.setHeader('Set-Cookie', cookie.serialize('nova_token', token, {
+                    httpOnly: true,
+                    secure: process.env.NODE_ENV === 'production' || !!process.env.VERCEL_ENV,
+                    sameSite: 'lax',
+                    maxAge: 60 * 60 * 24, // 24 hours
+                    path: '/',
+                }));
+
+                return res.status(200).json({ 
+                    success: true, 
+                    user: {
+                        id: user.id,
+                        username: user.username,
+                        role: user.role,
+                        email: user.email
+                    }
+                });
+            } else if (req.method === 'GET') {
+                const verifiedUser = await requireAuth(req, res);
+                if (!verifiedUser) return; // requireAuth already replies with 401
+                
+                // Get fresh user data from database
+                const dbUser = await db.query.admin_users.findFirst({
+                    where: eq(schema.admin_users.id, (verifiedUser as any).id)
+                });
+
+                if (!dbUser) {
+                    return res.status(404).json({ error: 'Usuario no encontrado en la base de datos' });
+                }
+
+                return res.status(200).json({
+                    success: true,
+                    user: {
+                        id: dbUser.id,
+                        username: dbUser.username,
+                        role: dbUser.role,
+                        email: dbUser.email
+                    }
                 });
             }
-
-            // Buscar usuario
-            const user = await db.query.admin_users.findFirst({
-                where: eq(schema.admin_users.username, username)
-            });
-
-            if (!user) {
-                return res.status(401).json({ error: 'Usuario no encontrado' });
-            }
-
-            // Verificar password (bcrypt hash o raw fallback si no hay hash)
-            let isMatch = false;
-            if (user.password_hash && user.password_hash.startsWith('$2')) {
-                isMatch = await bcrypt.compare(password, user.password_hash);
-            } else {
-                // Fallback para usuarios legacy o raw_password si existe
-                isMatch = (password === user.password_hash) || (password === user.raw_password);
-            }
-
-            if (!isMatch) {
-                return res.status(401).json({ error: 'Credenciales inválidas' });
-            }
-
-            // Generar Token
-            const token = jwt.sign({ 
-                id: user.id, 
-                username: user.username, 
-                role: user.role 
-            }, JWT_SECRET, { expiresIn: '24h' });
-
-            // Set Cookie
-            res.setHeader('Set-Cookie', cookie.serialize('nova_token', token, {
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production' || !!process.env.VERCEL_ENV,
-                sameSite: 'lax',
-                maxAge: 60 * 60 * 24, // 24 hours
-                path: '/',
-            }));
-
-            return res.status(200).json({ 
-                success: true, 
-                user: {
-                    id: user.id,
-                    username: user.username,
-                    role: user.role,
-                    email: user.email
-                }
-            });
         }
 
         // --- 3. AUTH REQUIRED FOR EVERYTHING ELSE ---

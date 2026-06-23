@@ -1,8 +1,8 @@
 import { motion } from "framer-motion";
 import { ChevronRight, Star } from "lucide-react";
 import ScrollReveal from "./ScrollReveal";
-import heroBg from "@/assets/centro-kalon-estetica.png";
-import logoKalon from "@/assets/logo kalon sin fondo.png";
+import heroBg from "@/assets/centro-kalon-estetica.jpg";
+import logoKalon from "@/assets/logo_kalon_optimized.png";
 
 const HeroSection = () => {
   return (
