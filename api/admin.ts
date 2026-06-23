@@ -200,50 +200,58 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         // --- DASHBOARD / STATS ---
         if (sec === 'dashboard' && req.method === 'GET') {
-            const [ordersCountObj] = await db.select({ count: sql`count(*)` }).from(schema.appointments);
-            const [leadsCountObj] = await db.select({ count: sql`count(*)` }).from(schema.leads);
-            
-            // Calculamos revenue desde appointments completados
-            const [revObj] = await db.select({
-                total: sql<number>`SUM(COALESCE(${schema.appointments.total_price}, 0))`
-            })
-            .from(schema.appointments)
-            .where(sql`LOWER(${schema.appointments.status}) IN ('realizada', 'concluida', 'pagada', 'confirmed', 'completada', 'completado', 'finalizada', 'servido', 'completed')`);
+            const [
+                ordersCountObjResult,
+                leadsCountObjResult,
+                revObjResult,
+                dashboardLeads,
+                dashboardAppointments
+            ] = await Promise.all([
+                db.select({ count: sql`count(*)` }).from(schema.appointments),
+                db.select({ count: sql`count(*)` }).from(schema.leads),
+                db.select({
+                    total: sql<number>`SUM(COALESCE(${schema.appointments.total_price}, 0))`
+                })
+                .from(schema.appointments)
+                .where(sql`LOWER(${schema.appointments.status}) IN ('realizada', 'concluida', 'pagada', 'confirmed', 'completada', 'completado', 'finalizada', 'servido', 'completed')`),
+                db.select({
+                    id: schema.leads.id,
+                    client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente sin nombre')`,
+                    phone: sql<string>`COALESCE(${schema.leads.phone}, ${schema.leads.contact_info}->>'phone', '')`,
+                    status: sql<string>`COALESCE(${schema.leads.status}, 'new')`,
+                    is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, true)`,
+                    created_at: schema.leads.created_at,
+                    last_interaction: schema.leads.last_interaction,
+                    category_name: sql<string>`COALESCE(${schema.categories.name}, 'Sin categoría')`,
+                    intent_score: sql<number>`COALESCE(${schema.leads.intent_score}, 0)::int`
+                })
+                .from(schema.leads)
+                .leftJoin(schema.categories, eq(schema.leads.category_id, schema.categories.id))
+                .orderBy(desc(schema.leads.last_interaction))
+                .limit(15),
+                db.select({
+                    id: schema.appointments.id,
+                    lead_id: schema.appointments.lead_id,
+                    client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente')`,
+                    phone: sql<string>`COALESCE(${schema.leads.phone}, ${schema.leads.contact_info}->>'phone', '')`,
+                    service_type: sql<string>`COALESCE(${schema.appointments.service_type}, 'Servicio')`,
+                    category_name: sql<string>`COALESCE(${schema.categories.name}, 'General')`,
+                    date_time: schema.appointments.date_time,
+                    status: schema.appointments.status,
+                    total_price: schema.appointments.total_price,
+                    total_duration: schema.appointments.total_duration,
+                    selected_services: schema.appointments.selected_services
+                })
+                .from(schema.appointments)
+                .leftJoin(schema.leads, eq(schema.appointments.lead_id, schema.leads.id))
+                .leftJoin(schema.categories, eq(schema.appointments.category_id, schema.categories.id))
+                .orderBy(desc(schema.appointments.date_time))
+                .limit(10)
+            ]);
 
-            const dashboardLeads = await db.select({
-                id: schema.leads.id,
-                client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente sin nombre')`,
-                phone: sql<string>`COALESCE(${schema.leads.phone}, ${schema.leads.contact_info}->>'phone', '')`,
-                status: sql<string>`COALESCE(${schema.leads.status}, 'new')`,
-                is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, true)`,
-                created_at: schema.leads.created_at,
-                last_interaction: schema.leads.last_interaction,
-                category_name: sql<string>`COALESCE(${schema.categories.name}, 'Sin categoría')`,
-                intent_score: sql<number>`COALESCE(${schema.leads.intent_score}, 0)::int`
-            })
-            .from(schema.leads)
-            .leftJoin(schema.categories, eq(schema.leads.category_id, schema.categories.id))
-            .orderBy(desc(schema.leads.last_interaction))
-            .limit(15);
-
-            const dashboardAppointments = await db.select({
-                id: schema.appointments.id,
-                lead_id: schema.appointments.lead_id,
-                client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente')`,
-                phone: sql<string>`COALESCE(${schema.leads.phone}, ${schema.leads.contact_info}->>'phone', '')`,
-                service_type: sql<string>`COALESCE(${schema.appointments.service_type}, 'Servicio')`,
-                category_name: sql<string>`COALESCE(${schema.categories.name}, 'General')`,
-                date_time: schema.appointments.date_time,
-                status: schema.appointments.status,
-                total_price: schema.appointments.total_price,
-                total_duration: schema.appointments.total_duration,
-                selected_services: schema.appointments.selected_services
-            })
-            .from(schema.appointments)
-            .leftJoin(schema.leads, eq(schema.appointments.lead_id, schema.leads.id))
-            .leftJoin(schema.categories, eq(schema.appointments.category_id, schema.categories.id))
-            .orderBy(desc(schema.appointments.date_time))
-            .limit(10);
+            const ordersCountObj = ordersCountObjResult[0] || { count: 0 };
+            const leadsCountObj = leadsCountObjResult[0] || { count: 0 };
+            const revObj = revObjResult[0] || { total: 0 };
             
             return res.status(200).json({
                 leads: dashboardLeads,
@@ -284,35 +292,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 }
                 const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-                const [totalCountObj] = await db.select({ count: sql`count(*)` })
-                                        .from(schema.appointments)
-                                        .where(whereClause);
-                
-                const results = await db.select({
-                    id: schema.appointments.id,
-                    lead_id: schema.appointments.lead_id,
-                    client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente')`,
-                    phone: sql<string>`COALESCE(${schema.leads.phone}, ${schema.leads.contact_info}->>'phone', '')`,
-                    service_type: sql<string>`COALESCE(${schema.appointments.service_type}, 'Servicio')`,
-                    category_name: sql<string>`COALESCE(${schema.categories.name}, 'General')`,
-                    category_id: schema.appointments.category_id,
-                    date_time: schema.appointments.date_time,
-                    status: sql<string>`COALESCE(${schema.appointments.status}, 'pending')`,
-                    created_at: schema.appointments.created_at,
-                    total_price: sql<number>`COALESCE(${schema.appointments.total_price}, 0)::float`,
-                    total_duration: schema.appointments.total_duration,
-                    selected_services: schema.appointments.selected_services,
-                    is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, true)`
-                })
-                .from(schema.appointments)
-                .leftJoin(schema.leads, eq(schema.appointments.lead_id, schema.leads.id))
-                .leftJoin(schema.categories, eq(schema.appointments.category_id, schema.categories.id))
-                .where(whereClause)
-                .orderBy(desc(schema.appointments.date_time))
-                .limit(limit)
-                .offset(offset);
+                const [
+                    totalCountObjResult,
+                    results
+                ] = await Promise.all([
+                    db.select({ count: sql`count(*)` })
+                        .from(schema.appointments)
+                        .where(whereClause),
+                    db.select({
+                        id: schema.appointments.id,
+                        lead_id: schema.appointments.lead_id,
+                        client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente')`,
+                        phone: sql<string>`COALESCE(${schema.leads.phone}, ${schema.leads.contact_info}->>'phone', '')`,
+                        service_type: sql<string>`COALESCE(${schema.appointments.service_type}, 'Servicio')`,
+                        category_name: sql<string>`COALESCE(${schema.categories.name}, 'General')`,
+                        category_id: schema.appointments.category_id,
+                        date_time: schema.appointments.date_time,
+                        status: sql<string>`COALESCE(${schema.appointments.status}, 'pending')`,
+                        created_at: schema.appointments.created_at,
+                        total_price: sql<number>`COALESCE(${schema.appointments.total_price}, 0)::float`,
+                        total_duration: schema.appointments.total_duration,
+                        selected_services: schema.appointments.selected_services,
+                        is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, true)`
+                    })
+                    .from(schema.appointments)
+                    .leftJoin(schema.leads, eq(schema.appointments.lead_id, schema.leads.id))
+                    .leftJoin(schema.categories, eq(schema.appointments.category_id, schema.categories.id))
+                    .where(whereClause)
+                    .orderBy(desc(schema.appointments.date_time))
+                    .limit(limit)
+                    .offset(offset)
+                ]);
 
-                const count = Number(totalCountObj?.count || 0);
+                const totalCountObj = totalCountObjResult[0] || { count: 0 };
+                const count = Number(totalCountObj.count || 0);
                 const formattedAppts = results.map((a) => ({
                     ...a,
                     date_time: a.date_time ? new Date(a.date_time).toISOString() : new Date().toISOString(),

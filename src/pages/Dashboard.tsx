@@ -149,22 +149,12 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
     refetchInterval: 30000,
   });
 
-
-  const { data: timelineData } = useQuery({
-    queryKey: ['timeline', todayStr],
-    queryFn: () => safeFetch(`/api/dashboard?date=${todayStr}`, DashboardResponseSchema, { leads: [], appointments: [], stats: {} }),
-    enabled: currentTab === 'dashboard',
-    refetchInterval: 30000,
-    refetchIntervalInBackground: true,
-    staleTime: 60000,
-    retry: 3,
-  });
-
   const { data: servData } = useQuery({
     queryKey: ['services-list'],
     queryFn: () => safeFetch('/api/services', ServicesResponseSchema, { services: [] }),
     staleTime: 120000,
     retry: 3,
+    enabled: isNewAppointmentModalOpen || isEditAppointmentModalOpen,
   });
 
   const { data: catData } = useQuery({
@@ -172,6 +162,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
     queryFn: () => safeFetch('/api/categories', CategoriesResponseSchema, { categories: [] }),
     staleTime: 300000,
     retry: 3,
+    enabled: isNewAppointmentModalOpen || isEditAppointmentModalOpen,
   });
 
   const { data: subServicesData } = useQuery({
