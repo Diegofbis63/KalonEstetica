@@ -22,7 +22,7 @@ export default function DashboardLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   return (
-    <div className="flex h-screen bg-noir text-cream overflow-hidden touch-none selection:bg-gold/30">
+    <div className="flex h-screen bg-noir text-cream overflow-hidden selection:bg-gold/30">
       {/* Global Chat Modal */}
       <ChatModal 
         open={isChatModalOpen} 
