@@ -44,7 +44,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       )}
 
       <aside className={`
-        fixed top-0 left-0 h-[100dvh] w-64 bg-noir/80 backdrop-blur-2xl border-r border-cream/5 z-[70] flex flex-col
+        fixed top-0 left-0 h-[100dvh] w-64 bg-noir/80 backdrop-blur-2xl border-r border-cream/5 z-[70] flex flex-col overflow-y-auto custom-scrollbar
         transition-transform duration-300 lg:translate-x-0
         ${isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
       `}>

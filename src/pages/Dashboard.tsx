@@ -1566,7 +1566,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
       
       {/* 2. New Appointment Modal */}
       <Dialog open={isNewAppointmentModalOpen} onOpenChange={setIsNewAppointmentModalOpen}>
-        <DialogContent className="bg-noir border border-gold/20 text-cream max-w-xl">
+        <DialogContent className="bg-noir border border-gold/20 text-cream max-w-xl max-h-[90dvh] overflow-y-auto custom-scrollbar">
             <DialogHeader>
                 <DialogTitle className="font-serif text-xl">Agendar Cita Manual</DialogTitle>
                 <DialogDescription>Convierte este lead en un turno confirmado con múltiples servicios</DialogDescription>
@@ -1734,7 +1734,7 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
 
       {/* 3. Edit Appointment Modal */}
       <Dialog open={isEditAppointmentModalOpen} onOpenChange={setIsEditAppointmentModalOpen}>
-        <DialogContent className="bg-noir border border-gold/20 text-cream max-w-xl">
+        <DialogContent className="bg-noir border border-gold/20 text-cream max-w-xl max-h-[90dvh] overflow-y-auto custom-scrollbar">
             <DialogHeader>
                 <DialogTitle className="font-serif text-xl border-l-4 border-gold pl-3">Redefinir Cita</DialogTitle>
                 <DialogDescription>Modifica los detalles del turno programado con soporte multi-servicio</DialogDescription>
