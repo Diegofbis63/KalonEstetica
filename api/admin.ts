@@ -157,19 +157,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     return res.status(401).json({ error: 'Credenciales inválidas' });
                 }
 
-                // Generar Token
+                // Generar Token (válido por 7 días)
                 const token = jwt.sign({ 
                     id: user.id, 
                     username: user.username, 
                     role: user.role 
-                }, JWT_SECRET, { expiresIn: '24h' });
+                }, JWT_SECRET, { expiresIn: '7d' });
 
-                // Set Cookie
+                // Set Cookie (expira en 7 días)
                 res.setHeader('Set-Cookie', cookie.serialize('nova_token', token, {
                     httpOnly: true,
                     secure: process.env.NODE_ENV === 'production' || !!process.env.VERCEL_ENV,
                     sameSite: 'lax',
-                    maxAge: 60 * 60 * 24, // 24 hours
+                    maxAge: 60 * 60 * 24 * 7, // 7 days
                     path: '/',
                 }));
 

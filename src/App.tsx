@@ -4,16 +4,19 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/components/AuthContext";
+import { lazy, Suspense } from "react";
 import Index from "./pages/Index";
-import Auth from "./pages/Auth";
-import DashboardLayout from "./components/layout/DashboardLayout";
-import Dashboard from "./pages/Dashboard";
-import Settings from "./pages/Settings";
-import CategoryDetail from "./pages/CategoryDetail";
-import NotFound from "./pages/NotFound";
-import Clients from "./pages/Clients";
-import Incomes from "./pages/Incomes";
 import ErrorBoundary from "./components/ErrorBoundary";
+
+// Lazy loading for admin routes (resolves heavy bundle load issue on landing page)
+const Auth = lazy(() => import("./pages/Auth"));
+const DashboardLayout = lazy(() => import("./components/layout/DashboardLayout"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Settings = lazy(() => import("./pages/Settings"));
+const CategoryDetail = lazy(() => import("./pages/CategoryDetail"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const Clients = lazy(() => import("./pages/Clients"));
+const Incomes = lazy(() => import("./pages/Incomes"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -57,6 +60,12 @@ const PlaceholderPage = ({ title }: { title: string }) => (
 
 import { ChatProvider } from "./context/ChatContext";
 
+const LoadingSpinner = () => (
+  <div className="min-h-screen bg-noir flex items-center justify-center">
+    <div className="w-8 h-8 border-4 border-gold border-t-transparent rounded-full animate-spin" />
+  </div>
+);
+
 const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
@@ -67,31 +76,33 @@ const App = () => {
             <Sonner />
             <BrowserRouter>
               <ErrorBoundary>
-                <Routes>
-                  <Route path="/" element={<Index />} />
-                  <Route path="/auth" element={<Auth />} />
-                  <Route path="/servicios/:category" element={<CategoryDetail />} />
-                  
-                  {/* Rutas Protegidas de Administración */}
-                  <Route
-                    path="/dashboard"
-                    element={
-                      <ProtectedRoute>
-                        <DashboardLayout />
-                      </ProtectedRoute>
-                    }
-                  >
-                    <Route index element={<Dashboard />} />
-                    <Route path="appointments" element={<Dashboard />} /> {/* For now reuse Dashboard */}
-                    <Route path="clients" element={<Clients />} />
-                    <Route path="income" element={<Incomes />} />
-                    <Route path="services" element={<Dashboard defaultTab="services" />} />
-                    <Route path="settings" element={<Settings />} />
-                  </Route>
+                <Suspense fallback={<LoadingSpinner />}>
+                  <Routes>
+                    <Route path="/" element={<Index />} />
+                    <Route path="/auth" element={<Auth />} />
+                    <Route path="/servicios/:category" element={<CategoryDetail />} />
+                    
+                    {/* Rutas Protegidas de Administración */}
+                    <Route
+                      path="/dashboard"
+                      element={
+                        <ProtectedRoute>
+                          <DashboardLayout />
+                        </ProtectedRoute>
+                      }
+                    >
+                      <Route index element={<Dashboard />} />
+                      <Route path="appointments" element={<Dashboard />} /> {/* For now reuse Dashboard */}
+                      <Route path="clients" element={<Clients />} />
+                      <Route path="income" element={<Incomes />} />
+                      <Route path="services" element={<Dashboard defaultTab="services" />} />
+                      <Route path="settings" element={<Settings />} />
+                    </Route>
 
-                  {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
+                    {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </Suspense>
               </ErrorBoundary>
             </BrowserRouter>
           </TooltipProvider>

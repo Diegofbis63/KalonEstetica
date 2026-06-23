@@ -51,22 +51,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     useEffect(() => {
         const checkAuth = async () => {
-            const auth = localStorage.getItem("kalon_auth");
-            if (auth) {
-                try {
-                    const parsed = JSON.parse(auth);
-                    // Check expiry (7 days)
-                    if (Date.now() - parsed.timestamp < 7 * 24 * 60 * 60 * 1000) {
-                        setIsAuthenticated(true);
-                        setUser(parsed.user);
-                        return;
-                    }
-                } catch (e) {
-                    localStorage.removeItem("kalon_auth");
-                }
-            }
-
-            // Fallback: double check with API
             try {
                 const res = await fetch('/api/auth');
                 if (res.ok) {
@@ -80,17 +64,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         timestamp: Date.now()
                     }));
                 } else {
+                    // Cookie has expired or is invalid
+                    localStorage.removeItem("kalon_auth");
                     setIsAuthenticated(false);
+                    setUser(null);
                 }
             } catch (e) {
+                // Network error: Fall back to local storage if available
+                const auth = localStorage.getItem("kalon_auth");
+                if (auth) {
+                    try {
+                        const parsed = JSON.parse(auth);
+                        if (Date.now() - parsed.timestamp < 7 * 24 * 60 * 60 * 1000) {
+                            setIsAuthenticated(true);
+                            setUser(parsed.user);
+                            return;
+                        }
+                    } catch (e2) {
+                        // ignore
+                    }
+                }
                 setIsAuthenticated(false);
+                setUser(null);
             }
         };
 
-        if (isAuthenticated === null) {
-            checkAuth();
-        }
-    }, [isAuthenticated]);
+        checkAuth();
+    }, []);
 
     // Auth state debug log removed for production quality
 
