@@ -191,80 +191,80 @@ export default function Clients() {
   const hasActiveFilters = filterType !== 'all' || filterStatus !== 'all' || searchTerm !== "";
 
   const renderClientDetail = (client: Client) => (
-    <div className="h-full flex flex-col pt-8">
-      <SheetHeader className="mb-8">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-gold/5 border border-gold/10 flex items-center justify-center text-gold font-bold text-2xl shadow-xl">
+    <div className="h-full flex flex-col pt-8 px-6 sm:px-8">
+      <SheetHeader className="mb-6 sm:mb-8">
+        <div className="flex items-center justify-between mb-4 sm:mb-6">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-gold/5 border border-gold/10 flex items-center justify-center text-gold font-bold text-xl sm:text-2xl shadow-xl">
               {(isEditing ? editName : client.client_name).split(' ').map(n => n[0]).join('').slice(0, 2)}
             </div>
             <div className="text-left">
               {isEditing ? (
-                <SheetTitle className="text-2xl font-serif text-cream">Editando Perfil</SheetTitle>
+                <SheetTitle className="text-xl sm:text-2xl font-serif text-cream">Editando Perfil</SheetTitle>
               ) : (
-                <SheetTitle className="text-2xl font-serif text-cream">{client.client_name || 'Cliente Sin Nombre'}</SheetTitle>
+                <SheetTitle className="text-xl sm:text-2xl font-serif text-cream">{client.client_name || 'Cliente Sin Nombre'}</SheetTitle>
               )}
-              <div className="flex items-center gap-2 mt-1">
-                <Badge className="bg-gold/10 text-gold border-gold/20 text-[10px]">
+              <div className="flex items-center gap-2 mt-0.5 sm:mt-1">
+                <Badge className="bg-gold/10 text-gold border-gold/20 text-[9px] sm:text-[10px]">
                   {(client.total_appointments ?? 0) > 5 ? 'CLIENTE VIP' : 'CLIENTE REGULAR'}
                 </Badge>
-                <span className="text-[10px] text-cream/20 uppercase tracking-widest font-black">ID: {client.id?.slice(0,8) ?? 'N/A'}</span>
+                <span className="text-[9px] sm:text-[10px] text-cream/20 uppercase tracking-widest font-black">ID: {client.id?.slice(0,8) ?? 'N/A'}</span>
               </div>
             </div>
           </div>
           {authUser?.role === 'admin' && (
             <button
               onClick={() => setIsEditing(!isEditing)}
-              className={`p-3 rounded-2xl border transition-all ${isEditing ? 'border-rose-500/20 text-rose-400 bg-rose-500/5' : 'border-white/5 text-cream/40 hover:text-gold hover:bg-gold/10 hover:border-gold/20'}`}
+              className={`p-2.5 sm:p-3 rounded-xl sm:rounded-2xl border transition-all ${isEditing ? 'border-rose-500/20 text-rose-400 bg-rose-500/5' : 'border-white/5 text-cream/40 hover:text-gold hover:bg-gold/10 hover:border-gold/20'}`}
             >
-              {isEditing ? <X className="w-5 h-5" /> : <Edit className="w-5 h-5" />}
+              {isEditing ? <X className="w-4 h-4 sm:w-5 sm:h-5" /> : <Edit className="w-4 h-4 sm:w-5 sm:h-5" />}
             </button>
           )}
         </div>
       </SheetHeader>
 
       {isEditing ? (
-        <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
-          <div className="space-y-4 bg-white/[0.02] border border-white/5 p-6 rounded-2xl shadow-inner">
-            <div className="space-y-2">
-              <Label className="text-[10px] uppercase tracking-widest text-cream/30 font-black">Nombre Completo</Label>
+        <div className="space-y-4 sm:space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+          <div className="space-y-3 sm:space-y-4 bg-white/[0.02] border border-white/5 p-4 sm:p-6 rounded-xl sm:rounded-2xl shadow-inner">
+            <div className="space-y-1.5">
+              <Label className="text-[9px] sm:text-[10px] uppercase tracking-widest text-cream/30 font-black">Nombre Completo</Label>
               <Input
                 value={editName}
                 onChange={e => setEditName(e.target.value)}
-                className="bg-noir border-white/5 focus:border-gold/30 h-14 rounded-xl"
+                className="bg-noir border-white/5 focus:border-gold/30 h-11 sm:h-14 rounded-xl text-sm"
               />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-[10px] uppercase tracking-widest text-cream/30 font-black">WhatsApp / Tel</Label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-[9px] sm:text-[10px] uppercase tracking-widest text-cream/30 font-black">WhatsApp / Tel</Label>
                 <Input
                   value={editPhone}
                   onChange={e => setEditPhone(e.target.value)}
-                  className="bg-noir border-white/5 focus:border-gold/30 h-14 rounded-xl"
+                  className="bg-noir border-white/5 focus:border-gold/30 h-11 sm:h-14 rounded-xl text-sm"
                 />
               </div>
-              <div className="space-y-2">
-                <Label className="text-[10px] uppercase tracking-widest text-cream/30 font-black">Email</Label>
+              <div className="space-y-1.5">
+                <Label className="text-[9px] sm:text-[10px] uppercase tracking-widest text-cream/30 font-black">Email</Label>
                 <Input
                   value={editEmail}
                   onChange={e => setEditEmail(e.target.value)}
-                  className="bg-noir border-white/5 focus:border-gold/30 h-14 rounded-xl"
+                  className="bg-noir border-white/5 focus:border-gold/30 h-11 sm:h-14 rounded-xl text-sm"
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label className="text-[10px] uppercase tracking-widest text-cream/30 font-black">Notas Internas</Label>
+            <div className="space-y-1.5">
+              <Label className="text-[9px] sm:text-[10px] uppercase tracking-widest text-cream/30 font-black">Notas Internas</Label>
               <Textarea
                 value={editNote}
                 onChange={e => setEditNote(e.target.value)}
-                className="bg-noir border-white/5 focus:border-gold/30 min-h-[120px] resize-none rounded-xl p-4"
+                className="bg-noir border-white/5 focus:border-gold/30 min-h-[80px] sm:min-h-[120px] resize-none rounded-xl p-3 text-sm"
                 placeholder="Ej: Prefiere turnos por la tarde, alergia a ciertos productos..."
               />
             </div>
           </div>
 
           <button
-            className="w-full bg-gold text-noir font-black h-16 rounded-[1.5rem] tracking-[0.2em] shadow-xl shadow-gold/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-3"
+            className="w-full bg-gold text-noir font-black h-12 sm:h-16 rounded-xl sm:rounded-[1.5rem] tracking-[0.2em] text-xs sm:text-sm shadow-xl shadow-gold/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-3"
             onClick={() => updateClient.mutate({ client_name: editName, phone: editPhone, email: editEmail, note: editNote })}
             disabled={updateClient.isPending || !editName || !editPhone}
           >

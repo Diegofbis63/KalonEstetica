@@ -1,14 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import KalonChat from "@/components/KalonChat";
 import ScrollReveal from "@/components/landing/ScrollReveal";
 import HeroSection from "@/components/landing/HeroSection";
 import ServicesSection from "@/components/landing/ServicesSection";
 import GallerySection from "@/components/landing/GallerySection";
 import WhyUsSection from "@/components/landing/WhyUsSection";
 import TestimonialsSection from "@/components/landing/TestimonialsSection";
-import FloatingChat from "@/components/FloatingChat";
+
+const KalonChat = lazy(() => import("@/components/KalonChat"));
+const FloatingChat = lazy(() => import("@/components/FloatingChat"));
 import { LogIn, MapPin, Phone, Instagram, Clock, Mail, Menu, X, MessageCircle } from "lucide-react";
 
 const Index = () => {
@@ -215,7 +216,13 @@ const Index = () => {
                 Habla con nuestra asistente virtual. Disponible las 24 horas, los 7 días de la semana.
               </p>
             </div>
-            <KalonChat />
+            <Suspense fallback={
+              <div className="h-[400px] flex items-center justify-center bg-white/[0.02] border border-white/5 rounded-3xl">
+                <div className="w-8 h-8 border-4 border-gold border-t-transparent rounded-full animate-spin" />
+              </div>
+            }>
+              <KalonChat />
+            </Suspense>
           </section>
         </ScrollReveal>
 
@@ -256,7 +263,9 @@ const Index = () => {
             </p>
           </div>
         </footer>
-        <FloatingChat />
+        <Suspense fallback={null}>
+          <FloatingChat />
+        </Suspense>
       </div>
     </div>
   );
