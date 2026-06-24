@@ -379,7 +379,57 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
             if (req.method === 'PUT' || req.method === 'PATCH') {
                 const id = req.query.id as string;
-                const [updated] = await db.update(schema.appointments).set(req.body).where(eq(schema.appointments.id, id)).returning();
+                const { 
+                    status, 
+                    date_time, 
+                    service_type, 
+                    selected_services, 
+                    total_price, 
+                    total_duration,
+                    notes,
+                    staff_id,
+                    payment_method,
+                    receipt_url,
+                    client_name,
+                    phone
+                } = req.body;
+
+                const apptFields: Record<string, any> = {};
+                if (status !== undefined) apptFields.status = status;
+                if (date_time !== undefined) apptFields.date_time = date_time ? new Date(date_time) : null;
+                if (service_type !== undefined) apptFields.service_type = service_type;
+                if (selected_services !== undefined) apptFields.selected_services = selected_services;
+                if (total_price !== undefined) apptFields.total_price = total_price;
+                if (total_duration !== undefined) apptFields.total_duration = total_duration;
+                if (notes !== undefined) apptFields.notes = notes;
+                if (staff_id !== undefined) apptFields.staff_id = staff_id;
+                if (payment_method !== undefined) apptFields.payment_method = payment_method;
+                if (receipt_url !== undefined) apptFields.receipt_url = receipt_url;
+
+                const [updated] = await db.update(schema.appointments)
+                    .set(apptFields)
+                    .where(eq(schema.appointments.id, id))
+                    .returning();
+
+                // Sync linked client_name and phone to leads table
+                if (updated && updated.lead_id && (client_name !== undefined || phone !== undefined)) {
+                    const [currLead] = await db.select().from(schema.leads).where(eq(schema.leads.id, updated.lead_id));
+                    if (currLead) {
+                        const leadFields: Record<string, any> = {};
+                        if (client_name !== undefined) leadFields.client_name = client_name;
+                        if (phone !== undefined) {
+                            leadFields.phone = phone;
+                            leadFields.contact_info = {
+                                ...((currLead.contact_info as any) || {}),
+                                phone: phone
+                            };
+                        }
+                        await db.update(schema.leads)
+                            .set(leadFields)
+                            .where(eq(schema.leads.id, updated.lead_id));
+                    }
+                }
+
                 return res.status(200).json({ appointment: updated });
             }
         }
@@ -466,7 +516,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     intent_score: sql<number>`COALESCE(${schema.leads.intent_score}, 0)::int`,
                     total_appointments: sql<number>`COUNT(${schema.appointments.id})::int`,
                     pending_appointments: sql<number>`COUNT(CASE WHEN LOWER(${schema.appointments.status}) NOT IN ('realizada', 'completed', 'finalizada', 'canceled', 'cancelled', 'anulado', 'anulada', 'cancelado', 'cancelada') THEN 1 END)::int`,
-                    total_spent: sql<number>`SUM(COALESCE(${schema.appointments.total_price}, 0))::float`
+                    total_spent: sql<number>`SUM(COALESCE(${schema.appointments.total_price}, 0))::float`,
+                    contact_info: schema.leads.contact_info
                 })
                 .from(schema.leads)
                 .leftJoin(schema.appointments, eq(schema.leads.id, schema.appointments.lead_id))
@@ -488,7 +539,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 const formatted = results.map(c => ({
                     ...c,
                     name: c.client_name,
-                    email: null,
+                    email: (c.contact_info as any)?.email || null,
                     created_at: safeISO(c.created_at) || new Date().toISOString(),
                     last_interaction: safeISO(c.last_interaction),
                     last_appointment: safeISO(c.last_interaction),
@@ -496,7 +547,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     pending_appointments: Number(c.pending_appointments || 0),
                     total_spent: Number(c.total_spent || 0),
                     intent_score: Number(c.intent_score || 0),
-                    note: ''
+                    note: (c.contact_info as any)?.note || ''
                 }));
 
                 return res.status(200).json({ 
@@ -519,7 +570,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
             if (req.method === 'PUT' || req.method === 'PATCH') {
                 const id = req.query.id as string;
-                const [updated] = await db.update(schema.leads).set(req.body).where(eq(schema.leads.id, id)).returning();
+                const [currLead] = await db.select().from(schema.leads).where(eq(schema.leads.id, id));
+                if (!currLead) return res.status(404).json({ error: 'Cliente no encontrado' });
+
+                const { client_name, phone, email, note } = req.body;
+
+                const contactInfo = {
+                    ...((currLead.contact_info as any) || {}),
+                    phone: phone !== undefined ? phone : ((currLead.contact_info as any)?.phone || ''),
+                    email: email !== undefined ? email : ((currLead.contact_info as any)?.email || ''),
+                    note: note !== undefined ? note : ((currLead.contact_info as any)?.note || '')
+                };
+
+                const updatePayload: Record<string, any> = {};
+                if (client_name !== undefined) updatePayload.client_name = client_name;
+                if (phone !== undefined) updatePayload.phone = phone;
+                updatePayload.contact_info = contactInfo;
+
+                const [updated] = await db.update(schema.leads)
+                    .set(updatePayload)
+                    .where(eq(schema.leads.id, id))
+                    .returning();
+
                 return res.status(200).json({ lead: updated });
             }
         }

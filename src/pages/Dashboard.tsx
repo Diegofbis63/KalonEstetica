@@ -1734,10 +1734,12 @@ export default function Dashboard({ defaultTab = 'dashboard' }: { defaultTab?: '
 
       {/* 3. Edit Appointment Modal */}
       <Dialog open={isEditAppointmentModalOpen} onOpenChange={setIsEditAppointmentModalOpen}>
-        <DialogContent className="bg-noir border border-gold/20 text-cream max-w-xl max-h-[90dvh] overflow-y-auto custom-scrollbar">
+        <DialogContent className="bg-noir border-t sm:border border-gold/20 text-cream w-full sm:max-w-xl max-h-[90vh] sm:max-h-[90dvh] overflow-y-auto custom-scrollbar fixed bottom-0 sm:bottom-auto sm:top-[50%] left-[50%] translate-x-[-50%] translate-y-0 sm:translate-y-[-50%] rounded-t-3xl sm:rounded-2xl p-6 sm:p-8 z-50 shadow-2xl pb-16 sm:pb-8">
+            {/* Visual handle for mobile swipe drawer */}
+            <div className="w-12 h-1 bg-white/10 rounded-full mx-auto mb-4 sm:hidden" />
             <DialogHeader>
                 <DialogTitle className="font-serif text-xl border-l-4 border-gold pl-3">Redefinir Cita</DialogTitle>
-                <DialogDescription>Modifica los detalles del turno programado con soporte multi-servicio</DialogDescription>
+                <DialogDescription className="text-xs text-cream/40">Modifica los detalles del turno programado con soporte de servicios múltiples</DialogDescription>
             </DialogHeader>
             <div className="space-y-5 py-4">
                 <div className="grid grid-cols-2 gap-4">

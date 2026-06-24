@@ -49,6 +49,7 @@ import {
   SheetHeader,
   SheetTitle,
   SheetTrigger,
+  SheetClose,
 } from "@/components/ui/sheet";
 import {
   Dialog,
@@ -212,14 +213,21 @@ export default function Clients() {
               </div>
             </div>
           </div>
-          {authUser?.role === 'admin' && (
-            <button
-              onClick={() => setIsEditing(!isEditing)}
-              className={`p-2.5 sm:p-3 rounded-xl sm:rounded-2xl border transition-all ${isEditing ? 'border-rose-500/20 text-rose-400 bg-rose-500/5' : 'border-white/5 text-cream/40 hover:text-gold hover:bg-gold/10 hover:border-gold/20'}`}
-            >
-              {isEditing ? <X className="w-4 h-4 sm:w-5 sm:h-5" /> : <Edit className="w-4 h-4 sm:w-5 sm:h-5" />}
-            </button>
-          )}
+          <div className="flex items-center gap-2 shrink-0">
+            {authUser?.role === 'admin' && (
+              <button
+                onClick={() => setIsEditing(!isEditing)}
+                className={`p-2.5 sm:p-3 rounded-xl sm:rounded-2xl border transition-all ${isEditing ? 'border-rose-500/20 text-rose-400 bg-rose-500/5' : 'border-white/5 text-cream/40 hover:text-gold hover:bg-gold/10 hover:border-gold/20'}`}
+              >
+                {isEditing ? <X className="w-4 h-4 sm:w-5 sm:h-5" /> : <Edit className="w-4 h-4 sm:w-5 sm:h-5" />}
+              </button>
+            )}
+            <SheetClose asChild>
+              <button className="p-2.5 sm:p-3 rounded-xl sm:rounded-2xl border border-white/5 text-cream/40 hover:text-gold hover:bg-gold/10 hover:border-gold/20 transition-all" aria-label="Cerrar panel">
+                <X className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+            </SheetClose>
+          </div>
         </div>
       </SheetHeader>
 
