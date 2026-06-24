@@ -1,129 +1,53 @@
-import { cleanString } from '../api/_chat/utils.ts';
+import { getActiveServices, getCategories } from '../api/_services/db.ts';
+import { matchServicesGreedily, cleanString } from '../api/_chat/utils.ts';
 
-export function matchServicesGreedilyProposed(text: string, services: any[], categories: any[]): any[] {
-    // Split the input into parts by typical separators (y, o, comas, +, etc) BEFORE cleaning to preserve them.
-    // We use \b for word boundaries on literal Spanish conjunctions (y, o, u) so we don't split inside words like "hoy".
-    // Comma (,) and plus (+) are non-word characters, so they don't use word boundaries.
-    const parts = text.split(/\b(?:y|o|u)\b|,|\+/i).map(p => cleanString(p).trim()).filter(Boolean);
+async function run() {
+    const services = await getActiveServices();
+    const categories = await getCategories();
     
-    const matched: any[] = [];
-    const matchedIds = new Set<string>();
+    const text = "laminado de cejas y pack 1 zona femenina";
+    console.log("Input text:", text);
+    
+    const matched = matchServicesGreedily(text, services, categories);
+    console.log("Matched services:");
+    matched.forEach(m => console.log(`- ${m.id} [${m.title}] Price: ${m.price}`));
 
-    // Sort services by title length descending to match longer titles (combos/promos) first
-    const sortedServices = [...services].sort((a, b) => b.title.length - a.title.length);
+    // Let's trace detail for "pack 1 zona femenina"
+    const part = "pack 1 zona femenina";
+    console.log(`\nDetail tracing for part: "${part}"`);
+    const partWords = cleanString(part).split(' ').filter(w => w.length >= 3 && w !== 'con' && w !== 'sin' && w !== 'para');
+    console.log("Part words:", partWords);
 
-    for (const part of parts) {
-        const partWords = part.split(' ').filter(w => w.length >= 3 && w !== 'con' && w !== 'sin' && w !== 'para');
-        if (partWords.length === 0) {
-            // Special handling for short 2-character words like "bozo" or "tiro"
-            const shortWords = part.split(' ').filter(w => w === 'bozo' || w === 'tiro' || w === 'cejas' || w === 'pies');
-            if (shortWords.length === 0) continue;
-            partWords.push(...shortWords);
-        }
+    for (const svc of services) {
+        if (!svc.title.toLowerCase().includes('pack')) continue;
+        
+        const svcTitleClean = cleanString(svc.title);
+        const svcWords = svcTitleClean.split(' ').filter(w => w.length >= 3 && w !== 'con' && w !== 'sin' && w !== 'para');
+        
+        let score = 0;
+        let matchType = "";
 
-        let bestMatch: any = null;
-        let bestScore = 0;
-
-        for (const svc of sortedServices) {
-            if (matchedIds.has(svc.id)) continue;
-
-            const svcTitleClean = cleanString(svc.title);
-            const svcWords = svcTitleClean.split(' ').filter(w => w.length >= 3 && w !== 'con' && w !== 'sin' && w !== 'para');
-
-            // Include short key words in comparison
-            const svcShortWords = svcTitleClean.split(' ').filter(w => w === 'bozo' || w === 'tiro' || w === 'cejas' || w === 'pies');
-            if (svcWords.length === 0) svcWords.push(...svcShortWords);
-
-            // 1. Exact match score
-            if (svcTitleClean === part) {
-                bestMatch = svc;
-                bestScore = 100;
-                break; // Perfect match
-            }
-
-            // 2. Part contains full service title
-            if (part.includes(svcTitleClean) && svcTitleClean.length > 3) {
-                if (90 > bestScore) {
-                    bestMatch = svc;
-                    bestScore = 90;
-                }
-                continue;
-            }
-
-            // 3. Service title contains the part
-            if (svcTitleClean.includes(part) && part.length > 3) {
-                const score = 80 + (part.length / svcTitleClean.length) * 9;
-                if (score > bestScore) {
-                    bestMatch = svc;
-                    bestScore = score;
-                }
-            }
-
-            // 4. Word-based fuzzy match score
+        if (svcTitleClean === part) {
+            score = 100;
+            matchType = "exact";
+        } else if (part.includes(svcTitleClean) && svcTitleClean.length > 3) {
+            score = 90;
+            matchType = "contains";
+        } else if (svcTitleClean.includes(part) && part.length > 3) {
+            score = 80 + (part.length / svcTitleClean.length) * 9;
+            matchType = "contained in";
+        } else {
             const commonWords = partWords.filter(w => svcWords.some(sw => sw === w || sw.startsWith(w) || w.startsWith(sw)));
             if (commonWords.length > 0) {
-                const score = 50 + (commonWords.length / Math.max(partWords.length, svcWords.length)) * 30;
-                if (score > bestScore) {
-                    bestMatch = svc;
-                    bestScore = score;
-                }
-            }
-        }
-
-        // Only accept reasonably good matches
-        if (bestMatch && bestScore >= 55) {
-            matched.push(bestMatch);
-            matchedIds.add(bestMatch.id);
-        }
-    }
-
-    // Fallback: If no matches were found using split parts, try matching against the whole cleanedText
-    if (matched.length === 0) {
-        const cleanedText = cleanString(text);
-        for (const svc of sortedServices) {
-            const svcTitleClean = cleanString(svc.title);
-            if (svcTitleClean && cleanedText.includes(svcTitleClean)) {
-                if (!matchedIds.has(svc.id)) {
-                    matched.push(svc);
-                    matchedIds.add(svc.id);
-                }
+                score = 50 + (commonWords.length / Math.max(partWords.length, svcWords.length)) * 30;
+                matchType = `common words (${commonWords.join(', ')})`;
             }
         }
         
-        // Final fallback: Core terms check on whole text
-        if (matched.length === 0) {
-            const cleanedText = cleanString(text);
-            const textWords = cleanedText.split(' ').filter(w => w.length >= 3);
-            for (const svc of sortedServices) {
-                const svcWords = cleanString(svc.title).split(' ').filter(w => w.length >= 3 && w !== 'con' && w !== 'sin' && w !== 'para');
-                const common = textWords.filter(w => svcWords.some(sw => sw === w || sw.startsWith(w) || w.startsWith(sw)));
-                if (common.length >= 2 || (common.length >= 1 && svcWords.length === 1)) {
-                    if (!matchedIds.has(svc.id)) {
-                        matched.push(svc);
-                        matchedIds.add(svc.id);
-                    }
-                }
-            }
-        }
+        console.log(`- Service: [${svc.title}] Score: ${score.toFixed(2)} (Type: ${matchType})`);
     }
 
-    return matched;
+    process.exit(0);
 }
 
-const mockServices = [
-  { id: "1", title: "Lifting de pestañas", price: 18000 },
-  { id: "2", title: "Axilas", price: 3500 }
-];
-const mockCategories = [];
-
-const testCases = [
-  "lifting de pestañas y axilas",
-  "lifting de pestañas, axilas",
-  "lifting de pestañas + axilas",
-  "axilas y lifting de pestañas"
-];
-
-testCases.forEach(tc => {
-  console.log(`\nTest Case: "${tc}"`);
-  console.log("Matched:", matchServicesGreedilyProposed(tc, mockServices, mockCategories));
-});
+run().catch(console.error);

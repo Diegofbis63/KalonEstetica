@@ -587,12 +587,55 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 if (phone !== undefined) updatePayload.phone = phone;
                 updatePayload.contact_info = contactInfo;
 
-                const [updated] = await db.update(schema.leads)
+                await db.update(schema.leads)
                     .set(updatePayload)
-                    .where(eq(schema.leads.id, id))
-                    .returning();
+                    .where(eq(schema.leads.id, id));
 
-                return res.status(200).json({ lead: updated });
+                // Obtener el cliente actualizado con todas sus estadísticas (igual que en GET)
+                const [updatedClientRow] = await db.select({
+                    id: schema.leads.id,
+                    client_name: sql<string>`COALESCE(${schema.leads.client_name}, 'Cliente')`,
+                    phone: sql<string>`COALESCE(${schema.leads.phone}, ${schema.leads.contact_info}->>'phone', '')`,
+                    status: sql<string>`COALESCE(${schema.leads.status}, 'new')`,
+                    created_at: schema.leads.created_at,
+                    last_interaction: schema.leads.last_interaction,
+                    is_bot_enabled: sql<boolean>`COALESCE(${schema.leads.is_bot_enabled}, true)`,
+                    intent_score: sql<number>`COALESCE(${schema.leads.intent_score}, 0)::int`,
+                    total_appointments: sql<number>`COUNT(${schema.appointments.id})::int`,
+                    pending_appointments: sql<number>`COUNT(CASE WHEN LOWER(${schema.appointments.status}) NOT IN ('realizada', 'completed', 'finalizada', 'canceled', 'cancelled', 'anulado', 'anulada', 'cancelado', 'cancelada') THEN 1 END)::int`,
+                    total_spent: sql<number>`SUM(COALESCE(${schema.appointments.total_price}, 0))::float`,
+                    contact_info: schema.leads.contact_info
+                })
+                .from(schema.leads)
+                .leftJoin(schema.appointments, eq(schema.leads.id, schema.appointments.lead_id))
+                .where(eq(schema.leads.id, id))
+                .groupBy(schema.leads.id, schema.leads.client_name, schema.leads.phone, schema.leads.contact_info, schema.leads.status, schema.leads.created_at, schema.leads.last_interaction, schema.leads.intent_score);
+
+                if (!updatedClientRow) return res.status(404).json({ error: 'Error recuperando cliente actualizado' });
+
+                const safeISO = (dateStr: any) => {
+                    if (!dateStr) return null;
+                    try {
+                        const date = new Date(dateStr);
+                        return isNaN(date.getTime()) ? null : date.toISOString();
+                    } catch { return null; }
+                };
+
+                const formatted = {
+                    ...updatedClientRow,
+                    name: updatedClientRow.client_name,
+                    email: (updatedClientRow.contact_info as any)?.email || null,
+                    created_at: safeISO(updatedClientRow.created_at) || new Date().toISOString(),
+                    last_interaction: safeISO(updatedClientRow.last_interaction),
+                    last_appointment: safeISO(updatedClientRow.last_interaction),
+                    total_appointments: Number(updatedClientRow.total_appointments || 0),
+                    pending_appointments: Number(updatedClientRow.pending_appointments || 0),
+                    total_spent: Number(updatedClientRow.total_spent || 0),
+                    intent_score: Number(updatedClientRow.intent_score || 0),
+                    note: (updatedClientRow.contact_info as any)?.note || ''
+                };
+
+                return res.status(200).json({ client: formatted });
             }
         }
 

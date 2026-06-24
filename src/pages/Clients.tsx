@@ -87,6 +87,14 @@ export default function Clients() {
   const [currentPage, setCurrentPage] = useState(0);
   const PAGE_SIZE = 20;
 
+  const [isMobile, setIsMobile] = useState(false);
+  React.useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
 
   const { openChat } = useChat();
   const queryClient = useQueryClient();
@@ -192,39 +200,40 @@ export default function Clients() {
   const hasActiveFilters = filterType !== 'all' || filterStatus !== 'all' || searchTerm !== "";
 
   const renderClientDetail = (client: Client) => (
-    <div className="h-full flex flex-col pt-8 px-6 sm:px-8">
-      <SheetHeader className="mb-6 sm:mb-8">
-        <div className="flex items-center justify-between mb-4 sm:mb-6">
-          <div className="flex items-center gap-3 sm:gap-4">
-            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-gold/5 border border-gold/10 flex items-center justify-center text-gold font-bold text-xl sm:text-2xl shadow-xl">
+    <div className="h-full flex flex-col pt-2 md:pt-8 px-4 md:px-8 pb-6 overflow-y-auto">
+      {isMobile && <div className="w-12 h-1 bg-white/10 rounded-full mx-auto my-2 shrink-0 animate-pulse" />}
+      <SheetHeader className="mb-4 md:mb-8">
+        <div className="flex items-center justify-between mb-2 md:mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 md:w-16 md:h-16 rounded-xl md:rounded-2xl bg-gold/5 border border-gold/10 flex items-center justify-center text-gold font-bold text-lg md:text-2xl shadow-xl shrink-0">
               {(isEditing ? editName : client.client_name).split(' ').map(n => n[0]).join('').slice(0, 2)}
             </div>
-            <div className="text-left">
+            <div className="text-left min-w-0">
               {isEditing ? (
-                <SheetTitle className="text-xl sm:text-2xl font-serif text-cream">Editando Perfil</SheetTitle>
+                <SheetTitle className="text-lg md:text-2xl font-serif text-cream">Editando Perfil</SheetTitle>
               ) : (
-                <SheetTitle className="text-xl sm:text-2xl font-serif text-cream">{client.client_name || 'Cliente Sin Nombre'}</SheetTitle>
+                <SheetTitle className="text-lg md:text-2xl font-serif text-cream truncate max-w-[150px] sm:max-w-xs">{client.client_name || 'Cliente Sin Nombre'}</SheetTitle>
               )}
-              <div className="flex items-center gap-2 mt-0.5 sm:mt-1">
-                <Badge className="bg-gold/10 text-gold border-gold/20 text-[9px] sm:text-[10px]">
+              <div className="flex items-center gap-2 mt-0.5">
+                <Badge className="bg-gold/10 text-gold border-gold/20 text-[8px] md:text-[10px]">
                   {(client.total_appointments ?? 0) > 5 ? 'CLIENTE VIP' : 'CLIENTE REGULAR'}
                 </Badge>
-                <span className="text-[9px] sm:text-[10px] text-cream/20 uppercase tracking-widest font-black">ID: {client.id?.slice(0,8) ?? 'N/A'}</span>
+                <span className="text-[8px] md:text-[10px] text-cream/20 uppercase tracking-widest font-black">ID: {client.id?.slice(0,8) ?? 'N/A'}</span>
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             {authUser?.role === 'admin' && (
               <button
                 onClick={() => setIsEditing(!isEditing)}
-                className={`p-2.5 sm:p-3 rounded-xl sm:rounded-2xl border transition-all ${isEditing ? 'border-rose-500/20 text-rose-400 bg-rose-500/5' : 'border-white/5 text-cream/40 hover:text-gold hover:bg-gold/10 hover:border-gold/20'}`}
+                className={`p-2 md:p-3 rounded-xl border transition-all ${isEditing ? 'border-rose-500/20 text-rose-400 bg-rose-500/5' : 'border-white/5 text-cream/40 hover:text-gold hover:bg-gold/10 hover:border-gold/20'}`}
               >
-                {isEditing ? <X className="w-4 h-4 sm:w-5 sm:h-5" /> : <Edit className="w-4 h-4 sm:w-5 sm:h-5" />}
+                {isEditing ? <X className="w-3.5 h-3.5 md:w-5 md:h-5" /> : <Edit className="w-3.5 h-3.5 md:w-5 md:h-5" />}
               </button>
             )}
             <SheetClose asChild>
-              <button className="p-2.5 sm:p-3 rounded-xl sm:rounded-2xl border border-white/5 text-cream/40 hover:text-gold hover:bg-gold/10 hover:border-gold/20 transition-all" aria-label="Cerrar panel">
-                <X className="w-4 h-4 sm:w-5 sm:h-5" />
+              <button className="p-2 md:p-3 rounded-xl border border-white/5 text-cream/40 hover:text-gold hover:bg-gold/10 hover:border-gold/20 transition-all" aria-label="Cerrar panel">
+                <X className="w-3.5 h-3.5 md:w-5 md:h-5" />
               </button>
             </SheetClose>
           </div>
@@ -232,55 +241,55 @@ export default function Clients() {
       </SheetHeader>
 
       {isEditing ? (
-        <div className="space-y-4 sm:space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
-          <div className="space-y-3 sm:space-y-4 bg-white/[0.02] border border-white/5 p-4 sm:p-6 rounded-xl sm:rounded-2xl shadow-inner">
-            <div className="space-y-1.5">
-              <Label className="text-[9px] sm:text-[10px] uppercase tracking-widest text-cream/30 font-black">Nombre Completo</Label>
+        <div className="space-y-3 md:space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+          <div className="space-y-2 md:space-y-4 bg-white/[0.02] border border-white/5 p-3 md:p-6 rounded-xl md:rounded-2xl shadow-inner">
+            <div className="space-y-1">
+              <Label className="text-[8px] md:text-[10px] uppercase tracking-widest text-cream/30 font-black">Nombre Completo</Label>
               <Input
                 value={editName}
                 onChange={e => setEditName(e.target.value)}
-                className="bg-noir border-white/5 focus:border-gold/30 h-11 sm:h-14 rounded-xl text-sm"
+                className="bg-noir border-white/5 focus:border-gold/30 h-10 md:h-14 rounded-xl text-sm"
               />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-[9px] sm:text-[10px] uppercase tracking-widest text-cream/30 font-black">WhatsApp / Tel</Label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-4">
+              <div className="space-y-1">
+                <Label className="text-[8px] md:text-[10px] uppercase tracking-widest text-cream/30 font-black">WhatsApp / Tel</Label>
                 <Input
                   value={editPhone}
                   onChange={e => setEditPhone(e.target.value)}
-                  className="bg-noir border-white/5 focus:border-gold/30 h-11 sm:h-14 rounded-xl text-sm"
+                  className="bg-noir border-white/5 focus:border-gold/30 h-10 md:h-14 rounded-xl text-sm"
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-[9px] sm:text-[10px] uppercase tracking-widest text-cream/30 font-black">Email</Label>
+              <div className="space-y-1">
+                <Label className="text-[8px] md:text-[10px] uppercase tracking-widest text-cream/30 font-black">Email</Label>
                 <Input
                   value={editEmail}
                   onChange={e => setEditEmail(e.target.value)}
-                  className="bg-noir border-white/5 focus:border-gold/30 h-11 sm:h-14 rounded-xl text-sm"
+                  className="bg-noir border-white/5 focus:border-gold/30 h-10 md:h-14 rounded-xl text-sm"
                 />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-[9px] sm:text-[10px] uppercase tracking-widest text-cream/30 font-black">Notas Internas</Label>
+            <div className="space-y-1">
+              <Label className="text-[8px] md:text-[10px] uppercase tracking-widest text-cream/30 font-black">Notas Internas</Label>
               <Textarea
                 value={editNote}
                 onChange={e => setEditNote(e.target.value)}
-                className="bg-noir border-white/5 focus:border-gold/30 min-h-[80px] sm:min-h-[120px] resize-none rounded-xl p-3 text-sm"
+                className="bg-noir border-white/5 focus:border-gold/30 min-h-[60px] md:min-h-[120px] resize-none rounded-xl p-3 text-sm"
                 placeholder="Ej: Prefiere turnos por la tarde, alergia a ciertos productos..."
               />
             </div>
           </div>
 
           <button
-            className="w-full bg-gold text-noir font-black h-12 sm:h-16 rounded-xl sm:rounded-[1.5rem] tracking-[0.2em] text-xs sm:text-sm shadow-xl shadow-gold/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-3"
+            className="w-full bg-gold text-noir font-black h-11 md:h-16 rounded-xl tracking-[0.2em] text-xs md:text-sm shadow-xl shadow-gold/20 hover:scale-[1.01] active:scale-[0.99] transition-all disabled:opacity-50 flex items-center justify-center gap-3"
             onClick={() => updateClient.mutate({ client_name: editName, phone: editPhone, email: editEmail, note: editNote })}
             disabled={updateClient.isPending || !editName || !editPhone}
           >
             {updateClient.isPending ? (
-              <History className="w-5 h-5 animate-spin" />
+              <History className="w-4 h-4 animate-spin" />
             ) : (
               <>
-                <Save className="w-5 h-5" />
+                <Save className="w-4 h-4" />
                 CONFIRMAR CAMBIOS
               </>
             )}
@@ -288,37 +297,37 @@ export default function Clients() {
         </div>
       ) : (
         <div className="flex flex-col h-full animate-in fade-in slide-in-from-left-4 duration-500">
-          <div className="grid grid-cols-2 gap-4 mb-10">
-            <div className="p-6 rounded-[1.5rem] bg-gradient-to-br from-gold/10 to-transparent border border-gold/10 group">
-              <p className="text-[10px] text-gold font-black uppercase tracking-[0.2em] mb-2 px-1">Total Visitas</p>
-              <p className="text-4xl font-serif font-black text-cream tracking-tighter">{client.total_appointments ?? 0}</p>
+          <div className="grid grid-cols-2 gap-3 mb-4 md:mb-10">
+            <div className="p-3 md:p-6 rounded-xl md:rounded-[1.5rem] bg-gradient-to-br from-gold/10 to-transparent border border-gold/10 group">
+              <p className="text-[8px] md:text-[10px] text-gold font-black uppercase tracking-[0.2em] mb-1 px-1">Total Visitas</p>
+              <p className="text-2xl md:text-4xl font-serif font-black text-cream tracking-tighter">{client.total_appointments ?? 0}</p>
             </div>
-            <div className="p-6 rounded-[1.5rem] bg-white/[0.03] border border-white/5">
-              <p className="text-[10px] text-cream/30 font-black uppercase tracking-[0.2em] mb-2">Última Visita</p>
-              <p className="text-xl font-serif font-bold text-cream">
-                {client.last_appointment ? Math.floor((new Date().getTime() - new Date(client.last_appointment).getTime()) / (1000 * 60 * 60 * 24)) : '-'} días ago
+            <div className="p-3 md:p-6 rounded-xl md:rounded-[1.5rem] bg-white/[0.03] border border-white/5">
+              <p className="text-[8px] md:text-[10px] text-cream/30 font-black uppercase tracking-[0.2em] mb-1">Última Visita</p>
+              <p className="text-sm md:text-xl font-serif font-bold text-cream">
+                {client.last_appointment ? Math.floor((new Date().getTime() - new Date(client.last_appointment).getTime()) / (1000 * 60 * 60 * 24)) : '-'} días
               </p>
             </div>
           </div>
 
-          <div className="space-y-8 flex-1">
+          <div className="space-y-4 md:space-y-8 flex-1">
             <div>
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-sm font-black text-cream/60 uppercase tracking-widest flex items-center gap-3 italic">
-                  <History className="w-4 h-4 text-gold/60" />
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xs font-black text-cream/60 uppercase tracking-widest flex items-center gap-2 italic">
+                  <History className="w-3.5 h-3.5 text-gold/60" />
                   Línea de Tiempo del Cliente
                 </h3>
-                <div className="h-[2px] flex-1 bg-white/5 ml-4" />
+                <div className="h-[2px] flex-1 bg-white/5 ml-3" />
               </div>
-              <ScrollArea className="h-[450px] pr-6">
-                <div className="space-y-4">
+              <ScrollArea className="h-[200px] md:h-[450px] pr-3">
+                <div className="space-y-3">
                   {client.appointment_history?.map((appt, idx) => (
-                    <div key={appt.id || idx} className="relative pl-8 pb-8 border-l border-white/10 last:pb-0 group/time">
+                    <div key={appt.id || idx} className="relative pl-6 pb-6 border-l border-white/10 last:pb-0 group/time">
                       <div className="absolute left-[-5px] top-2 w-2.5 h-2.5 rounded-full bg-gold/40 shadow-gold/20 shadow-lg group-hover/time:scale-150 group-hover/time:bg-gold transition-all" />
-                      <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/5 group-hover/time:bg-white/[0.04] group-hover/time:border-gold/20 transition-all shadow-sm">
-                        <div className="flex justify-between items-start mb-3">
-                          <p className="font-serif font-bold text-cream text-xl tracking-tight">{appt.service_type || 'Servicio General'}</p>
-                          <Badge variant="outline" className={`text-[9px] font-black tracking-widest px-3 h-6 rounded-full border-none shadow-inner ${
+                      <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 group-hover/time:bg-white/[0.04] group-hover/time:border-gold/20 transition-all shadow-sm">
+                        <div className="flex justify-between items-start mb-2">
+                          <p className="font-serif font-bold text-cream text-base tracking-tight">{appt.service_type || 'Servicio General'}</p>
+                          <Badge variant="outline" className={`text-[8px] font-black tracking-widest px-2 h-5 rounded-full border-none shadow-inner ${
                             appt.status?.toLowerCase() === 'completed' ? 'bg-emerald-500/10 text-emerald-400' :
                             appt.status?.toLowerCase() === 'canceled' ? 'bg-rose-500/10 text-rose-400' :
                             'bg-gold/10 text-gold shadow-gold/20'
@@ -326,22 +335,22 @@ export default function Clients() {
                             {(appt.status || 'PENDIENTE').toUpperCase()}
                           </Badge>
                         </div>
-                        <div className="flex items-center gap-4 text-xs font-medium text-cream/40">
-                          <div className="flex items-center gap-1.5 bg-white/5 py-1 px-2.5 rounded-lg border border-white/5">
-                            <Calendar className="w-3.5 h-3.5 text-gold/60" />
-                            {appt.date_time ? new Date(appt.date_time).toLocaleDateString('es-AR', { day: '2-digit', month: 'long' }) : 'N/A'}
+                        <div className="flex items-center gap-3 text-[10px] font-medium text-cream/40">
+                          <div className="flex items-center gap-1 bg-white/5 py-0.5 px-2 rounded-lg border border-white/5">
+                            <Calendar className="w-3 h-3 text-gold/60" />
+                            {appt.date_time ? new Date(appt.date_time).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' }) : 'N/A'}
                           </div>
-                          <div className="flex items-center gap-1.5 bg-white/5 py-1 px-2.5 rounded-lg border border-white/5">
-                            <Clock className="w-3.5 h-3.5" />
+                          <div className="flex items-center gap-1 bg-white/5 py-0.5 px-2 rounded-lg border border-white/5">
+                            <Clock className="w-3 h-3" />
                             {appt.date_time ? new Date(appt.date_time).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : 'N/A'}hs
                           </div>
                         </div>
                       </div>
                     </div>
                   )) || (
-                    <div className="flex flex-col items-center justify-center py-20 opacity-20 text-center">
-                      <CalendarDays className="w-12 h-12 mb-4" />
-                      <p className="font-serif italic text-lg">Sin historial de turnos</p>
+                    <div className="flex flex-col items-center justify-center py-10 opacity-20 text-center">
+                      <CalendarDays className="w-10 h-10 mb-2" />
+                      <p className="font-serif italic text-sm">Sin historial de turnos</p>
                     </div>
                   )}
                 </div>
@@ -349,7 +358,7 @@ export default function Clients() {
             </div>
           </div>
 
-          <div className="mt-auto pt-8 border-t border-white/5 flex gap-3">
+          <div className="mt-auto pt-4 border-t border-white/5 flex gap-3 pb-safe-area">
             <button
               onClick={() => {
                 const leadObj: Lead = {
@@ -359,16 +368,16 @@ export default function Clients() {
                 };
                 openChat(leadObj);
               }}
-              className="flex-1 bg-[#25D366] hover:bg-[#128C7E] text-white font-black text-[10px] tracking-[0.2em] h-16 rounded-[1.25rem] shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-3 transition-all active:scale-95"
+              className="flex-1 bg-[#25D366] hover:bg-[#128C7E] text-white font-black text-[10px] tracking-[0.2em] h-12 md:h-16 rounded-xl md:rounded-[1.25rem] shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-2 transition-all active:scale-95"
             >
-              <Phone className="w-5 h-5" />
+              <Phone className="w-4 h-4" />
               ENVIAR WHATSAPP
             </button>
             <button
-              className="w-16 h-16 rounded-[1.25rem] border border-white/5 bg-white/5 text-cream/40 flex items-center justify-center hover:text-white transition-all active:scale-95"
+              className="w-12 h-12 md:w-16 md:h-16 rounded-xl md:rounded-[1.25rem] border border-white/5 bg-white/5 text-cream/40 flex items-center justify-center hover:text-white transition-all active:scale-95"
               onClick={() => toast.info("Funcionalidad próximamente")}
             >
-              <Paperclip className="w-6 h-6" />
+              <Paperclip className="w-5 h-5" />
             </button>
           </div>
         </div>
@@ -544,7 +553,7 @@ export default function Clients() {
                       <span className="text-[10px] font-black uppercase text-cream/40 group-hover:text-cream transition-colors tracking-widest">Historial</span>
                     </button>
                   </SheetTrigger>
-                  <SheetContent side="right" className="bg-noir-light border-l border-white/5 text-cream w-full sm:w-[540px] p-0 overflow-y-auto">
+                  <SheetContent side={isMobile ? "bottom" : "right"} className="bg-noir-light border-t md:border-l border-white/5 text-cream w-full md:w-[540px] h-[85vh] md:h-full rounded-t-[2.5rem] md:rounded-none p-0 overflow-y-auto">
                      {selectedClient && renderClientDetail(selectedClient)}
                   </SheetContent>
                 </Sheet>
@@ -657,7 +666,7 @@ export default function Clients() {
                           <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                         </button>
                       </SheetTrigger>
-                      <SheetContent side="right" className="bg-noir-light border-l border-white/5 text-cream w-full sm:w-[540px] p-0 overflow-y-auto">
+                      <SheetContent side={isMobile ? "bottom" : "right"} className="bg-noir-light border-t md:border-l border-white/5 text-cream w-full md:w-[540px] h-[85vh] md:h-full rounded-t-[2.5rem] md:rounded-none p-0 overflow-y-auto">
                         {selectedClient && renderClientDetail(selectedClient)}
                       </SheetContent>
                     </Sheet>
