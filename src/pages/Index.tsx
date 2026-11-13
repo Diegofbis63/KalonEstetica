@@ -163,13 +163,13 @@ const Index = () => {
         <ScrollReveal className="px-6 my-12 md:my-16">
           <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 md:gap-12 text-cream/80 text-[15px] font-sans font-medium">
             <a 
-              href="https://www.google.com/maps/search/?api=1&query=Miguel+de+Cervantes+708,+Córdoba,+Argentina+-31.389794,-64.184034" 
+              href="https://www.google.com/maps/search/?api=1&query=Av.+Ejemplo+123,+C%C3%B3rdoba,+Argentina" 
               target="_blank" 
               rel="noopener noreferrer" 
               className="flex items-center gap-3 justify-center md:justify-start hover:text-amber-500 transition-colors group"
             >
               <MapPin className="w-5 h-5 text-gold shrink-0 group-hover:scale-110 transition-transform" />
-              <span className="text-center md:text-left">Miguel de Cervantes 708, Córdoba</span>
+              <span className="text-center md:text-left">Av. Ejemplo 123, Córdoba</span>
             </a>
             
             <div className="flex items-center gap-3 justify-center md:justify-start">
@@ -178,23 +178,23 @@ const Index = () => {
             </div>
 
             <a 
-              href="https://wa.me/5493513975114" 
+              href="https://wa.me/5493510000000" 
               target="_blank" 
               rel="noopener noreferrer" 
               className="flex items-center gap-3 justify-center md:justify-start hover:text-amber-500 transition-colors group"
             >
               <MessageCircle className="w-5 h-5 text-gold shrink-0 group-hover:scale-110 transition-transform" />
-              <span className="text-center md:text-left">+54 9 3513 97-5114</span>
+              <span className="text-center md:text-left">+54 9 351 000-0000</span>
             </a>
 
             <a 
-              href="https://www.instagram.com/kalon.multiespacio.estetico/" 
+              href="https://www.instagram.com/estetica.demo/" 
               target="_blank" 
               rel="noopener noreferrer" 
               className="flex items-center gap-3 justify-center md:justify-start hover:text-amber-500 transition-colors group"
             >
               <Instagram className="w-5 h-5 text-gold shrink-0 group-hover:scale-110 transition-transform" />
-              <span className="text-center md:text-left">@kalon.multiespacio.estetico</span>
+              <span className="text-center md:text-left">@estetica.demo</span>
             </a>
           </div>
         </ScrollReveal>
@@ -238,14 +238,14 @@ const Index = () => {
             <div>
               <h4 className="font-serif text-lg font-bold text-cream mb-4">Contacto</h4>
               <div className="space-y-3 text-sm text-cream/50 font-sans">
-                <a href="https://www.google.com/maps/search/?api=1&query=Miguel+de+Cervantes+708,+Córdoba,+Argentina+-31.389794,-64.184034" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center md:justify-start gap-3 hover:text-gold transition-colors">
-                  <MapPin className="w-4 h-4 text-gold/60" /> Miguel de Cervantes 708, Córdoba
+                <a href="https://www.google.com/maps/search/?api=1&query=Av.+Ejemplo+123,+C%C3%B3rdoba,+Argentina" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center md:justify-start gap-3 hover:text-gold transition-colors">
+                  <MapPin className="w-4 h-4 text-gold/60" /> Av. Ejemplo 123, Córdoba
                 </a>
-                <a href="https://wa.me/5493513975114" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center md:justify-start gap-3 hover:text-gold transition-colors">
-                  <MessageCircle className="w-4 h-4 text-gold/60" /> +54 9 3513 97-5114
+                <a href="https://wa.me/5493510000000" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center md:justify-start gap-3 hover:text-gold transition-colors">
+                  <MessageCircle className="w-4 h-4 text-gold/60" /> +54 9 351 000-0000
                 </a>
-                <a href="mailto:hola@kalonestetica.com" className="flex items-center justify-center md:justify-start gap-3 hover:text-gold transition-colors">
-                  <Mail className="w-4 h-4 text-gold/60" /> hola@kalonestetica.com
+                <a href="mailto:hola@ejemplo.com" className="flex items-center justify-center md:justify-start gap-3 hover:text-gold transition-colors">
+                  <Mail className="w-4 h-4 text-gold/60" /> hola@ejemplo.com
                 </a>
               </div>
             </div>
